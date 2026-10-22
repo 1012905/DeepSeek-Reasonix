@@ -2,9 +2,14 @@
 package serve
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"reasonix/internal/contract/config"
 	"reasonix/internal/ext/theme"
@@ -15,6 +20,7 @@ func (s *Server) registerThemeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /themes", s.activateTheme)
 	mux.HandleFunc("POST /themes/import", s.importTheme)
 	mux.HandleFunc("POST /themes/folder", s.openThemeFolder)
+	mux.HandleFunc("DELETE /themes/{id}", s.removeTheme)
 	mux.HandleFunc("GET /themes/{id}/{asset}", s.themeAsset)
 }
 
@@ -25,9 +31,11 @@ type themeView struct {
 	Description string                       `json:"description,omitempty"`
 	Active      bool                         `json:"active,omitempty"`
 	Tokens      map[string]map[string]string `json:"tokens"`
+	Recipes     *theme.Recipes               `json:"recipes,omitempty"`
 	Background  *theme.Background            `json:"background,omitempty"`
 	Sky         *theme.Sky                   `json:"sky,omitempty"`
 	HasPreview  bool                         `json:"hasPreview,omitempty"`
+	Removable   bool                         `json:"removable,omitempty"`
 	// What the pack asked for and did not get. It rides on the listing so the
 	// author sees it in the picker rather than only in a log they never read.
 	Warnings []string `json:"warnings,omitempty"`
@@ -47,7 +55,7 @@ func (s *Server) themes(w http.ResponseWriter, r *http.Request) {
 		out = append(out, themeView{
 			ID: p.ID, Name: p.Name, Author: p.Author, Description: p.Description,
 			Active: p.ID == active, Tokens: p.Tokens,
-			Background: p.Background, Sky: p.Sky, HasPreview: p.HasPreview,
+			Background: p.Background, Sky: p.Sky, HasPreview: p.HasPreview, Removable: p.Removable,
 			Warnings: p.Warnings,
 		})
 	}
@@ -82,9 +90,48 @@ func (s *Server) activateTheme(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// themeAsset serves a pack's background or preview. The bytes are immutable
-// for a given pack id — a user replacing their own image changes the file, not
-// the address — so this is cached hard and the frontend never has to bust it.
+// removeTheme deletes a pack from the user's library. When the pack was the
+// active one and nothing of that id is left to load, the default appearance
+// takes over rather than leaving the config naming a pack that is gone.
+func (s *Server) removeTheme(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := theme.CanRemove(id); err != nil {
+		switch {
+		case errors.Is(err, theme.ErrBadID):
+			refuse(w, http.StatusBadRequest, "theme.bad_id", "that is not a theme id", nil)
+		case errors.Is(err, theme.ErrNotInstalled):
+			notFound(w, "theme", id)
+		default:
+			saveFailed(w, http.StatusInternalServerError, "theme.remove_failed", err)
+		}
+		return
+	}
+	// The config settles first: if it cannot be written the pack is still
+	// there, and if the files then fail to go the old choice is put back.
+	path := config.UserConfigPath()
+	edit := config.LoadForEdit(path)
+	active := strings.TrimSpace(edit.Desktop.ThemePack)
+	resets := active == id && !theme.Shipped(id)
+	if resets {
+		edit.Desktop.ThemePack = ""
+		if err := edit.SaveTo(path); err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+	if err := theme.Remove(id); err != nil {
+		if resets {
+			edit.Desktop.ThemePack = active
+			_ = edit.SaveTo(path)
+		}
+		saveFailed(w, http.StatusInternalServerError, "theme.remove_failed", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// themeAsset serves a pack's background or preview. Imported packs can replace
+// images at the same URL, so clients must revalidate cached bytes.
 func (s *Server) themeAsset(w http.ResponseWriter, r *http.Request) {
 	kind, ok := theme.KindOf(r.PathValue("asset"))
 	if !ok {
@@ -97,6 +144,7 @@ func (s *Server) themeAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Cache-Control", "private, max-age=3600")
-	_, _ = w.Write(raw)
+	w.Header().Set("Cache-Control", "private, no-cache")
+	w.Header().Set("ETag", fmt.Sprintf(`"%x"`, sha256.Sum256(raw)))
+	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(raw))
 }

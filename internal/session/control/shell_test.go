@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -42,7 +43,7 @@ func collectSink() (event.Sink, chan event.Event, func() []event.Event) {
 
 func waitForDone(t *testing.T, done chan event.Event) event.Event {
 	t.Helper()
-	return waitForDoneWithin(t, done, 5*time.Second)
+	return waitForDoneWithin(t, done, testenv.Budget(t))
 }
 
 func waitForDoneWithin(t *testing.T, done chan event.Event, d time.Duration) event.Event {
@@ -234,7 +235,9 @@ func TestRunShell_HeredocCancelReleasesTurn(t *testing.T) {
 	}, "\n")
 
 	ctrl.RunShell(command)
-	if !waitForFileContainingWithin(target, "TOKEN_EXAMPLE", 2*time.Second) {
+	// What is awaited is the shell starting (a cold Git Bash on a shared runner can take
+	// seconds), not a property under test: the bound only keeps a hang from lasting forever.
+	if !waitForFileContainingWithin(target, "TOKEN_EXAMPLE", 15*time.Second) {
 		ctrl.Cancel()
 		waitForDoneWithin(t, done, shellWaitDelay+10*time.Second)
 		t.Fatalf("heredoc target body was not written before cancel: %s", target)
@@ -303,4 +306,126 @@ func waitForFileContainingWithin(path, want string, d time.Duration) bool {
 
 func controlShellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
+type inputRecorder struct {
+	mu     sync.Mutex
+	inputs []string
+}
+
+func (r *inputRecorder) Run(_ context.Context, input string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.inputs = append(r.inputs, input)
+	return nil
+}
+
+func (r *inputRecorder) seen() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.inputs...)
+}
+
+// A command the user ran reaches the model as something they said: the
+// command, its exit code and its output, answered in a turn of its own.
+func TestRunShellHandsTheOutputToTheModel(t *testing.T) {
+	sink, done, _ := collectSink()
+	runner := &inputRecorder{}
+	ctrl := New(Options{Runner: runner, Sink: sink})
+	t.Cleanup(ctrl.Close)
+
+	ctrl.RunShell("echo shell-into-context")
+	waitForDone(t, done)
+	inputs := runner.seen()
+	if len(inputs) != 1 {
+		t.Fatalf("model turns = %d, want 1", len(inputs))
+	}
+	for _, want := range []string{"<bash-input>echo shell-into-context</bash-input>", "<bash-exit-code>0</bash-exit-code>", "shell-into-context\n"} {
+		if !strings.Contains(inputs[0], want) {
+			t.Fatalf("model input missing %q:\n%s", want, inputs[0])
+		}
+	}
+}
+
+// A terminal's `!` command can stay the user's own: its output is shown and
+// nothing reaches the model, as 1.x has it.
+func TestRunShellLocalOnlyLeavesTheModelOut(t *testing.T) {
+	sink, done, events := collectSink()
+	runner := &inputRecorder{}
+	ctrl := New(Options{Runner: runner, Sink: sink})
+	t.Cleanup(ctrl.Close)
+
+	ctrl.RunShellWith("echo shell-stays-local", ShellRun{LocalOnly: true})
+	waitForDone(t, done)
+	if n := len(runner.seen()); n != 0 {
+		t.Fatalf("a local command was answered %d times: %q", n, runner.seen())
+	}
+	var shown bool
+	for _, e := range events() {
+		if e.Kind == event.ToolResult && strings.Contains(e.Tool.Output, "shell-stays-local") {
+			shown = true
+		}
+	}
+	if !shown {
+		t.Fatal("the command's output never reached the screen")
+	}
+}
+
+// A command the user stopped is not something to answer.
+func TestCancelledShellIsNotAnswered(t *testing.T) {
+	sink, done, _ := collectSink()
+	runner := &inputRecorder{}
+	ctrl := New(Options{Runner: runner, Sink: sink})
+	t.Cleanup(ctrl.Close)
+	command := "sleep 30"
+	if sandbox.ResolveShell("", "", nil).Kind == sandbox.ShellPowerShell {
+		command = "Start-Sleep -Seconds 30"
+	}
+	ctrl.RunShell(command)
+	time.Sleep(100 * time.Millisecond)
+	ctrl.Cancel()
+	waitForDoneWithin(t, done, shellWaitDelay+10*time.Second)
+	if n := len(runner.seen()); n != 0 {
+		t.Fatalf("a cancelled command was answered %d times", n)
+	}
+}
+
+func TestShellTurnInputCutsLongOutputAndSaysSo(t *testing.T) {
+	long := strings.Repeat("a", shellContextBytes*2)
+	got := shellTurnInput("cat big", nil, long, "")
+	if len(got) > shellContextBytes+512 || !strings.Contains(got, "bytes of output cut from the middle") {
+		t.Fatalf("long output not bounded (%d bytes)", len(got))
+	}
+}
+
+// A host started from a launcher has a thinner PATH than the user's terminal; a
+// "!" command must find what the model's bash tool finds.
+func TestRunShellUsesTheLoginShellPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("login shell PATH probing is POSIX-only")
+	}
+	bin := filepath.Join(testenv.TempDir(t), "bin")
+	if err := os.Mkdir(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "reasonix-bang-probe"), []byte("#!/bin/sh\nprintf 'bang-path-ok\\n'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	testenv.FakeLoginShell(t, bin+":/usr/bin:/bin")
+	t.Setenv("PATH", "/usr/bin:/bin")
+
+	sink, done, events := collectSink()
+	ctrl := &Controller{controllerDeps: controllerDeps{sink: sink}}
+	ctrl.RunShell("reasonix-bang-probe")
+	waitForDone(t, done)
+
+	for _, e := range events() {
+		if e.Kind == event.ToolResult {
+			if e.Tool.Err != "" || !strings.Contains(e.Tool.Output, "bang-path-ok") {
+				t.Fatalf("result = %q (err %q), want the command found through the login-shell PATH", e.Tool.Output, e.Tool.Err)
+			}
+			return
+		}
+	}
+	t.Fatal("no ToolResult")
 }

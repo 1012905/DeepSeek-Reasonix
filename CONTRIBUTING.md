@@ -162,16 +162,58 @@ ci: add golangci-lint and govulncheck
 
 ## Submitting changes
 
+Reasonix ships on two lines (see the
+[version roadmap](https://github.com/esengine/DeepSeek-Reasonix/discussions/10748)),
+and each takes different changes:
+
+| Line | Branch | Takes |
+| --- | --- | --- |
+| 2.x | `studio` | Features and fixes: active development |
+| 1.x | `main-v2` | Bug fixes, provider/API compatibility, release/updater, security, platform stability |
+
+A fix that matters on both lines lands on `main-v2` and is reviewed for
+porting to `studio`; do not open the same PR against both.
+
 1. Fork the repository
-2. Create a feature branch from `main-v2`
+2. Create a feature branch from the branch your change targets
 3. Make your changes with tests
 4. Ensure `go test ./...` passes
 5. Ensure `gofmt -l .` shows no changes
-6. Submit a pull request to `main-v2`
+6. Submit a pull request to that same branch
+
+## Pull request policy
+
+**Related changes.** If you have several related changes of one pattern, a
+tracking issue plus one pull request is easiest to review.
+
+**Issue first for features.** A change that adds behaviour rather than fixing a
+defect should link an issue the maintainers have agreed to before the work
+starts. A fix for a reproducible defect may open directly, with the failing test
+in the PR. Documentation-only and test-only PRs are reviewed at lower priority.
+
+**Review tiers.**
+
+- Changes under the `sensitive:` paths declared in `REASONIX.md` get a full
+  review plus a security review, regardless of author.
+- Every PR carries the four sections of the PR template: Cause, Blast radius,
+  Neighbouring behaviours tested, Why this layer.
+- The new test must fail without the change.
+- A UI change (`desktop/frontend-next/src` or the website pages) fills the
+  template's UI section: screenshots before and after, light and dark, wide
+  and phone width.
+- The same section carries the line "Entries moved, hidden or removed".
+- Hiding or removing a visible control needs a linked issue and a release-notes
+  line naming it, and updates `docs/STUDIO_PARITY.md` for a 1.x feature.
+- Review holds these; no check reads them.
+
+**Transparency.** The PR template has an optional checkbox for disclosing AI
+assistance. It is for transparency only and does not change how a change is
+reviewed.
 
 ## Reporting issues
 
 Open an issue on GitHub with:
+- Which line (1.x or 2.x) and the exact version
 - Steps to reproduce
 - Expected vs actual behavior
 - Go version and OS

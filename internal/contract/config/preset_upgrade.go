@@ -2,7 +2,11 @@
 // to the preset that replaced that shape.
 package config
 
-import "strings"
+import (
+	"strings"
+
+	"reasonix/internal/contract/provider"
+)
 
 // shippedPreset is a shape this project once shipped. An entry matching one is
 // ours to bring forward; anything else its user curated, and curation is the
@@ -21,6 +25,9 @@ type shippedPreset struct {
 	// Default, when set, has to match too: a shape that shipped one and had it
 	// changed was changed by somebody.
 	Default string
+	// Kind, when set, is the wire that shape shipped on, and the upgrade moves
+	// the entry onto the preset's. Empty identifies the shape on the preset's own.
+	Kind string
 	// Vision is the list that shape shipped. Holding it, or nil, is unspoken;
 	// anything else is a choice, an empty list most clearly of all — it says
 	// nothing here reads images.
@@ -31,6 +38,13 @@ type shippedPreset struct {
 	ByName bool
 }
 
+// The GLM catalogs before GLM-5.3: the shapes an install still holds until the
+// entries below move them forward.
+var (
+	legacyGlmAPIModels    = []string{"glm-5.2", "glm-5.1", "glm-5", "glm-5-turbo", "glm-5v-turbo", "glm-4.7", "glm-4.7-flash", "glm-4.7-flashx", "glm-4.6", "glm-4.5", "glm-4.5-air", "glm-4.5-flash"}
+	legacyGlmCodingModels = []string{"glm-5.2", "glm-5.1", "glm-5", "glm-4.7"}
+)
+
 // shippedPresets is every shape a curated preset has had. Adding one is how a
 // preset change reaches the installs that already have the old shape — the
 // alternative is a migration function per vendor per change, which is what this
@@ -39,7 +53,21 @@ type shippedPreset struct {
 var shippedPresets = []shippedPreset{
 	{PresetID: "kimi-cn", Models: legacyKimiAPIModels, Vision: legacyKimiAPIModels, ByName: true},
 	{PresetID: "kimi-global", Models: legacyKimiAPIModels, Vision: legacyKimiAPIModels, ByName: true},
+	// The GLM catalogs before GLM-5.3, on both hosts. Four presets shipped one
+	// of these two lists; the Anthropic-dialect GLM presets never held them.
+	{PresetID: "glm-cn", Models: legacyGlmAPIModels, ByName: true},
+	{PresetID: "zai-global", Models: legacyGlmAPIModels, ByName: true},
+	{PresetID: "glm-coding-plan-cn", Models: legacyGlmCodingModels, ByName: true},
+	{PresetID: "zai-coding-plan-global", Models: legacyGlmCodingModels, ByName: true},
 	{PresetID: "opencode-go", Models: legacyOpenCodeGoModels, ByName: true},
+	{PresetID: "mimo-api", Models: legacyMimoModels, Window: new(legacyMimoWindow), Default: legacyMimoModels[0], Vision: legacyMimoVision},
+	{PresetID: "mimo-anthropic", Models: legacyMimoModels, Window: new(legacyMimoWindow), Default: legacyMimoModels[0], Vision: legacyMimoVision},
+	{PresetID: "mimo-token-plan-cn", Models: legacyMimoModels, Window: new(legacyMimoWindow), Default: legacyMimoModels[0], Vision: legacyMimoVision},
+	{PresetID: "mimo-token-plan-cn-anthropic", Models: legacyMimoModels, Window: new(legacyMimoWindow), Default: legacyMimoModels[0], Vision: legacyMimoVision},
+	{PresetID: "mimo-token-plan-sgp", Models: legacyMimoModels, Window: new(legacyMimoWindow), Default: legacyMimoModels[0], Vision: legacyMimoVision},
+	{PresetID: "mimo-token-plan-sgp-anthropic", Models: legacyMimoModels, Window: new(legacyMimoWindow), Default: legacyMimoModels[0], Vision: legacyMimoVision},
+	{PresetID: "mimo-token-plan-ams", Models: legacyMimoModels, Window: new(legacyMimoWindow), Default: legacyMimoModels[0], Vision: legacyMimoVision},
+	{PresetID: "mimo-token-plan-ams-anthropic", Models: legacyMimoModels, Window: new(legacyMimoWindow), Default: legacyMimoModels[0], Vision: legacyMimoVision},
 	{PresetID: "longcat-openai", Models: longCat20Models, Window: new(legacyLongCat20ContextWindow), Default: longCat20Models[0]},
 	{PresetID: "longcat-anthropic", Models: longCat20Models, Window: new(legacyLongCat20ContextWindow), Default: longCat20Models[0]},
 	{PresetID: "qwen-cn", CurrentModels: true, Window: new(0), ByName: true},
@@ -48,6 +76,7 @@ var shippedPresets = []shippedPreset{
 	{PresetID: "qwen-coding-plan-cn-anthropic", CurrentModels: true, Window: new(0), ByName: true},
 	{PresetID: "qwen-coding-plan-global", CurrentModels: true, Window: new(0), ByName: true},
 	{PresetID: "qwen-coding-plan-global-anthropic", CurrentModels: true, Window: new(0), ByName: true},
+	{PresetID: "openai", CurrentModels: true, Window: new(openAIWindow), Default: "gpt-6-sol", Kind: kindOpenAI},
 }
 
 // upgradeShippedPresets brings every entry still carrying a shape we shipped up
@@ -87,9 +116,13 @@ func (s shippedPreset) matches(p *ProviderEntry) (ProviderEntry, bool) {
 	if s.CurrentModels {
 		models = canonical.Models
 	}
+	kind := canonical.Kind
+	if s.Kind != "" {
+		kind = s.Kind
+	}
 	// A single model in `model` rather than `models` is a shape nothing here
 	// shipped, and replacing its catalog would answer a narrowing with a list.
-	if !strings.EqualFold(strings.TrimSpace(p.Kind), strings.TrimSpace(canonical.Kind)) ||
+	if !strings.EqualFold(strings.TrimSpace(p.Kind), strings.TrimSpace(kind)) ||
 		normalizedBaseURLForMigration(p.BaseURL) != normalizedBaseURLForMigration(canonical.BaseURL) ||
 		!stringSlicesEqual(p.Models, models) ||
 		strings.TrimSpace(p.Model) != "" {
@@ -119,6 +152,10 @@ func (s shippedPreset) identifies(p *ProviderEntry) bool {
 func (s shippedPreset) upgrade(p *ProviderEntry, canonical ProviderEntry) bool {
 	added := addedModels(p.Models, canonical.Models)
 	changed := false
+	if s.Kind != "" && !strings.EqualFold(strings.TrimSpace(p.Kind), canonical.Kind) {
+		p.Kind = canonical.Kind
+		changed = true
+	}
 	if !stringSlicesEqual(p.Models, canonical.Models) {
 		p.Models = append([]string(nil), canonical.Models...)
 		changed = true
@@ -130,7 +167,10 @@ func (s shippedPreset) upgrade(p *ProviderEntry, canonical ProviderEntry) bool {
 		p.ContextWindow = canonical.ContextWindow
 		changed = true
 	}
-	if canonical.Default != "" && p.Default != canonical.Default && !p.HasModel(p.Default) {
+	// The guard held the shipped default, so it moves with the shape; any other
+	// default is a choice and stays while its model is still listed.
+	shippedDefault := s.Default != "" && p.Default == s.Default
+	if canonical.Default != "" && p.Default != canonical.Default && (shippedDefault || !p.HasModel(p.Default)) {
 		p.Default = canonical.Default
 		changed = true
 	}
@@ -142,6 +182,27 @@ func (s shippedPreset) upgrade(p *ProviderEntry, canonical ProviderEntry) bool {
 		changed = true
 	}
 	if mergeMissingModelOverrides(p, canonical.ModelOverrides) {
+		changed = true
+	}
+	if mergeMissingPrices(p, canonical.Prices, added) {
+		changed = true
+	}
+	return changed
+}
+
+// mergeMissingPrices prices the models an upgrade adds, only where the entry
+// holds no price for them. A rate somebody wrote down is theirs to keep.
+func mergeMissingPrices(p *ProviderEntry, defaults map[string]*provider.Pricing, added []string) bool {
+	changed := false
+	for _, model := range added {
+		fallback := defaults[model]
+		if fallback == nil || p.Prices[model] != nil {
+			continue
+		}
+		if p.Prices == nil {
+			p.Prices = make(map[string]*provider.Pricing, len(added))
+		}
+		p.Prices[model] = clonePricing(fallback)
 		changed = true
 	}
 	return changed

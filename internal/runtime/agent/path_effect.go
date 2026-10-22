@@ -2,7 +2,8 @@ package agent
 
 import (
 	"context"
-	"io/fs"
+	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"reasonix/internal/runtime/writeclaim"
@@ -10,7 +11,6 @@ import (
 	"strings"
 
 	"reasonix/internal/base/diff"
-	"reasonix/internal/base/fileutil"
 	"reasonix/internal/contract/tool"
 	"reasonix/internal/safety/evidence"
 	"reasonix/internal/state/checkpoint"
@@ -27,6 +27,7 @@ type pathState struct {
 	exists  bool
 	size    int64
 	modTime int64
+	mode    os.FileMode
 }
 
 // pathSnapshot is what the workspace looked like before a call. root is kept so
@@ -56,6 +57,7 @@ func snapshotPaths(ledger *evidence.Ledger, root string, targets []string) pathS
 	paths := append([]string(nil), targets...)
 	paths = append(paths, ledger.TouchedPaths(observedPathLimit, false)...)
 	paths = append(paths, workspaceTopLevel(root)...)
+	paths = slices.DeleteFunc(paths, func(p string) bool { return !watchablePath(p, root) })
 	if len(paths) == 0 && root == "" {
 		return pathSnapshot{}
 	}
@@ -68,7 +70,7 @@ func snapshotPaths(ledger *evidence.Ledger, root string, targets []string) pathS
 		if _, seen := snap.state[key]; seen {
 			continue
 		}
-		snap.state[key] = watchedPath{path: p, pathState: statePathOf(p)}
+		snap.state[key] = watchedPath{path: p, pathState: statePathOf(p, root)}
 	}
 	return snap
 }
@@ -91,19 +93,25 @@ func workspaceTopLevel(root string) []string {
 	return out
 }
 
-func statePathOf(path string) pathState {
+func statePathOf(path, root string) pathState {
+	if !watchablePath(path, root) {
+		return pathState{}
+	}
 	info, err := os.Lstat(path)
 	if err != nil {
 		return pathState{}
 	}
-	return pathState{exists: true, size: info.Size(), modTime: info.ModTime().UnixNano()}
+	return pathState{exists: true, size: info.Size(), modTime: info.ModTime().UnixNano(), mode: info.Mode()}
 }
 
 // since compares the snapshot against the workspace as it is now, returning
 // what the call changed and, of those, what it brought into existence.
 func (before pathSnapshot) since() (affected, created []string) {
 	for _, was := range before.state {
-		now := statePathOf(was.path)
+		if !watchablePath(was.path, before.root) {
+			continue
+		}
+		now := statePathOf(was.path, before.root)
 		if now == was.pathState {
 			continue
 		}
@@ -133,6 +141,18 @@ func decorateObservedPaths(rec *evidence.Receipt, plan *toolCallPlan) {
 	}
 	if rec.Success {
 		rec.CriteriaRewritten = plan.criteriaRewritten
+		for _, path := range plan.declaredPaths {
+			if !holdsPath(rec.Paths, path) {
+				rec.Paths = append(rec.Paths, path)
+			}
+		}
+	}
+	if rec.Write {
+		for _, target := range linkedWriteTargets(plan.pathsBefore.root, rec.Paths) {
+			if !holdsPath(rec.Paths, target) {
+				rec.Paths = append(rec.Paths, target)
+			}
+		}
 	}
 	if plan.pathsBefore.empty() || !rec.Success {
 		return
@@ -148,6 +168,42 @@ func decorateObservedPaths(rec *evidence.Receipt, plan *toolCallPlan) {
 			rec.Paths = append(rec.Paths, path)
 		}
 	}
+}
+
+// linkedWriteTargets names the files a named write changed through a link.
+// fileutil.AtomicOverwriteFile writes where a path resolves, and the link that
+// led there can be gone or replaced by the time anything reads the receipt.
+func linkedWriteTargets(root string, paths []string) []string {
+	if root == "" {
+		return nil
+	}
+	root = filepath.Clean(root)
+	var out []string
+	for _, path := range paths {
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(root, path)
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || !throughLink(root, filepath.Clean(path)) {
+			continue
+		}
+		if target, err := filepath.EvalSymlinks(path); err == nil {
+			out = append(out, target)
+		}
+	}
+	return out
+}
+
+// throughLink reports whether path, or a directory between it and root, is a
+// symbolic link. path must lie under root.
+func throughLink(root, path string) bool {
+	for path != root && path != filepath.Dir(path) {
+		if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return true
+		}
+		path = filepath.Dir(path)
+	}
+	return false
 }
 
 // holdsPath asks whether the receipt already names this file, by the ledger's
@@ -168,12 +224,12 @@ func holdsPath(paths []string, want string) bool {
 // it: removing a file the turn made leaves the workspace as found, removing one
 // it did not is the change. An unresolvable path looks exactly like a deleted
 // one, so anything never watched appear is assumed to have survived.
-func leftSomethingBehind(ledger *evidence.Ledger, r evidence.Receipt) bool {
+func leftSomethingBehind(ledger *evidence.Ledger, r evidence.Receipt, root string) bool {
 	if len(r.Paths) == 0 {
 		return true
 	}
 	for _, path := range r.Paths {
-		if statePathOf(path).exists || !ledger.CreatedInTurn(path) {
+		if statePathOf(path, root).exists || !ledger.CreatedInTurn(path) {
 			return true
 		}
 	}
@@ -188,17 +244,36 @@ func (a *Agent) touchedTheWorkspace(r evidence.Receipt) bool {
 	if a.writeWorkspaceRoot == "" || len(r.Paths) == 0 {
 		return true
 	}
-	return slices.ContainsFunc(r.Paths, a.pathInWorkspace)
+	return slices.ContainsFunc(r.Paths, func(p string) bool {
+		return !slices.Contains(r.HostOwned, p) && a.pathInWorkspace(p)
+	})
+}
+
+// stampHostOwned records which of the receipt's paths are host state as the
+// filesystem stands now, while the call's own effects are what it reflects.
+func (a *Agent) stampHostOwned(rec *evidence.Receipt) {
+	if a.writeWorkspaceRoot == "" || rec == nil {
+		return
+	}
+	for _, p := range rec.Paths {
+		if hostOwnedPath(a.writeWorkspaceRoot, p) {
+			rec.HostOwned = append(rec.HostOwned, p)
+		}
+	}
 }
 
 // pathInWorkspace reports whether one path is part of the work product. A
 // relative path is resolved against the workspace by every file tool, so it is
 // inside by construction; only an absolute one can leave.
 func (a *Agent) pathInWorkspace(path string) bool {
-	if a.writeWorkspaceRoot == "" {
+	root := a.writeWorkspaceRoot
+	if root == "" {
 		return true
 	}
-	return !filepath.IsAbs(path) || writeclaim.PathWithin(a.writeWorkspaceRoot, path)
+	if !filepath.IsAbs(path) {
+		return true
+	}
+	return writeclaim.PathWithin(root, path) || slices.ContainsFunc(a.extraRoots, func(extra string) bool { return writeclaim.PathWithin(extra, path) })
 }
 
 // mutationBaseline is what the turn's remaining obligations are measured from:
@@ -206,14 +281,20 @@ func (a *Agent) pathInWorkspace(path string) bool {
 // and build artifacts it cleaned up has no baseline, and owes no verification
 // of changes it kept none of.
 func (a *Agent) mutationBaseline(delivery bool) (int, bool) {
-	ledger := a.task.ledger
-	survives := func(r evidence.Receipt) bool {
-		return a.touchedTheWorkspace(r) && leftSomethingBehind(ledger, r)
-	}
 	if delivery {
-		return ledger.LatestProvenMutationIndexFunc(survives)
+		return a.task.ledger.LatestProvenMutationIndexFunc(a.survives)
 	}
-	return ledger.LatestSuccessfulWriterIndexFunc(survives)
+	return a.task.ledger.LatestSuccessfulWriterIndexFunc(a.survives)
+}
+
+// writerBaselineThrough is the non-delivery baseline as it stood at receipt
+// through.
+func (a *Agent) writerBaselineThrough(through int) (int, bool) {
+	return a.task.ledger.LatestSuccessfulWriterIndexThrough(through, a.survives)
+}
+
+func (a *Agent) survives(r evidence.Receipt) bool {
+	return a.touchedTheWorkspace(r) && leftSomethingBehind(a.task.ledger, r, a.writeWorkspaceRoot)
 }
 
 // observeBeforeMutation captures preimages for Previewable writers and records
@@ -231,12 +312,13 @@ func (a *Agent) observeBeforeMutation(ctx context.Context, plan *toolCallPlan) {
 	// one observer's branch — a build with no mutation observer still may not
 	// move its own criteria silently.
 	var change diff.Change
-	if pv, ok := plan.execTool.(tool.Previewer); ok {
-		if c, perr := pv.Preview(ctx, plan.execArgs); perr == nil {
+	if _, ok := plan.runTool.(tool.Previewer); ok {
+		if c, described := tool.PreviewChange(ctx, plan.runTool, plan.runArgs); described {
 			change = c
 			plan.criteriaRewritten = evidence.RewrittenTestCriteria(c.Path, c.OldText, c.NewText)
 			a.captureRewrittenCriteria(c, plan.criteriaRewritten)
 		}
+		a.publishToolPreview(ctx, plan, change)
 	}
 	obs := a.svc.mutationObserver
 	if obs != nil {
@@ -244,6 +326,9 @@ func (a *Agent) observeBeforeMutation(ctx context.Context, plan *toolCallPlan) {
 			obs.BeforeMutationFromChange(change, toolName)
 			plan.mutationPath = change.Path
 			plan.mutationWitness = evidence.ChangedLines(change.OldText, change.NewText)
+			return
+		}
+		if a.observeDeclaredPaths(plan, toolName) {
 			return
 		}
 		// Non-previewable writers: record a coverage gap (do not guess paths).
@@ -267,15 +352,22 @@ func (a *Agent) observeBeforeMutation(ctx context.Context, plan *toolCallPlan) {
 
 // observeAfterMutation records the after fingerprint when a concrete path was
 // known before execution, regardless of tool success or failure.
-func (a *Agent) observeAfterMutation(plan *toolCallPlan) {
-	if a == nil || plan == nil || plan.mutationPath == "" || a.svc.mutationObserver == nil {
-		return
+func (a *Agent) observeAfterMutation(plan *toolCallPlan) error {
+	if a == nil || plan == nil || a.svc.mutationObserver == nil {
+		return nil
 	}
+	var err error
 	toolName := plan.evidenceName
 	if toolName == "" {
 		toolName = plan.call.Name
 	}
-	a.svc.mutationObserver.AfterMutation(plan.mutationPath, toolName)
+	if plan.mutationPath != "" {
+		err = errors.Join(err, a.svc.mutationObserver.AfterMutation(plan.mutationPath, toolName))
+	}
+	for _, p := range plan.declaredPaths {
+		err = errors.Join(err, a.svc.mutationObserver.AfterMutation(p, toolName))
+	}
+	return err
 }
 
 // workspaceScanLimit bounds the walk. Past it the scan reports itself
@@ -306,52 +398,30 @@ func scanWorkspace(ctx context.Context, root string) workspaceScan {
 	return scanWorkspaceTo(ctx, root, workspaceScanLimit)
 }
 
-// scanWorkspaceTo takes the limit as an argument so a test can reach the
-// over-limit answer without laying down fifty thousand files, and without a
-// package variable two tests could write while a third reads it.
-func scanWorkspaceTo(ctx context.Context, root string, limit int) workspaceScan {
-	if root == "" {
-		return workspaceScan{}
+// scanObserved walks the observed workspace and every granted extra root, so
+// a change in any of them is seen. One incomplete walk makes the whole scan
+// incomplete: nothing is concluded from a part.
+func (a *Agent) scanObserved(ctx context.Context) workspaceScan {
+	scan := scanWorkspaceTo(ctx, a.observeRoot, a.scanLimit())
+	if len(a.extraRoots) == 0 || !scan.complete {
+		return scan
 	}
-	state := make(map[string]pathState, 4096)
-	complete := true
-	overLimit := false
-	// A stop has to reach the walk: it runs on the turn's critical path twice
-	// per call, and an uninterruptible one is what a user experiences as the
-	// stop button not working.
-	checked := 0
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if checked++; checked%scanCancelCheckEvery == 0 && ctx.Err() != nil {
-			complete = false
-			return filepath.SkipAll
-		}
-		if err != nil {
-			complete = false
-			return nil
-		}
-		if d.IsDir() {
-			if fileutil.IsVCSStoreDir(d.Name()) && path != root {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if len(state) >= limit {
-			complete = false
-			overLimit = true
-			return filepath.SkipAll
-		}
-		info, err := d.Info()
-		if err != nil {
-			complete = false
-			return nil
-		}
-		state[path] = pathState{exists: true, size: info.Size(), modTime: info.ModTime().UnixNano()}
-		return nil
-	})
-	if err != nil {
-		complete = false
+	for _, extra := range a.extraRoots {
+		more := scanWorkspaceTo(ctx, extra, max(0, a.scanLimit()-len(scan.state)))
+		maps.Copy(scan.state, more.state)
+		scan.complete = scan.complete && more.complete
+		scan.overLimit = scan.overLimit || more.overLimit
 	}
-	return workspaceScan{state: state, complete: complete, overLimit: overLimit}
+	return scan
+}
+
+// scanLimit is the walk bound this agent runs under: its configured limit,
+// never above workspaceScanLimit, which is also the default.
+func (a *Agent) scanLimit() int {
+	if a.workspaceScanLimit > 0 {
+		return min(a.workspaceScanLimit, workspaceScanLimit)
+	}
+	return workspaceScanLimit
 }
 
 // unchanged reports whether the workspace is byte-for-byte as this scan found
@@ -394,23 +464,42 @@ func (before workspaceScan) changed(after workspaceScan) (paths []string, ok boo
 // through its own script language, a wrapper, a path built from a variable —
 // stays a mutation unless the workspace it ran against is exactly as it was.
 func (a *Agent) settleUnchangedWorkspace(ctx context.Context, rec *evidence.Receipt, plan *toolCallPlan) {
-	if rec == nil || plan == nil || !rec.Success || rec.MutationEvidence != evidence.MutationUnknown {
+	if rec == nil || plan == nil || !rec.Success {
+		return
+	}
+	// The watched paths may already have proven a change, but only the walk can
+	// say those were all of it.
+	watchedProof := rec.MutationEvidence == evidence.MutationProven
+	if rec.MutationEvidence != evidence.MutationUnknown && !watchedProof {
 		return
 	}
 	// Nothing to compare against is not a reason to walk: a call that took no
 	// before-scan can only reach changed() to be told so, and that walk costs
 	// what one that answers costs.
-	if !plan.scanBefore.complete {
+	if !plan.scanBefore.complete || !a.mayAttributeObserved(ctx) {
 		return
 	}
-	after := scanWorkspace(ctx, a.writeWorkspaceRoot)
+	after := a.scanObserved(ctx)
 	changed, ok := plan.scanBefore.changed(after)
 	if !ok {
 		return
 	}
+	whole := true
+	if scope := scopedGrant(ctx); scope != nil && len(changed) > 0 {
+		// Inside a run's own declared paths a change is taken as that run's:
+		// the claims are proven disjoint up front and writer tools are fenced
+		// to them. Outside them it is someone else's, so it says nothing here.
+		changed = slices.DeleteFunc(changed, func(p string) bool { return !scope.Allows(p) })
+		whole = false
+		if len(changed) == 0 {
+			return
+		}
+	}
 	if len(changed) == 0 {
-		rec.Mutation = false
-		rec.MutationEvidence = ""
+		if !watchedProof {
+			rec.Mutation = false
+			rec.MutationEvidence = ""
+		}
 		return
 	}
 	// The walk answered what the command would not: these files and no others.
@@ -421,14 +510,18 @@ func (a *Agent) settleUnchangedWorkspace(ctx context.Context, rec *evidence.Rece
 		if !holdsPath(rec.Paths, path) {
 			rec.Paths = append(rec.Paths, path)
 		}
+		if _, existed := plan.scanBefore.state[path]; !existed && !holdsPath(rec.Created, path) {
+			rec.Created = append(rec.Created, path)
+		}
 	}
+	rec.PathsComplete = whole && len(changed) < observedPathLimit
 }
 
 // scanBeforeUnprovenCall takes the whole-workspace scan only for a call the
 // host could not classify. A proven writer already reports its paths, and a
 // proven reader has nothing to settle, so neither pays for the walk.
 func (a *Agent) scanBeforeUnprovenCall(ctx context.Context, plan *toolCallPlan) workspaceScan {
-	if evidence.ToolCallMutationClass(plan.evidenceName, plan.evidenceArgs, plan.readOnly) != evidence.MutationUnknown {
+	if evidence.ToolCallMutationClassWith(plan.evidenceName, plan.evidenceArgs, plan.facts()) != evidence.MutationUnknown {
 		return workspaceScan{}
 	}
 	// A backgrounded job's receipt is written when it starts, so the workspace
@@ -442,9 +535,108 @@ func (a *Agent) scanBeforeUnprovenCall(ctx context.Context, plan *toolCallPlan) 
 	if a.task.workspaceOverScanLimit() {
 		return workspaceScan{}
 	}
-	scan := scanWorkspace(ctx, a.writeWorkspaceRoot)
+	if !a.mayAttributeObserved(ctx) {
+		return workspaceScan{}
+	}
+	scan := a.scanObserved(ctx)
 	if scan.overLimit {
 		a.task.noteWorkspaceOverScanLimit()
 	}
 	return scan
+}
+
+// mayAttributeObserved says whether what a walk sees change can be charged to
+// this agent's call: when it holds a declared write scope to filter by, or
+// when no other background writer is running beside it.
+func (a *Agent) mayAttributeObserved(ctx context.Context) bool {
+	return scopedGrant(ctx) != nil || !a.svc.mutationObserver.HasOtherActiveWriters()
+}
+
+// scopedGrant is the running child's write grant when it names paths; a
+// whole-workspace grant filters nothing, so it is not one.
+func scopedGrant(ctx context.Context) *writeclaim.WriteGrant {
+	g := writeclaim.SubagentWriteGrant(ctx)
+	if g == nil || g.Declared().WholeWorkspace || g.Scope().Empty() {
+		return nil
+	}
+	return g
+}
+
+// recordLinkTargets names the file a named-path write really landed on when its
+// path goes through a symlink. The link can be removed before the turn ends, so
+// the target has to be written down while the link still resolves. A path the
+// host cannot resolve leaves the write's extent unestablished.
+func (a *Agent) recordLinkTargets(rec *evidence.Receipt) {
+	if !rec.Write || a.observeRoot == "" {
+		return
+	}
+	root, err := filepath.EvalSymlinks(a.observeRoot)
+	if err != nil {
+		rec.MutationEvidence = evidence.MutationUnknown
+		return
+	}
+	for _, path := range rec.Paths {
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(a.observeRoot, path)
+		}
+		resolved, err := resolveThroughExisting(path)
+		if err != nil {
+			rec.MutationEvidence = evidence.MutationUnknown
+			continue
+		}
+		rel, err := filepath.Rel(a.observeRoot, path)
+		if err == nil && !strings.HasPrefix(rel, "..") && evidence.NormalizePath(filepath.Join(root, rel)) == evidence.NormalizePath(resolved) {
+			continue
+		}
+		rec.MutationPaths = append(rec.MutationPaths, resolved)
+	}
+}
+
+// maxLinkHops bounds how many dangling links one write path may chain through.
+const maxLinkHops = 40
+
+var errLinkChain = errors.New("symlink chain too long")
+
+// resolveThroughExisting resolves symlinks in the longest existing prefix of
+// path, so a write that never created its target still reports where it would
+// have landed. A dangling link is followed by hand: the write creates its
+// target, and an unfollowed link would name itself as the destination.
+func resolveThroughExisting(path string) (string, error) {
+	return resolveHops(path, 0)
+}
+
+func resolveHops(path string, hops int) (string, error) {
+	if hops > maxLinkHops {
+		return "", errLinkChain
+	}
+	rest := ""
+	for {
+		resolved, err := filepath.EvalSymlinks(path)
+		if err == nil {
+			return filepath.Join(resolved, rest), nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		if info, lerr := os.Lstat(path); lerr == nil && info.Mode()&os.ModeSymlink != 0 {
+			target, rerr := os.Readlink(path)
+			if rerr != nil {
+				return "", rerr
+			}
+			if !filepath.IsAbs(target) {
+				target = filepath.Join(filepath.Dir(path), target)
+			}
+			landed, derr := resolveHops(target, hops+1)
+			if derr != nil {
+				return "", derr
+			}
+			return filepath.Join(landed, rest), nil
+		}
+		parent := filepath.Dir(path)
+		if parent == path {
+			return "", err
+		}
+		rest = filepath.Join(filepath.Base(path), rest)
+		path = parent
+	}
 }

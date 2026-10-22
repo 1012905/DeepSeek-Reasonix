@@ -130,7 +130,7 @@ func TestRecordedSelectionWinsOverTheWordList(t *testing.T) {
 	a := &Agent{}
 	m := provider.Message{Content: content, ToolExecution: &provider.ToolExecution{
 		State: tool.ShellStateFailed, ExitCode: &code, DiagnosticLines: []int{31}}}
-	got := a.keptForProjection(m)
+	got := a.window().keptForProjection(m)
 	if !strings.Contains(got.Content, "[ERR] handlers.go:88") {
 		t.Errorf("the selected failure line did not survive:\n%s", got.Content)
 	}
@@ -169,7 +169,7 @@ func TestAnnotateFailureDiagnosticsAsksOnceAndRecordsTheAnswer(t *testing.T) {
 		t.Error("the caller's region was mutated in place")
 	}
 	// The recorded answer drives the shortening, and the failure survives it.
-	shortened := a.keptForProjection(got[1])
+	shortened := a.window().keptForProjection(got[1])
 	if !strings.Contains(shortened.Content, "[ERR] handlers.go:88") {
 		t.Errorf("selected failure did not survive:\n%s", shortened.Content)
 	}
@@ -200,7 +200,7 @@ func TestAnnotateFailureDiagnosticsFallsBackWhenTheModelIsNoHelp(t *testing.T) {
 	if len(got[0].ToolExecution.DiagnosticLines) != 0 {
 		t.Fatalf("an unusable reply was recorded as a selection: %v", got[0].ToolExecution.DiagnosticLines)
 	}
-	shortened := a.keptForProjection(got[0])
+	shortened := a.window().keptForProjection(got[0])
 	if shortened.Content == content {
 		t.Error("nothing was shortened: the mechanical fallback did not run")
 	}
@@ -262,6 +262,10 @@ func TestOversizeOutputSpillsRatherThanTruncates(t *testing.T) {
 	// Owning neither a transcript nor an archive is likewise not a reason to
 	// lose the middle: scratch is somewhere, and truncation drops most of a
 	// result this size.
+	scratchHome := testenv.TempDir(t)
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, scratchHome)
+	}
 	bare := New(nil, tool.NewRegistry(), sessionstore.NewSession("sys"), Options{}, event.Discard)
 	bareOut, _, bareNotice := bare.boundToolOutput(big, "bash", "call-2", "", false)
 	if bareNotice != "" {

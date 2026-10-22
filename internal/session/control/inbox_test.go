@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reasonix/internal/state/sessionstore"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -53,7 +54,7 @@ func TestInboxMutationsReachTheEventStream(t *testing.T) {
 
 func waitForKind(t *testing.T, sink *noticeSink, kind event.Kind, want int) {
 	t.Helper()
-	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
+	for deadline := time.Now().Add(testenv.Budget(t)); time.Now().Before(deadline); {
 		if countKind(sink, kind) >= want {
 			return
 		}
@@ -127,17 +128,15 @@ func TestTrySteerRejectedBecomesFollowup(t *testing.T) {
 	if got.Disposition != sessioninbox.DispositionQueuedFollowup {
 		t.Fatalf("disposition = %s, want queued_followup", got.Disposition)
 	}
-	select {
-	case <-runner.started:
-	case <-time.After(time.Second):
-		t.Fatal("rejected idle steer did not dispatch as a follow-up")
-	}
+	// The rejection dispatches before TrySteerInboxItem returns, so admission is
+	// already durable here; how soon the turn goroutine reaches the runner is not.
 	meta, _, err := c.ReadInboxItem(rec.ItemID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if meta.State != sessioninbox.StateRunning || meta.Intent != sessioninbox.IntentFollowup {
-		t.Fatalf("meta = %+v", meta)
+	if meta.State != sessioninbox.StateRunning || meta.Intent != sessioninbox.IntentFollowup || !c.Running() {
+		t.Fatalf("rejected idle steer did not dispatch as a follow-up: meta = %+v, running = %v, queue = %+v",
+			meta, c.Running(), c.InboxSnapshot())
 	}
 }
 
@@ -206,7 +205,14 @@ func TestIdempotentEnqueueRejectsDifferentInput(t *testing.T) {
 type inboxSteerProvider struct {
 	started  chan struct{}
 	release  chan struct{}
+	unblock  func() // closes release once; safe from both the test body and its cleanup
 	requests []provider.Request
+}
+
+func newInboxSteerProvider() *inboxSteerProvider {
+	p := &inboxSteerProvider{started: make(chan struct{}), release: make(chan struct{})}
+	p.unblock = sync.OnceFunc(func() { close(p.release) })
+	return p
 }
 
 func (p *inboxSteerProvider) Name() string { return "inbox-steer" }
@@ -234,25 +240,7 @@ func (p *inboxSteerProvider) Stream(ctx context.Context, req provider.Request) (
 }
 
 func TestThirtySteersApplyAndAckExactlyOnce(t *testing.T) {
-	dir := testenv.TempDir(t)
-	prov := &inboxSteerProvider{started: make(chan struct{}), release: make(chan struct{})}
-	sess := sessionstore.NewSession("sys")
-	exec := agent.New(prov, tool.NewRegistry(), sess, agent.Options{}, event.Discard)
-	sink, done, _ := collectSink()
-	c := New(Options{
-		Runner:      exec,
-		Executor:    exec,
-		Sink:        sink,
-		SessionDir:  dir,
-		SessionPath: filepath.Join(dir, "s.jsonl"),
-	})
-	defer c.autosaveWG.Wait()
-	c.Submit("initial turn")
-	select {
-	case <-prov.started:
-	case <-time.After(time.Second):
-		t.Fatal("initial provider turn did not start")
-	}
+	c, _, sess, prov, done := steeringTurn(t)
 
 	const steerCount = 30
 	for i := range steerCount {
@@ -269,7 +257,7 @@ func TestThirtySteersApplyAndAckExactlyOnce(t *testing.T) {
 			t.Fatalf("steer %d disposition = %q", i, got.Disposition)
 		}
 	}
-	close(prov.release)
+	prov.unblock()
 	// Thirty durable round trips are real filesystem work; a loaded Windows
 	// runner spends most of the default five seconds before the turn is even
 	// released. This asserts exactly-once acknowledgement, not latency.
@@ -477,6 +465,9 @@ func TestInboxUsesFrozenImageBytesAfterWorkspaceChanges(t *testing.T) {
 		t.Fatalf("frozen image envelope = %+v err=%v", env, err)
 	}
 	frozen := env.FrozenImages[0]
+	if snap := c.InboxSnapshot(); len(snap.Items) != 1 || !snap.Items[0].Images {
+		t.Fatalf("the queue snapshot does not say the item carries a picture: %+v", snap.Items)
+	}
 	if err := os.WriteFile(imagePath, []byte("changed after enqueue"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -552,8 +543,22 @@ func TestCancelWithInboxItemsDiscardsOnlyOwnedPendingItems(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Resuming after the cancel offers the survivor to the dispatcher; hold
+	// that submit so the assertion sees the queue, not a turn that already
+	// acknowledged the item.
+	var offered []string
+	c.inbox.mu.Lock()
+	c.inbox.beforeDispatchSubmit = func(id string) error {
+		offered = append(offered, id)
+		return errors.New("hold dispatch")
+	}
+	c.inbox.scheduleDispatchRetry = func(time.Duration, func()) {}
+	c.inbox.mu.Unlock()
 	if err := c.CancelWithInboxItems([]string{owned.ItemID, unrelated.ItemID}, "desktop"); err != nil {
 		t.Fatal(err)
+	}
+	if len(offered) != 1 || offered[0] != unrelated.ItemID {
+		t.Fatalf("dispatcher was offered %v, want only the unrelated item", offered)
 	}
 	snap := c.InboxSnapshot()
 	if snap.Paused {

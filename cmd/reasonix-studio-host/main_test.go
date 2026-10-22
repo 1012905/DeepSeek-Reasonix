@@ -26,6 +26,78 @@ func TestMain(m *testing.M) {
 	testenv.RunWithIsolatedUserState(m)
 }
 
+func TestStudioPingConsentIsReadFreshEachTime(t *testing.T) {
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	path := config.UserConfigPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	write := func(body string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	opts := studioTelemetryOptions(context.Background(), config.Default(), "2.20.2")
+	if opts.PingAllowed == nil {
+		t.Fatal("Studio's ping has no live consent check")
+	}
+	write("[desktop]\ntelemetry = true\n")
+	if !opts.PingAllowed() {
+		t.Fatal("enabled setting reads as off")
+	}
+	write("[desktop]\ntelemetry = false\n")
+	if opts.PingAllowed() {
+		t.Fatal("a setting turned off while running still allows the ping")
+	}
+	write("[desktop]\ntelemetry = false\n\n[broken\nx = \n")
+	if opts.PingAllowed() {
+		t.Fatal("a corrupt file after an opt-out counted as consent")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if !opts.PingAllowed() {
+		t.Fatal("a missing file should keep the documented default (on)")
+	}
+}
+
+func TestProjectConfigCannotTurnThePingOn(t *testing.T) {
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	path := config.UserConfigPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("[desktop]\ntelemetry = false\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	project := testenv.TempDir(t)
+	if err := os.WriteFile(filepath.Join(project, "reasonix.toml"), []byte("[desktop]\ntelemetry = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(project)
+	if desktopTelemetryOn() {
+		t.Fatal("a checkout's reasonix.toml turned the ping back on")
+	}
+}
+
+func TestStudioTelemetryUsesItsOwnSurfaceAndConsent(t *testing.T) {
+	cfg := config.Default()
+	disabled := false
+	cfg.Desktop.Telemetry = &disabled
+
+	opts := studioTelemetryOptions(context.Background(), cfg, "2.20.2")
+	if opts.Surface != surface.Studio {
+		t.Fatalf("surface = %q, want studio", opts.Surface)
+	}
+	if !opts.SuppressPing {
+		t.Fatal("disabled launch telemetry did not suppress the Studio ping")
+	}
+	if opts.Version != "2.20.2" || opts.Mode != "on" || !opts.Interactive {
+		t.Fatalf("Studio telemetry options = %+v", opts)
+	}
+}
+
 // recordingRunner stands in for the agent: a turn that reaches it proves the
 // request crossed the boundary and landed in the kernel, which is the only
 // thing a status code cannot say.
@@ -346,7 +418,7 @@ func TestRunServesUntilTheParentLetsGo(t *testing.T) {
 	go func() { _, _ = io.Copy(io.Discard, logs) }()
 
 	done := make(chan int, 1)
-	go func() { done <- run(lease, announced, logged, page, shellIdentity{version: "2.10.0"}) }()
+	go func() { done <- run(lease, announced, logged, page, shellIdentity{version: "2.10.0"}, nil) }()
 
 	line, err := bufio.NewReader(stdout).ReadString('\n')
 	if err != nil {
@@ -408,7 +480,7 @@ func TestHostNotificationsCarryTheSharedSettingLive(t *testing.T) {
 		{Notifications: config.NotificationsConfig{Enabled: true}},
 		nil,
 	} {
-		wrap, set := hostNotifications(cfg)
+		wrap, set, _ := hostNotifications(cfg)
 		if got := wrap(plain); got == event.Sink(plain) {
 			t.Fatalf("runtime was left unwrapped, so the switch could never reach it (cfg %+v)", cfg)
 		}
@@ -454,3 +526,70 @@ type stubTray struct{}
 func (stubTray) IconLive() bool                 { return false }
 func (stubTray) TrayFold() traystate.State      { return traystate.State{} }
 func (stubTray) ApplyTrayPrefs(serve.TrayPrefs) {}
+
+// A person who only ever opens the window still gets the one-time upgrades:
+// the shipped "auto" a v6 file carries is released before the first pane is
+// built, so that pane opens in the default the sandbox and trust decide.
+func TestAssembleAppliesTheStartupUpgrades(t *testing.T) {
+	// Its own home: another test's launch already recorded the release in the
+	// package's shared one, and a recorded release is not run again.
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	path := config.UserConfigPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("config_version = 6\n[desktop]\ndefault_tool_approval_mode = \"auto\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(testenv.TempDir(t))
+	hub, err := assemble(t.Context(), io.Discard, io.Discard, shellIdentity{}, nil, newStartupPhases(io.Discard, time.Now), nil)
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+	defer hub.Shutdown()
+	if got := config.LoadForEdit(path).DesktopDefaultToolApprovalMode(); got != "" {
+		t.Fatalf("after the window started, the desktop posture is %q, want the shipped auto released", got)
+	}
+}
+
+type phoneReports chan [2]any
+
+func (p phoneReports) NotifyPhones(_ context.Context, kind string, count int) error {
+	p <- [2]any{kind, count}
+	return nil
+}
+
+// A runtime's own events, through the wrapper every pane gets, reach the account
+// connection as a kind and a count and nothing else, and only once the switches
+// ask for it.
+func TestAnApprovalOnAPaneReachesThePhoneLinkAsATypeAndACount(t *testing.T) {
+	cfg := &config.Config{Notifications: config.NotificationsConfig{Phone: config.PhoneNotificationsConfig{Enabled: true, Approval: true}}}
+	wrap, set, link := hostNotifications(cfg)
+	reports := make(phoneReports, 4)
+	link.Set(reports)
+	sink := wrap(serve.NewBroadcaster())
+
+	sink.Emit(event.Event{Kind: event.ApprovalRequest, Approval: event.Approval{ID: "1", Tool: "bash", Subject: "git push --force"}})
+	select {
+	case got := <-reports:
+		if got != [2]any{"approval", 1} {
+			t.Fatalf("reported %v, want a type and a count and no text", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("an approval on a pane did not reach the phone link")
+	}
+
+	sink.Emit(event.Event{Kind: event.AskRequest})
+	select {
+	case got := <-reports:
+		t.Fatalf("reported %v for a kind whose switch is off", got)
+	case <-time.After(100 * time.Millisecond):
+	}
+	set.Store(config.NotificationsConfig{})
+	sink.Emit(event.Event{Kind: event.ApprovalRequest})
+	select {
+	case got := <-reports:
+		t.Fatalf("reported %v after the master switch was turned off", got)
+	case <-time.After(100 * time.Millisecond):
+	}
+}

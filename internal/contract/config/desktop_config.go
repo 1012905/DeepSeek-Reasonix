@@ -51,6 +51,39 @@ func (c *Config) SetDesktopTray(mode string) error {
 	return nil
 }
 
+// DesktopDefaultToolApprovalMode is the Ask/Auto/YOLO posture the person named
+// for new desktop sessions, or "" when they never named one and the session
+// follows the sandbox claim and folder trust instead.
+func (c *Config) DesktopDefaultToolApprovalMode() string {
+	if c == nil || strings.TrimSpace(c.Desktop.DefaultToolApprovalMode) == "" {
+		return ""
+	}
+	switch strings.ToLower(strings.TrimSpace(c.Desktop.DefaultToolApprovalMode)) {
+	case "workspace-write":
+		return ""
+	case "danger-full-access":
+		return "yolo"
+	}
+	return NormalizeToolApprovalMode(c.Desktop.DefaultToolApprovalMode)
+}
+
+// UnrecognizedDesktopToolApprovalMode is the file's default_tool_approval_mode
+// when it names no posture this build knows, so it loads as ask; else "".
+func (c *Config) UnrecognizedDesktopToolApprovalMode() string {
+	raw := ""
+	if c != nil {
+		raw = strings.TrimSpace(c.Desktop.DefaultToolApprovalMode)
+	}
+	switch strings.ToLower(raw) {
+	case "", "ask", "workspace-write", "danger-full-access", "read-only":
+		return ""
+	}
+	if NormalizeToolApprovalMode(raw) != "ask" {
+		return ""
+	}
+	return raw
+}
+
 // DesktopConfig controls desktop-only UI preferences. It is intentionally
 // separate from top-level language and [ui] so desktop choices do not affect CLI
 // language, terminal colours, or provider-visible prompt/request data.
@@ -64,6 +97,11 @@ type DesktopConfig struct {
 	// config rather than browser storage because clearing a cache is not the
 	// same as meeting the app for the first time.
 	Welcomed bool `toml:"welcomed"`
+	// MaxWorkspaces caps the projects the sidebar remembers. 0, the default, is no cap.
+	MaxWorkspaces int `toml:"max_workspaces"`
+	// SessionRefTokens bounds what one referenced past conversation may add to a
+	// message, in tokens; 0 is the default, DefaultSessionRefTokens.
+	SessionRefTokens int `toml:"session_ref_tokens"`
 	// SurfaceSlots is where the user put an extension's surface, keyed
 	// "<pluginId>:<surfaceId>". It outranks the extension's own suggestion.
 	SurfaceSlots   map[string]string `toml:"surface_slots"`
@@ -78,17 +116,52 @@ type DesktopConfig struct {
 	DisplayMode             string           `toml:"display_mode"`               // standard|compact (legacy "minimal" maps to compact); transcript display mode
 	StatusBarStyle          string           `toml:"status_bar_style"`           // icon|text; desktop status bar metric labels
 	StatusBarItems          []string         `toml:"status_bar_items"`           // ordered visible desktop status bar items
-	DefaultToolApprovalMode string           `toml:"default_tool_approval_mode"` // ask|auto|yolo; defaults to auto for newly-created desktop sessions
+	DefaultToolApprovalMode string           `toml:"default_tool_approval_mode"` // ask|auto|yolo; empty follows the sandbox claim and folder trust
 	CheckUpdates            *bool            `toml:"check_updates"`              // startup update checks; nil keeps the default enabled
 	UpdateChannel           string           `toml:"update_channel"`             // legacy: read for compatibility, never written back
-	Telemetry               *bool            `toml:"telemetry"`                  // anonymous launch ping plus scrubbed next-launch native crash diagnostics; nil keeps the default enabled
-	Metrics                 *bool            `toml:"metrics"`                    // aggregate desktop metrics (anonymous signal/bucket counts, including lifecycle health; no content); nil keeps the default enabled
+	Telemetry               *bool            `toml:"telemetry"`                  // anonymous daily ping, scrubbed native crash diagnostics, per-package market install counts (anonymous, no content); nil = enabled
+	Metrics                 *bool            `toml:"metrics"`                    // aggregate desktop metrics (anonymous signal/bucket counts, lifecycle health) and per-package market install counts (anonymous, no content); nil = enabled
 	ProviderAccess          []string         `toml:"provider_access"`            // desktop-only list of provider entries shown in Settings > Model > Access
 	ExpandThinking          bool             `toml:"expand_thinking"`            // deprecated compatibility alias: true maps to auto
 	ReasoningDisplayMode    string           `toml:"reasoning_display_mode"`
-	ConversationWidth       string           `toml:"conversation_width"` // standard|full; how far prose runs; empty = standard
+	ConversationWidth       string           `toml:"conversation_width"` // standard|full|full-all; how far prose (and the composer, for full-all) runs; empty = standard
 	PinnedVersion           string           `toml:"pinned_version"`     // release pinned by a rollback; empty follows the channel
+	UpdateMode              string           `toml:"update_mode"`        // manual (default) | notify | download; user file only
 	Appearance              AppearanceConfig `toml:"appearance"`
+}
+
+// The interface scale's one declared range: the save clamp, the range the page
+// draws its slider from and the comment in the rendered config all read it.
+const (
+	ZoomMin  = 0.8
+	ZoomMax  = 1.8
+	ZoomStep = 0.05
+)
+
+// ClampZoom holds a scale to ZoomMin..ZoomMax. Zero stays zero because it means
+// "unset"; a stored value outside the range is not rewritten, only read through
+// here.
+func ClampZoom(v float64) float64 {
+	if !(v > 0) {
+		return 0
+	}
+	return min(max(v, ZoomMin), ZoomMax)
+}
+
+// The interface text size moves type alone, where Zoom moves everything, so its
+// range is narrower: past these ends spacing written in pixels stops keeping up.
+const (
+	TextSizeMin = 0.85
+	TextSizeMax = 1.6
+)
+
+// ClampTextSize holds a scale to TextSizeMin..TextSizeMax; zero stays zero
+// because it means "unset".
+func ClampTextSize(v float64) float64 {
+	if !(v > 0) {
+		return 0
+	}
+	return min(max(v, TextSizeMin), TextSizeMax)
 }
 
 // AppearanceConfig is what the user set for themselves, on top of whichever
@@ -97,8 +170,9 @@ type DesktopConfig struct {
 // Zero means "unset" throughout, so an untouched config resolves to the
 // stylesheet's own defaults rather than to a number written here.
 type AppearanceConfig struct {
-	Zoom      float64         `toml:"zoom"`      // whole-interface scale, 0.8..1.6; 0 = 1.0
+	Zoom      float64         `toml:"zoom"`      // whole-interface scale within ZoomMin..ZoomMax; 0 = 1.0
 	ReadSize  float64         `toml:"read_size"` // transcript body size in px; 0 = the stylesheet's
+	TextSize  float64         `toml:"text_size"` // interface text scale within TextSizeMin..TextSizeMax, spacing untouched; 0 = 1.0
 	FontUI    string          `toml:"font_ui"`   // CSS font-family list for the interface
 	FontMono  string          `toml:"font_mono"` // CSS font-family list for code and output
 	Wallpaper WallpaperConfig `toml:"wallpaper"`
@@ -113,4 +187,12 @@ type WallpaperConfig struct {
 	Dim     float64 `toml:"dim"`     // scrim of page colour over it, 0..1
 	FocusX  float64 `toml:"focus_x"` // 0..1, the point that survives cropping
 	FocusY  float64 `toml:"focus_y"` // 0..1
+}
+
+// WorkspaceLimit is how many projects the sidebar may remember; zero is no limit.
+func (c *Config) WorkspaceLimit() int {
+	if c == nil {
+		return 0
+	}
+	return max(c.Desktop.MaxWorkspaces, 0)
 }

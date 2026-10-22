@@ -5,6 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"reasonix/internal/contract/tool"
+	"reasonix/internal/state/trustedstate"
 )
 
 // SessionDataGuard rejects agent writes into Reasonix's own session stores:
@@ -60,6 +63,16 @@ func (g SessionDataGuard) Check(target string) error {
 			"Ask the user to edit it themselves, or to add the directory to [sandbox] allow_write in reasonix.toml if raw access is truly intended",
 			target, g.stateRoot)
 	}
+	if g.deniesTrusted(abs) {
+		return tool.Refusal{Code: CodeTrustedStateWrite, Message: fmt.Sprintf(
+			"write refused: `%s` is inside Reasonix's trusted host state (%s). The host alone records evidence and contracts there, so agents may not modify it; report the underlying problem instead",
+			target, filepath.Join(g.stateRoot, TrustedStateDir))}
+	}
+	if g.deniesSchedule(abs) {
+		return tool.Refusal{Code: CodeScheduleStateWrite, Message: fmt.Sprintf(
+			"write refused: `%s` is inside the scheduled-runs store (%s). Schedules, budgets and run records are changed by the person through the app, never by an agent, so an unattended run's limits cannot be edited from a chat; report the underlying problem instead",
+			target, filepath.Join(g.stateRoot, ScheduleStateDir))}
+	}
 	if !g.denies(abs) {
 		return nil
 	}
@@ -106,6 +119,45 @@ func (g SessionDataGuard) deniesSecurity(abs string) bool {
 		return false
 	}
 	return securityStateFile(rel)
+}
+
+// TrustedStateDir is the state-root subdirectory holding Trusted Host State.
+const TrustedStateDir = trustedstate.DirectoryName
+
+// CodeTrustedStateWrite identifies a file-tool write refused for landing in
+// Trusted Host State.
+const CodeTrustedStateWrite = "workspace.trusted_state_write"
+
+// ScheduleStateDir is the state-root subdirectory holding the scheduled-runs
+// store.
+const ScheduleStateDir = "schedules"
+
+// CodeScheduleStateWrite identifies a file-tool write refused for landing in the
+// scheduled-runs store.
+const CodeScheduleStateWrite = "workspace.schedule_state_write"
+
+// deniesSchedule reports whether abs lies in the scheduled-runs store and no
+// explicit allow_write root covers it.
+func (g SessionDataGuard) deniesSchedule(abs string) bool {
+	for _, a := range g.allowRoots {
+		if withinFold(a, abs) {
+			return false
+		}
+	}
+	return withinFold(filepath.Join(g.stateRoot, ScheduleStateDir), abs)
+}
+
+// deniesTrusted reports whether abs lies in Trusted Host State and no explicit
+// allow_write root covers it. An allow_write entry there also reaches the bash
+// sandbox's write roots, which is what drops the host's integrity level.
+func (g SessionDataGuard) deniesTrusted(abs string) bool {
+	root := filepath.Join(g.stateRoot, TrustedStateDir)
+	for _, a := range g.allowRoots {
+		if withinFold(a, abs) {
+			return false
+		}
+	}
+	return withinFold(root, abs)
 }
 
 // runtimeStateFile reports whether name (a state-root-direct file name, already
@@ -195,8 +247,10 @@ func (g SessionDataGuard) CommandHint(workDir, command string) string {
 		return ""
 	}
 	warn := fmt.Sprintf("WARNING: this command referenced Reasonix's own session/state data under %s. "+
+		"This is a notice, not a refusal: the command was not blocked, and an empty result above means it matched nothing. "+
+		"To read a spilled tool output (<session>.outputs/), use read_file (offset/limit) or grep rather than shell text tools. "+
 		"The app is actively saving those files; external modifications conflict with its saves and are preserved as conflict copies, so an edit can look like it \"did not take\". "+
-		"Do not modify session files from a chat — stop retrying and report the underlying problem instead.", g.stateRoot)
+		"Do not modify session files from a chat — stop retrying a write and report the underlying problem instead.", g.stateRoot)
 	haystack := strings.ToLower(filepath.ToSlash(command))
 	for _, needle := range g.hintNeedles {
 		if strings.Contains(haystack, needle) {

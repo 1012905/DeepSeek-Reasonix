@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"reasonix/internal/runtime/usecap"
 	"strings"
 
 	"reasonix/internal/contract/tool"
@@ -25,6 +26,7 @@ func PlannerToolRegistry(parent *tool.Registry) *tool.Registry {
 	exclude := append(SubagentMetaTools(), plannerNonResearchTools...)
 	base := FilterReadOnlyRegistry(parent, exclude...)
 	sub := tool.NewRegistry()
+	sub.CopyDisabledMCPFrom(parent)
 	sub.Add(NewSubmitPlanTool())
 	sub.Add(NewConcludeNoChangesTool())
 	if base != nil {
@@ -39,7 +41,7 @@ func PlannerToolRegistry(parent *tool.Registry) *tool.Registry {
 	}
 	if parent != nil {
 		if tl, ok := parent.Get("use_capability"); ok {
-			if uc, ok := tl.(*UseCapabilityTool); ok {
+			if uc, ok := tl.(*usecap.UseCapabilityTool); ok {
 				sub.Add(uc.CloneForAgent(nil, nil))
 			} else {
 				sub.Add(tl)

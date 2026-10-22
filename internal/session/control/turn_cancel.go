@@ -22,6 +22,7 @@ import (
 // The caller must already have claimed admission (running=true) under c.mu.
 func (c *Controller) spawnGuardedTurn(ctx context.Context, cancel context.CancelFunc, body func(ctx context.Context) error) {
 	ctx, completion := withGuardedTurnCompletion(ctx)
+	ctx = agent.WithRunTimeSink(ctx, func(ms int64) { completion.workMs.Add(ms) })
 	c.autosaveWG.Go(func() {
 		c.autosaveWhileRunning(ctx)
 	})
@@ -63,14 +64,18 @@ func (c *Controller) finishGuardedTurn(err error, completion *guardedTurnComplet
 	defer func() {
 		c.mu.Lock()
 		c.gate.finishing = false
-		if c.gate.closed {
+		if c.gate.closed || len(c.parkedTurns) == 0 {
+			closed := c.gate.closed
+			releaseWorkspace := c.gate.workspaceRelease
+			c.gate.workspaceRelease = nil
 			c.mu.Unlock()
-			return
-		}
-		if len(c.parkedTurns) == 0 {
-			c.mu.Unlock()
+			c.releaseWorkspaceTurn(releaseWorkspace)
+			if closed {
+				return
+			}
 			// No parked compatibility body: admit the next durable inbox item.
 			c.maybeDispatchInbox()
+			c.notifyIdle()
 			return
 		}
 		next := c.parkedTurns[0]
@@ -92,9 +97,11 @@ func (c *Controller) finishGuardedTurn(err error, completion *guardedTurnComplet
 	done := event.Event{
 		Kind:           event.TurnDone,
 		Err:            err,
-		Cancelled:      cancelRequested,
+		Cancelled:      cancelRequested && (err == nil || errors.Is(err, context.Canceled)),
 		Outcome:        turnOutcome(err),
 		CheckpointTurn: c.validatedCheckpointTurn(completion),
+		WorkDurationMs: turnWorkMs(err, cancelRequested, completion),
+		WorkStartedAt:  turnWorkStartedAt(err, cancelRequested, completion),
 		Receipt:        c.executor.CompletionReceipt(),
 		ItemID:         activeInboxID,
 	}
@@ -106,14 +113,19 @@ func (c *Controller) finishGuardedTurn(err error, completion *guardedTurnComplet
 	// refresh the inbox from that event and must not observe already-consumed
 	// steers in the completed turn. Dispatch still waits for finishing to clear.
 	c.onInboxTurnDone()
+	c.recordTurnFinished(done.Cancelled)
 	c.sink.Emit(done)
 }
 
 // Cancel aborts the in-flight turn. A goroutine blocked awaiting approval
 // unblocks via the cancelled context.
 func (c *Controller) Cancel() {
+	c.cancelTurn(causeStop)
+}
+
+func (c *Controller) cancelTurn(cause cancelCause) {
 	c.mu.Lock()
-	cancel := c.gate.requestCancel()
+	cancel := c.gate.requestCancel(cause)
 	c.mu.Unlock()
 	if cancel != nil {
 		c.approval.clearAll()
@@ -211,7 +223,7 @@ func (c *Controller) stripCancelledVisibleTurnMessagesAfterWithFallbackAt(idx in
 			m.Role = provider.RoleTool
 			m.ToolCallID = provider.LocalOnlyToolID
 			m.Name = provider.LocalOnlyToolName
-			m.InterruptedTurn = nil
+			transferStreamFailure(recovery, &m)
 			m.ToolCalls = displayOnlyToolCalls(m.ToolCalls)
 			next = append(next, m)
 			localIndexes = append(localIndexes, len(next)-1)
@@ -282,6 +294,13 @@ func (c *Controller) stripCancelledVisibleTurnMessagesAfterWithFallbackAt(idx in
 	}
 	next[localIndexes[len(localIndexes)-1]].InterruptedTurn = recovery
 	c.replaceSessionAfterCancel(next)
+}
+
+func transferStreamFailure(recovery *provider.InterruptedTurnRecovery, m *provider.Message) {
+	if prior := m.InterruptedTurn; prior != nil && prior.Pending && prior.StreamFailure.Description() != "" {
+		recovery.StreamFailure = prior.StreamFailure
+	}
+	m.InterruptedTurn = nil
 }
 
 func (c *Controller) hasInterruptedDisplayAfter(idx int, fallback provider.Message) bool {
@@ -609,7 +628,7 @@ func interruptedToolSummary(call provider.ToolCall) provider.InterruptedToolSumm
 		summary.Files = append(summary.Files, path)
 	}
 	var args map[string]any
-	if json.Unmarshal([]byte(call.Arguments), &args) == nil {
+	if json.Unmarshal([]byte(call.ExecutionArguments()), &args) == nil {
 		for _, key := range []string{"path", "file", "file_path", "filename"} {
 			if value, ok := args[key].(string); ok && strings.TrimSpace(value) != "" {
 				addFile(value)
@@ -632,4 +651,22 @@ func interruptedToolSummary(call provider.ToolCall) provider.InterruptedToolSumm
 		}
 	}
 	return summary
+}
+
+// turnWorkMs is the run time the turn reports: none when it failed or was
+// stopped, because a figure for work the person cut short says nothing.
+func turnWorkMs(err error, cancelled bool, completion *guardedTurnCompletion) int64 {
+	if err != nil || cancelled || completion == nil {
+		return 0
+	}
+	return completion.workMs.Load()
+}
+
+// turnWorkStartedAt is when the turn that reports a run time began; it is
+// reported with that run time or not at all.
+func turnWorkStartedAt(err error, cancelled bool, completion *guardedTurnCompletion) int64 {
+	if turnWorkMs(err, cancelled, completion) == 0 {
+		return 0
+	}
+	return completion.startedAt
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"regexp"
 	"strings"
 
@@ -20,8 +21,20 @@ func explainError(err error) error {
 	if err == nil {
 		return nil
 	}
+	var recoveryErr *provider.ContinuationRecoveryError
+	if errors.As(err, &recoveryErr) {
+		return &provider.ContinuationRecoveryError{Err: explainError(recoveryErr.Err)}
+	}
 	if provider.IsStreamInterrupted(err) {
 		return fmt.Errorf("model stream interrupted after recovery attempts: %s. The partial response was kept; retry or ask Reasonix to continue", err.Error())
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		msg := i18n.M.ProviderErrDNSTemporary
+		if dnsErr.IsNotFound {
+			msg = i18n.M.ProviderErrDNSNotFound
+		}
+		return fmt.Errorf(msg, dnsErr.Name)
 	}
 	if neterr.IsConnReset(err) {
 		return fmt.Errorf("model stream disconnected before completion after retry attempts: %s. Check the provider/proxy connection, then retry or ask Reasonix to continue", err.Error())
@@ -35,11 +48,6 @@ func explainError(err error) error {
 			return errors.New(msg)
 		}
 		msg := i18n.M.ProviderStatusMessage(apiErr.Status)
-		// The status says only that the body was refused. When the client that
-		// built it named what it left out, that answer is the actionable one.
-		if hint := i18n.M.ProviderHintMessage(string(apiErr.Hint)); hint != "" {
-			msg = hint
-		}
 		if msg == "" {
 			return err
 		}

@@ -1,10 +1,14 @@
 package update
 
-// The steps an install passes through beyond the download's own. Authorizing is
-// the Linux package prompt; relaunching is the last thing a caller sees, because
-// what follows it is this process ending.
+// The steps an install passes through beyond the download's own. Ready is a
+// verified release waiting for the user to allow the restart; applying is the
+// time between that consent and the handover. Authorizing is the Linux package
+// prompt; relaunching is the last thing a caller sees, because what follows it
+// is this process ending.
 const (
 	PhaseIdle        = "idle"
+	PhaseReady       = "ready"
+	PhaseApplying    = "applying"
 	PhaseAuthorizing = "authorizing"
 	PhaseRelaunching = "relaunching"
 	PhaseFailed      = "error"
@@ -21,6 +25,13 @@ type Progress struct {
 	Received int64  `json:"received"`
 	Total    int64  `json:"total"`
 	Err      string `json:"err,omitempty"`
+	Code     string `json:"code,omitempty"` // why a failed move failed, as a dotted code
+	// Stalls counts connections dropped for delivering nothing; the download
+	// resumes after each, so a rising count is why the bar is not moving.
+	Stalls int `json:"stalls,omitempty"`
+	// DeltaSkipped is why an offered chunked update was abandoned for the full
+	// package, as a dotted code; empty when none was offered or it was used.
+	DeltaSkipped string `json:"delta_skipped,omitempty"`
 }
 
 // Running reports whether an install is under way, which is the one thing a
@@ -28,7 +39,7 @@ type Progress struct {
 // first would have two writers for one set of files.
 func (p Progress) Running() bool {
 	switch p.Phase {
-	case "", PhaseIdle, PhaseCached, PhaseFailed:
+	case "", PhaseIdle, PhaseCached, PhaseReady, PhaseFailed:
 		return false
 	}
 	return true

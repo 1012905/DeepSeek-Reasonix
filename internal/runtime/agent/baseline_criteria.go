@@ -26,7 +26,7 @@ func (a *Agent) captureRewrittenCriteria(change diff.Change, rewritten []string)
 		return
 	}
 	store := a.baselineCriteriaStore()
-	if store == nil || len(rewritten) == 0 || change.OldText == "" {
+	if store == nil || len(rewritten) == 0 || change.OldText == "" || !evidence.PathMayHoldTestCriteria(change.Path) {
 		return
 	}
 	criterion, err := store.Capture(change.Path, []byte(change.OldText))
@@ -80,7 +80,7 @@ func (a *Agent) captureCriteriaBefore(ctx context.Context, plan *toolCallPlan) e
 		return nil
 	}
 	store := a.baselineCriteriaStore()
-	if evidence.ToolCallMutationClass(plan.evidenceName, plan.evidenceArgs, plan.readOnly) == evidence.MutationUnknown {
+	if evidence.ToolCallMutationClassWith(plan.evidenceName, plan.evidenceArgs, plan.facts()) == evidence.MutationUnknown {
 		return a.captureCriteriaOnce(ctx, store)
 	}
 	for _, path := range evidence.ToolCallPaths(plan.evidenceArgs) {
@@ -149,7 +149,7 @@ func (a *Agent) captureCriterionAt(store *evidence.BaselineStore, path string) e
 	// Before the read, not after: the name already settles whether this file
 	// could hold a criterion, and asking the bytes instead read every file in
 	// the workspace to answer it — on every broad-scope call of the task.
-	if !evidence.PathMayHoldTestCriteria(path) {
+	if !evidence.PathMayHoldTestCriteria(path) || !watchablePath(path, a.writeWorkspaceRoot) {
 		return nil
 	}
 	if _, held := a.task.baselineCriteria[path]; held {

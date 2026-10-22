@@ -1,3 +1,8 @@
+import type { ContextComposition } from "./context_composition";
+import type { WorkspaceLease } from "./workspace_lease";
+export type { WorkspaceLease } from "./workspace_lease";
+import type { SurfaceImage, SurfaceLocation, SurfaceFact, SurfaceDataset } from "./surface-rich";
+export type { SurfaceImage, SurfaceLocation, SurfaceFact, SurfaceDataset, SurfaceSeries } from "./surface-rich";
 // Mirrors internal/contract/eventwire. Field names and kind strings must match exactly;
 // this file is the contract, not a convenience shape.
 
@@ -15,6 +20,7 @@ export type Kind =
   | "turn_phase"
   | "approval_request"
   | "ask_request"
+  | "ask_engaged"
   | "turn_done"
   | "compaction_started"
   | "compaction_progress"
@@ -32,9 +38,11 @@ export type Kind =
   | "workspace_changed"
   | "completion_summary"
   | "inbox_changed"
+  | "rewind_changed"
   | "adjudications_changed"
   | "browser_tabs_changed"
   | "graph_delta"
+  | "progress_watch"
   // Transport frames, not kernel events: the stream describing itself. Handled
   // in the port and never reaching the reducer.
   | "stream_gap"
@@ -48,7 +56,7 @@ export interface Profile {
   name?: string;
   count?: number;
   model?: string;
-  effort?: string;
+  effort?: string; label?: string; // label: the task's own short description, one sub-agent only
 }
 
 // Present on shell tools. A non-zero exit was invisible before: the card only
@@ -56,8 +64,7 @@ export interface Profile {
 export interface Execution {
   kind?: string;
   shell?: string;
-  /** PowerShell 5.1 and 7 are two different languages to write a command in,
-   *  and the shell name alone cannot say which one answered. */
+  /** PowerShell 5.1 and 7 are different languages; the shell name alone cannot say which answered. */
   shellVersion?: string;
   platform?: string;
   /** False on Windows PowerShell 5.1, where `&&` is a syntax error. */
@@ -66,8 +73,7 @@ export interface Execution {
   failurePhase?: string;
   exitCode?: number;
   outputTail?: string;
-  /** The command with its leading environment assignments dropped, when
-   *  dropping them changed it. What a row names; never what authorised it. */
+  /** The command without its leading environment assignments, when that changed it; never what authorised it. */
   subject?: string;
   mutationRisk?: string;
   verification?: string;
@@ -99,24 +105,41 @@ export interface Bound {
  */
 export type ToolIssuer = "model" | "host" | "user" | "provider";
 
+export interface ArgumentNormalization {
+  reason: string;
+  original: string;
+  effective: string;
+}
+
 export interface Tool {
+  deliveries?: import("./workspace").DeliveredFile[];
   id?: string;
   name: string;
   args?: string;
+  argumentNormalization?: ArgumentNormalization;
   resolvedName?: string;
   capabilityId?: string;
   output?: string;
   // What the call showed the model, as data URLs. The output text only names
   // them, so without these a person is told a picture was taken and not shown it.
   images?: string[];
+  // Video files the call handed to the model to watch natively: name and size,
+  // never the bytes.
+  videos?: { name: string; size: number; durationMs?: number; model: string }[];
   err?: string;
   // The host's dotted identity for a refusal. err is only its wording.
   refusalCode?: string;
+  workspaceLease?: WorkspaceLease;
+  // outputDiff marks a shell result whose whole output is a unified diff, so the
+  // transcript renders it as a diff instead of flat text.
+  outputDiff?: boolean;
   readOnly: boolean;
   // truncated is the pre-Bound projection kept for old journals; read bound.
   truncated?: boolean;
   bound?: Bound;
   durationMs?: number;
+  // A sub-agent's estimated tokens per second on its status channel; not provider usage.
+  rate?: number;
   contextTokens?: number;
   startedAt?: number;
   endedAt?: number;
@@ -221,6 +244,10 @@ export interface Approval {
   allowsSession?: boolean;
   allowsPersist?: boolean;
   kind?: "tool" | "plan" | "recovery";
+  // What approving authorizes beyond the call, as the tool declares it; the
+  // call's arguments ride along only then, because they are what it covers.
+  scope?: string;
+  input?: Record<string, unknown>;
 }
 
 // DecisionReceipt is what the kernel recorded when a prompt was settled, on the
@@ -232,6 +259,21 @@ export interface DecisionReceipt {
   tool?: string;
   subject?: string;
   outcome: string;
+  // The paired device the decision was made on; absent is the window.
+  via?: Via;
+}
+
+// An image the host stored under .reasonix/attachments that a message references.
+// Mirrors eventwire.Attachment: a client previews this, not how it was spelled.
+export interface StoredAttachment {
+  path: string;
+}
+
+// The paired device a person acted from. Mirrors eventwire.Via: the pairing's
+// id, and the 设备 N the window listed it under at the time.
+export interface Via {
+  device: string;
+  ordinal: number;
 }
 
 export interface AskOption {
@@ -243,6 +285,7 @@ export interface AskOption {
 export interface AskAnswer {
   QuestionID: string;
   Selected: string[];
+  Value?: Record<string, unknown>;
 }
 
 export interface AskQuestion {
@@ -254,11 +297,28 @@ export interface AskQuestion {
   reason?: "user_decision" | "missing_value";
   options: AskOption[];
   multi?: boolean;
+  // Prefilled answer: a form sent back to be corrected keeps what was given.
+  default?: string[];
+  surface?: import("../ui/surface/spec").SurfaceSpec;
+  callId?: string;
+}
+
+// Who is asking, when it is not the agent: an MCP server's form.
+export interface AskOrigin {
+  kind: "mcp";
+  source: string;
+  message?: string;
+  note?: string;
+  url?: string;
+ urlHost?: string;
+ urlLocal?: boolean;
 }
 
 export interface Ask {
   id: string;
   questions: AskQuestion[];
+  origin?: AskOrigin;
+  skipInMs?: number;
 }
 
 export interface Guardian {
@@ -338,7 +398,7 @@ export interface ExtensionNotification {
 export type ExtensionViewTone = "dim" | "strong" | "ok" | "warn" | "err" | "accent";
 
 export interface ExtensionViewNode {
-  kind: "text" | "markdown" | "row" | "stack" | "kv" | "meter" | "pip" | "button" | "divider";
+  kind: "text" | "markdown" | "row" | "stack" | "kv" | "meter" | "pip" | "button" | "divider" | "field" | "choice_card" | "editable_text" | "diff_preview" | "map" | "comparison" | "dashboard";
   value?: string;
   key?: string;
   label?: string;
@@ -346,6 +406,37 @@ export interface ExtensionViewNode {
   progress?: number;
   actionId?: string;
   children?: ExtensionViewNode[];
+  field?: SurfaceField;
+  diff?: SurfaceDiff;
+  dataset?: SurfaceDataset;
+}
+
+export interface SurfaceDiff {
+  before: string;
+  after: string;
+}
+
+export interface SurfaceField {
+  type: "string" | "number" | "bool" | "choice" | "multichoice";
+  required?: boolean;
+  default?: string | number | boolean | string[];
+  min?: number;
+  max?: number;
+  max_length?: number;
+  options?: SurfaceOption[];
+}
+
+export interface SurfaceOption {
+  value: string;
+  label: string;
+  description?: string;
+  preview?: string;
+  group?: string;
+  location?: SurfaceLocation;
+  price?: number;
+  currency?: string;
+  facts?: SurfaceFact[];
+  image?: SurfaceImage;
 }
 
 export interface ExtensionView {
@@ -361,6 +452,7 @@ export interface ExtensionView {
 }
 
 export interface ExtensionSurface {
+  code?: string;
   pluginId: string;
   surfaceId: string;
   sessionId?: string;
@@ -377,6 +469,20 @@ export interface ExtensionSurface {
 // One task-list transition. kind is the structural verdict; the three revisions
 // count writes, plan changes, and execution movement separately, because a turn
 // can produce any number of the first two without the third ever moving.
+/** The host's reading of whether the run still moves: rounds since the last
+ *  effect it could observe, and input spent against the backstop. Advisory —
+ *  only pausing, which the user switched on, ends the run. */
+export interface ProgressWatch {
+  stalled: boolean;
+  cause?: "rounds" | "tokens" | "perseveration";
+  idleRounds: number;
+  roundLimit?: number;
+  promptTokens?: number;
+  tokenLimit?: number;
+  tokenMultiple?: number;
+  pausing?: boolean;
+}
+
 export interface TodoProgress {
   kind: string;
   steps?: number;
@@ -384,17 +490,6 @@ export interface TodoProgress {
   contentRevision?: number;
   planRevision?: number;
   progressRevision?: number;
-}
-
-/** One closed account of the workspace write lease. Waits under the notice
- *  grace are counted here and nowhere else, and idleMs is the stretch held
- *  after the last write asked for it. */
-export interface WorkspaceLease {
-  contended: number;
-  reported?: number;
-  waitedMs?: number;
-  heldMs: number;
-  idleMs: number;
 }
 
 // One context-maintenance transaction. status "noop" carries code: the attempt
@@ -422,20 +517,21 @@ export interface Compaction {
   trigger?: string;
   messages?: number;
   summary?: string;
-  // What the fold cost, and what the digest kept of it. coverageRequired counts
-  // the changes and failures the folded work produced; coverageMissing is how
-  // many the digest did not carry.
+  // What the fold cost; coverageRequired counts the changes and failures it
+  // folded and coverageMissing how many the digest did not carry.
   sourceTokens?: number;
   projectionTokens?: number;
   coverageRequired?: number;
   coverageMissing?: number;
   // The host wrote the dropped facts in itself, because the digest did not.
   coverageBackstopped?: boolean;
-  // Which threshold sent this fold and how big it is. "Reached a threshold"
-  // is all the card can say without them, and a fold at 16% of the declared
-  // window is exactly the one that needs saying.
+  // Which threshold sent this fold and how big it is.
   boundary?: string;
   triggerTokens?: number;
+  // Why a fold that installed nothing did not; the host's class, not a sentence.
+  code?: string;
+  // What the prompt still holds when a fold left a large share of the window.
+  remains?: ContextComposition;
 }
 
 export interface StreamAttempt {
@@ -444,6 +540,7 @@ export interface StreamAttempt {
   attempt?: number;
   max?: number;
   reason?: string;
+  firstTokenMs?: number; // commit only: request sent to first output, host-measured
 }
 
 export interface CompletionSummary {
@@ -487,6 +584,8 @@ export interface Receipt {
   // The kernel's own answer to "is this worth showing at all", carried rather
   // than recomputed here so the windows and the terminal never drift apart.
   saysSomething?: boolean;
+  // The kernel's grading of what was left unproven; absent when nothing was.
+  severity?: "notice" | "warn";
 }
 
 export interface ReceiptChange {
@@ -603,10 +702,17 @@ export type ExecutionGraphRead = ExecutionGraphView & ExecutionGraphSnapshot;
 
 export interface WireEvent {
   kind: Kind;
+ nonPersistable?: boolean;
   text?: string;
   detail?: string;
   code?: string;
   reasoning?: string;
+  // message: how long the kernel measured this reply thinking, in ms.
+  thoughtMs?: number;
+  // turn_done: ms the run took up to its final answer; absent when it gave none.
+  workDurationMs?: number;
+  // turn_done: unix ms the turn began; sent only alongside workDurationMs.
+  workStartedAt?: number;
   level?: string;
   // "operator" means the notice is about the machine running this conversation,
   // not about the conversation. Only the latter belongs in a transcript.
@@ -620,6 +726,7 @@ export interface WireEvent {
   compaction?: Compaction;
   maintenance?: ContextMaintenance;
   todoProgress?: TodoProgress;
+  progressWatch?: ProgressWatch;
   workspaceLease?: WorkspaceLease;
   streamAttempt?: StreamAttempt;
   completion?: CompletionSummary;
@@ -648,13 +755,25 @@ export interface WireEvent {
   // that says which row the kernel just started a turn for.
   authoredTurn?: number;
   msgIndex?: number;
+  // turn_started / steer: the paired device the message came from; absent is
+  // the window. The message itself rides text, for every client that did not
+  // send it.
+  via?: Via;
+  // turn_started / steer: the stored attachments the message references.
+  attachments?: StoredAttachment[];
+  // steer: the host wrote this guidance, so it is never drawn as the person's.
+  hostAuthored?: boolean;
   // recovery_paused is no longer emitted; sessions recorded before the retry
   // budgets were removed still carry it, so a reader has to render it.
-  outcome?: "final_readiness" | "recovery_paused";
+  outcome?: "final_readiness" | "recovery_paused" | "no_progress";
   phase?: string;
   retryAttempt?: number;
   retryMax?: number;
   retryScope?: "headers" | "stream";
+  retryCause?: "connection_closed" | "timeout" | "upstream_status" | "stream_idle" | "upstream_error";
+  retryStatus?: number;
+  retryDelayMs?: number;
+  retryTimeoutSecs?: number;
   itemId?: string;
   // Set by the transport on frames that must not be missed, so a client can
   // tell it missed one. Streaming deltas carry none — losing one costs nothing

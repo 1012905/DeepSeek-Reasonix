@@ -28,6 +28,7 @@ func TestTaskRuntimeRestartCarriesScopeAndResetsAccounting(t *testing.T) {
 		outcome:    evidence.NewOutcomeTracker(),
 		budget:     runBudget{rounds: 4, requests: 9, cost: 1.5, limit: TaskBudget{}},
 		witness:    map[string][]string{"tally.go": {"total += x"}},
+		origins:    &originLedger{},
 	}
 	after := *before
 	after.restartLedger()
@@ -45,6 +46,9 @@ func TestTaskRuntimeRestartCarriesScopeAndResetsAccounting(t *testing.T) {
 	if after.budget.rounds != 0 || after.budget.requests != 0 || after.budget.cost != 0 {
 		t.Errorf("budget = %+v, want a fresh bill for the new task", after.budget)
 	}
+	if after.origins == nil || after.origins == before.origins {
+		t.Error("origin ledger not replaced; text one task read must not stand for another's")
+	}
 	if after.outcome == nil || after.outcome == before.outcome {
 		t.Error("outcome tracker not replaced; the shadow scorer must not span tasks")
 	}
@@ -57,6 +61,7 @@ var taskRestarted = map[string]bool{
 	"outcome": true,
 	"budget":  true,
 	"witness": true,
+	"origins": true,
 	// A new task begins under whatever the tree says then, so what an earlier
 	// one was held to is not carried into it.
 	"baselineCriteria": true,
@@ -69,6 +74,12 @@ var taskRestarted = map[string]bool{
 	// The capture answers for the workspace one task began under. A new task
 	// begins under whatever the tree says then, alongside baselineCriteria.
 	"criteriaEpoch": true,
+	// A new task is accepted under a new contract; the cache goes with the
+	// record name restartLedger clears from the carried checkpoint.
+	"contract":       true,
+	"contractRecord": true,
+	// The explanation answers for an obligation of the ledger a new task replaces.
+	"explained": true,
 }
 
 // restartLedger is one assignment, so an unlisted field resets by default —
@@ -115,5 +126,21 @@ func TestTaskRuntimeLifetimeListsCoverTheStruct(t *testing.T) {
 		case !taskCarryOver[name] && !taskRestarted[name]:
 			t.Errorf("taskRuntime.%s is on neither list; decide whether a new task keeps it and assert that above", name)
 		}
+	}
+}
+
+func TestTaskRuntimeRestartStartsANewContract(t *testing.T) {
+	before := &taskRuntime{
+		checkpoint:     evidence.DeliveryCheckpoint{ScopeID: "scope-1", Contract: "sha256:rev"},
+		ledger:         evidence.NewLedger(),
+		contractRecord: "sha256:rev",
+	}
+	after := *before
+	after.restartLedger()
+	if after.checkpoint.Contract != "" || after.contractRecord != "" || after.contract != nil {
+		t.Fatalf("checkpoint.Contract=%q record=%q, want a new task to start without the last one's contract", after.checkpoint.Contract, after.contractRecord)
+	}
+	if after.checkpoint.ScopeID != "scope-1" {
+		t.Fatal("the scope still carries")
 	}
 }

@@ -2,12 +2,14 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
-	"reasonix/internal/base/netclient"
+	"reasonix/internal/base/i18n"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
@@ -97,6 +99,7 @@ allow_write = ["../outside"]
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	approveWorkspace(t, project)
 	off := false
 	factory := &acpFactory{
 		plannerOff: true, networkOverride: &off, bashOverride: "enforce", workspaceOnly: true,
@@ -121,6 +124,7 @@ func TestACPSupervisorRuntimeStateDegradesWhenSandboxIsUnavailable(t *testing.T)
 	if err := os.WriteFile(filepath.Join(project, "reasonix.toml"), []byte("[sandbox]\nbash = \"enforce\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	approveWorkspace(t, project)
 	unavailable := func() bool { return false }
 	params := acp.SessionRuntimeStateParams{Cwd: project, RuntimeProfile: "balanced"}
 
@@ -179,6 +183,7 @@ api_key_env = "REASONIX_TEST_KEY"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	approveWorkspace(t, project)
 	cmdDir := filepath.Join(project, ".reasonix", "commands")
 	if err := os.MkdirAll(cmdDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -231,6 +236,7 @@ effort = "high"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	approveWorkspace(t, project)
 
 	high := "high"
 	state, err := (&acpFactory{}).SessionConfigState(context.Background(), acp.SessionConfigStateParams{
@@ -279,6 +285,7 @@ api_key_env = "REASONIX_TEST_KEY"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	approveWorkspace(t, project)
 
 	state, err := (&acpFactory{profile: "full"}).SessionConfigState(context.Background(), acp.SessionConfigStateParams{
 		Cwd:            project,
@@ -299,89 +306,6 @@ api_key_env = "REASONIX_TEST_KEY"
 	work, _ = findACPConfigOption(state.ConfigOptions, "work_mode")
 	if work.CurrentValue != "balanced" || state.RuntimeProfile != "balanced" {
 		t.Fatalf("legacy full profile = %+v / %q, want balanced", work, state.RuntimeProfile)
-	}
-}
-
-func TestACPTaskProfileDefaults(t *testing.T) {
-	cfg := config.Default()
-	cfg.Agent.SubagentModel = "default-model"
-	cfg.Agent.SubagentEffort = "high"
-	cfg.Agent.SubagentModels = map[string]string{"task": "task-model"}
-	cfg.Agent.SubagentEfforts = map[string]string{"task": "max"}
-
-	model, effort := acpTaskProfileDefaults(cfg)
-	if model != "task-model" || effort != "max" {
-		t.Fatalf("task profile defaults = %q/%q, want task-model/max", model, effort)
-	}
-
-	cfg.Agent.SubagentModels = nil
-	cfg.Agent.SubagentEfforts = nil
-	model, effort = acpTaskProfileDefaults(cfg)
-	if model != "default-model" || effort != "high" {
-		t.Fatalf("fallback task profile defaults = %q/%q, want default-model/high", model, effort)
-	}
-}
-
-func TestACPSubagentProviderResolverHonorsProfile(t *testing.T) {
-	cfg := config.Default()
-	cfg.Providers = []config.ProviderEntry{
-		{
-			Name:             "parent",
-			Kind:             acpTestProviderKind,
-			Model:            "parent-model",
-			ContextWindow:    111,
-			SupportedEfforts: []string{"low", "high"},
-		},
-		{
-			Name:             "sub",
-			Kind:             acpTestProviderKind,
-			Models:           []string{"sub-model"},
-			Default:          "sub-model",
-			ContextWindow:    222,
-			SupportedEfforts: []string{"low", "high"},
-		},
-	}
-	parent, ok := cfg.ResolveModel("parent")
-	if !ok {
-		t.Fatal("parent model did not resolve")
-	}
-
-	resolve := newACPSubagentProviderResolver(cfg, parent, netclient.ProxySpec{})
-	prov, _, ctxWin, err := resolve("sub/sub-model", "HIGH")
-	if err != nil {
-		t.Fatalf("resolve sub profile: %v", err)
-	}
-	got := prov.(*acpTestProvider).cfg
-	if got.Model != "sub-model" || got.Extra["effort"] != "high" || ctxWin != 222 {
-		t.Fatalf("resolved profile = model:%q effort:%v ctx:%d, want sub-model/high/222", got.Model, got.Extra["effort"], ctxWin)
-	}
-
-	prov, _, ctxWin, err = resolve("", "low")
-	if err != nil {
-		t.Fatalf("resolve effort-only profile: %v", err)
-	}
-	got = prov.(*acpTestProvider).cfg
-	if got.Model != "parent-model" || got.Extra["effort"] != "low" || ctxWin != 111 {
-		t.Fatalf("effort-only profile = model:%q effort:%v ctx:%d, want parent-model/low/111", got.Model, got.Extra["effort"], ctxWin)
-	}
-}
-
-func TestACPSubagentProviderResolverRejectsInvalidEffort(t *testing.T) {
-	cfg := config.Default()
-	cfg.Providers = []config.ProviderEntry{{
-		Name:             "parent",
-		Kind:             acpTestProviderKind,
-		Model:            "parent-model",
-		SupportedEfforts: []string{"low", "high"},
-	}}
-	parent, ok := cfg.ResolveModel("parent")
-	if !ok {
-		t.Fatal("parent model did not resolve")
-	}
-
-	resolve := newACPSubagentProviderResolver(cfg, parent, netclient.ProxySpec{})
-	if _, _, _, err := resolve("", "max"); err == nil {
-		t.Fatal("invalid effort should fail before ACP task falls back to the parent profile")
 	}
 }
 
@@ -421,4 +345,51 @@ func (p *acpTestProvider) Stream(context.Context, provider.Request) (<-chan prov
 	ch <- provider.Chunk{Type: provider.ChunkDone}
 	close(ch)
 	return ch, nil
+}
+
+func TestACPEffortForcedThinkingDescription(t *testing.T) {
+	prev := i18n.CurrentLanguage()
+	t.Cleanup(func() { i18n.DetectLanguage(prev) })
+	cap := config.EffortCapability{Supported: true, Levels: []string{"auto", "minimal", "high"}}
+	for _, lang := range []string{"en", "zh", "zh-TW"} {
+		i18n.DetectLanguage(lang)
+		for _, model := range []string{"glm-5.3", "glm-5.2"} {
+			entry := &config.ProviderEntry{Kind: "openai", BaseURL: "https://api.z.ai/api/paas/v4", Model: model}
+			for _, option := range acpEffortOptions(cap, entry) {
+				want := ""
+				if model == "glm-5.3" && option.Value == "minimal" {
+					want = i18n.M.ArgEffortForcedOn
+				}
+				if option.Description != want {
+					t.Errorf("%s/%s/%s: description = %q, want %q", lang, model, option.Value, option.Description, want)
+				}
+			}
+		}
+	}
+}
+
+func TestACPSessionCarriesAdditionalDirsIntoBootAndTheReportedWriteRoots(t *testing.T) {
+	isolateCLIConfigHome(t)
+	project := testenv.TempDir(t)
+	approveWorkspace(t, project)
+	extra := filepath.Join(project, "..", "extra-roots-not-real")
+	factory := &acpFactory{}
+	opts, err := factory.sessionBootOptions(acp.SessionParams{Cwd: project, Sink: event.Discard, AdditionalDirs: []string{extra}})
+	if err != nil || len(opts.AdditionalDirs) != 1 || opts.AdditionalDirs[0] != extra {
+		t.Fatalf("boot options = %+v (%v)", opts.AdditionalDirs, err)
+	}
+	state, err := factory.SessionRuntimeState(context.Background(), acp.SessionRuntimeStateParams{Cwd: project, AdditionalDirs: []string{extra}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(state.Sandbox.WriteRoots, extra) {
+		t.Fatalf("the status hides a root the agent can write: %v", state.Sandbox.WriteRoots)
+	}
+	confined := &acpFactory{workspaceOnly: true}
+	if _, err := confined.sessionBootOptions(acp.SessionParams{Cwd: project, Sink: event.Discard, AdditionalDirs: []string{extra}}); !errors.Is(err, acp.ErrAdditionalDirectoriesDisabled) {
+		t.Fatalf("a cwd-only agent took extra folders: %v", err)
+	}
+	if state, err := confined.SessionRuntimeState(context.Background(), acp.SessionRuntimeStateParams{Cwd: project, AdditionalDirs: []string{extra}}); err != nil || slices.Contains(state.Sandbox.WriteRoots, extra) {
+		t.Fatalf("a cwd-only agent reports %v (%v)", state.Sandbox.WriteRoots, err)
+	}
 }

@@ -234,3 +234,69 @@ func TestJournalIsClearedOnlyWhenTheMoveIsDone(t *testing.T) {
 		t.Fatalf("a finished move left a journal: %+v", j)
 	}
 }
+
+// The sidebar's remembered project list is a file at the top of the state
+// root. A move that carries sessions but not the list leaves every transcript
+// on disk and none of them reachable.
+func TestMoveCarriesTheRememberedProjectList(t *testing.T) {
+	home := stateHome(t)
+	seedState(t, home)
+	list := filepath.Join(home, "serve-workspaces.json")
+	if err := os.WriteFile(list, []byte(`{"paths":["D:\\work\\app"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(testenv.TempDir(t), "moved")
+
+	plan := PlanMove(t.Context(), config.RootState, target)
+	if err := Move(t.Context(), plan, nil); err != nil {
+		t.Fatalf("move: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "serve-workspaces.json")); err != nil {
+		t.Fatalf("project list was not carried to the new root: %v", err)
+	}
+}
+
+// Every top-level entry the state root owns travels with it: a move that left
+// standing instructions or memory behind would read as them being deleted.
+func TestMoveCarriesEveryOwnedEntry(t *testing.T) {
+	home := stateHome(t)
+	for _, name := range config.StateRootEntries {
+		if filepath.Ext(name) != "" {
+			write(t, filepath.Join(home, name), 8)
+		} else {
+			write(t, filepath.Join(home, name, "f"), 8)
+		}
+	}
+	target := filepath.Join(testenv.TempDir(t), "moved")
+	if err := Move(t.Context(), PlanMove(t.Context(), config.RootState, target), nil); err != nil {
+		t.Fatalf("move: %v", err)
+	}
+	for _, name := range config.StateRootEntries {
+		if _, err := os.Lstat(filepath.Join(target, name)); err != nil {
+			t.Errorf("%s was not carried: %v", name, err)
+		}
+	}
+}
+
+// The Windows sandbox's grant record travels with the state root. Left behind, the
+// record is gone while the permission entries it lists stay on the folders, and
+// nothing would ever take them back.
+func TestMoveCarriesTheSandboxGrantRecord(t *testing.T) {
+	home := stateHome(t)
+	record := filepath.Join(home, "sandbox", "windows-grants.json")
+	if err := os.MkdirAll(filepath.Dir(record), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const body = `{"version":1,"sid":"S-1-5-21-1-2-3-12345","roots":[]}`
+	if err := os.WriteFile(record, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(testenv.TempDir(t), "moved")
+	if err := Move(t.Context(), PlanMove(t.Context(), config.RootState, target), nil); err != nil {
+		t.Fatalf("move: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(target, "sandbox", "windows-grants.json"))
+	if err != nil || string(got) != body {
+		t.Fatalf("the grant record was not carried intact: %q, %v", got, err)
+	}
+}

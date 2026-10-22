@@ -1,6 +1,7 @@
 // What a session is made of, apart from the reducer that maintains it: the
 // rows the transcript draws and the state one turn hands the next.
-import type { Ask, Approval, Compaction, CostCoverage, ExtensionSurface, Guardian, Receipt, Tool } from "../port/wire";
+import type { StateTool } from "./outputcap";
+import type { Ask, Approval, Compaction, CostCoverage, ExtensionSurface, Guardian, Receipt, StoredAttachment, Tool, Via, WorkspaceLease } from "../port/wire";
 import type { Sample } from "../port/tokens";
 import type { Executions } from "./executions";
 
@@ -23,22 +24,37 @@ export type Item =
       queued?: "steer" | "followup";
       authoredTurn?: number;
       msgIndex?: number;
+      // The paired device it was sent from; absent is the window.
+      via?: Via;
+      attachments?: StoredAttachment[];
+      // When the message landed in the conversation (unix ms): the moment it was
+      // sent, or for a follow-up that waited, when its turn began. Guidance said
+      // into a running turn has none.
+      at?: number;
     }
   // source names which model wrote it — a turn can carry two, and the card is
   // where the answer has to survive.
   | { t: "say"; id: string; text: string; reasoning?: string; done: boolean; thoughtMs?: number; source?: string; model?: string }
-  | { t: "tool"; id: string; tool: Tool; running: boolean; children: Tool[] }
+  // omitted counts the characters of a running call's output that the page let go of from the front.
+  | { t: "tool"; id: string; tool: StateTool; running: boolean; children: StateTool[]; omitted?: number }
   | { t: "reads"; id: string; tools: Tool[] }
   | { t: "guardian"; id: string; g: Guardian }
-  | { t: "approval"; id: string; a: Approval; verdict?: string }
-  | { t: "ask"; id: string; ask: Ask; answered?: string[][]; answeredElsewhere?: boolean }
+  // by is who settled it when that was not this screen: the device named on
+  // the kernel's receipt, or the window when the receipt names none.
+  | { t: "approval"; id: string; a: Approval; verdict?: string; by?: Via | "window" }
+  // An ask answered on another screen keeps who answered it and what the
+  // kernel recorded they said, since this screen never saw the selection.
+  // recorded is the call's result when the card is rebuilt from history: the
+  // record keeps what the model was told, not which options were pressed.
+  | { t: "ask"; id: string; ask: Ask; skipAt?: number; answered?: string[][]; answeredElsewhere?: boolean; timedOut?: boolean; by?: Via | "window"; said?: string; recorded?: string; surfaceValues?: Record<string, unknown>; surfaceExpired?: boolean }
   | { t: "compaction"; id: string; c: Compaction; done: boolean }
   | { t: "remember"; id: string; m: RememberedFact; forgotten?: boolean }
   | { t: "receipt"; id: string; r: Receipt }
+  | { t: "worked"; id: string; ms: number; startedAt?: number }
   | { t: "extension"; id: string; ext: ExtensionSurface }
   // code identifies what the kernel is reporting. text is its own English,
   // kept as the fallback for a code this build has no wording for.
-  | { t: "notice"; id: string; level: string; text: string; detail?: string; code?: string; count?: number };
+  | { t: "notice"; id: string; level: string; text: string; detail?: string; code?: string; count?: number; workspaceLease?: WorkspaceLease };
 
 // What a remember call wrote, read off its own arguments. Saving a fact changes
 // what the agent will do in later sessions, which no other tool call does — so it
@@ -94,10 +110,20 @@ export interface Metrics {
 
 export interface Waiting {
   ttftSince?: number;
-  // scope is the kernel's own answer to which half of the request broke, and
-  // since is when the stall began rather than when this attempt did — the
-  // attempt counter already says how far into it the run is.
-  retry?: { attempt: number; max: number; scope?: "headers" | "stream"; since: number };
+  // scope, cause, status, delayMs and timeoutSecs are the kernel's own answers:
+  // which half of the request broke, why, how long until the next attempt
+  // starts and how long that attempt waits before it counts as unanswered.
+  // since is when this attempt's notice arrived.
+  retry?: {
+    attempt: number;
+    max: number;
+    scope?: "headers" | "stream";
+    cause?: "connection_closed" | "timeout" | "upstream_status" | "stream_idle" | "upstream_error";
+    status?: number;
+    delayMs?: number;
+    timeoutSecs?: number;
+    since: number;
+  };
 }
 
 /** complete_step moves an item to completed and promotes the next one itself,
@@ -146,8 +172,19 @@ export type TurnTerminal =
   | { kind: "unread" }
   | null;
 
+export interface Stall {
+  cause: "rounds" | "tokens" | "perseveration";
+  idleRounds: number;
+  roundLimit: number;
+  promptTokens: number;
+  tokenMultiple: number;
+  // The user's pause setting ended the run on this reading.
+  paused: boolean;
+}
+
 export interface SessionState {
   error: string;
+  errorFrom: string;
   // What the tool calls of this session did, keyed by wire id. Held apart from
   // items because the transcript folds, nests and replaces the cards drawing
   // them, and none of that is a change to what ran.
@@ -160,6 +197,10 @@ export interface SessionState {
   // surface, they hold their own place instead of scrolling away in the
   // transcript as if they had been said by someone.
   runtime: RuntimeNotice[];
+  // The kernel's reading that the run stopped producing observable effects,
+  // and whether this window was asked to stop saying so while it runs.
+  stall?: Stall;
+  stallMuted?: boolean;
   items: Item[];
   // Which cards have not yet had their one entrance, and how far this
   // projection has already let in. Motion describes a state transition, and
@@ -173,6 +214,10 @@ export interface SessionState {
   // second model wrote it; the rest are this one, recorded when the turn began
   // rather than read off the composer, which moves on.
   turnModel?: string;
+  // The session-log index of the message the live turn is about, taken from
+  // its turn_started. A second start naming the same one is the same open
+  // delivered twice — a duplicate, not a turn that ended without saying so.
+  turnMsgIndex?: number;
   entranceOwed: string[];
   enteredThrough: number;
   // Bumped when the transcript's composition changes — a card added, settled,
@@ -192,11 +237,18 @@ export interface SessionState {
   // event, which replaces the estimate with what was billed — a reading that is
   // still an estimate says so rather than passing for the measured one.
   outLive: number;
+  interactionIDs: { asked:string[]; answered:string[] };
+  interactions: { requests:number; questions:number; options:number; answers:number; customAnswers:number };
   metrics: Metrics;
   waiting: Waiting;
   running: boolean;
+  // When this window saw the turn start; unknown for a turn that began before it attached.
+  runSince?: number;
   doing: string;
   steerQueue: string[];
+  // Queue ids this window gave up, so a receipt that lands after the withdrawal
+  // cannot name a row for an entry that no longer exists.
+  takenBack: string[];
   // The rows whose turns have not started yet, oldest first: each send that the
   // kernel has not yet named a message for. A steer never joins them, because
   // it starts no turn of its own.
@@ -206,6 +258,7 @@ export interface SessionState {
   // and this is what asks it again. Counting, not the kernel's own revision:
   // the point is that it changed, and a counter cannot arrive out of order.
   queueMoved: number;
+  rewindMoved: number;
   // How many times the agent's browser tabs moved; the tabs are read back.
   browserTabsMoved: number;
   // Standing extension surfaces, keyed by plugin and surface id. They describe
@@ -221,4 +274,7 @@ export interface SessionState {
   // are kept apart from `views` because they have no place of their own: they
   // appear only where the thing they stand in for appears.
   takeovers: Record<string, ExtensionSurface>;
+  // The last phase each sub-agent reported, by call id. Kept beside the cards
+  // because a background child outlives the call that started it.
+  subagentPhase: Record<string, string>;
 }

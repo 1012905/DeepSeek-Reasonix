@@ -17,6 +17,13 @@ type Sender interface {
 	Send(Message) error
 }
 
+// Chimer is a Sender that can also play a short audible cue by itself, so the
+// sound does not depend on the system's notification settings (focus modes mute
+// the toast and its sound together).
+type Chimer interface {
+	Chime() error
+}
+
 // Sink forwards every event to inner and mirrors configured attention events to
 // sender. It holds the setting rather than a copy of it, so a runtime built
 // while notifications were off still delivers once they are turned on.
@@ -26,6 +33,7 @@ type Sink struct {
 	sender Sender
 	say    i18n.Messages
 	set    *Settings
+	phone  *Phone
 }
 
 // NewSink wraps an existing event sink with best-effort notification delivery.
@@ -33,21 +41,45 @@ func NewSink(inner event.Sink, sender Sender, say i18n.Messages, set *Settings) 
 	return &Sink{AuditForwarder: event.AuditForwarder{Inner: inner}, inner: inner, sender: sender, say: say, set: set}
 }
 
+// WithPhone makes the sink also report the events a phone is told about, under
+// the settings' phone switches.
+func (s *Sink) WithPhone(p *Phone) *Sink {
+	s.phone = p
+	return s
+}
+
 // Emit preserves the underlying event stream before attempting notification side effects.
 func (s *Sink) Emit(e event.Event) {
 	if s.inner != nil {
 		s.inner.Emit(e)
 	}
-	SendEvent(s.sender, s.say, s.set.Load(), e)
+	cfg := s.set.Load()
+	SendEvent(s.sender, s.say, cfg, e)
+	s.phone.Event(cfg, e)
 }
 
 // SendEvent applies the same notification rules for paths that do not emit through Sink.
 func SendEvent(sender Sender, say i18n.Messages, cfg config.NotificationsConfig, e event.Event) {
-	if !cfg.Enabled || sender == nil {
+	if msg, ok := message(say, cfg, e); ok {
+		announce(sender, cfg, msg)
+	}
+}
+
+// announce delivers one already-chosen message under the two master switches:
+// the toast under Enabled, the chime under Sound.
+func announce(sender Sender, cfg config.NotificationsConfig, msg Message) {
+	if sender == nil {
 		return
 	}
-	if msg, ok := message(say, cfg, e); ok {
-		_ = sender.Send(msg)
+	if cfg.Enabled {
+		if err := sender.Send(msg); err != nil {
+			sendFailed(err)
+		}
+	}
+	if cfg.Sound {
+		if c, ok := sender.(Chimer); ok {
+			_ = c.Chime()
+		}
 	}
 }
 

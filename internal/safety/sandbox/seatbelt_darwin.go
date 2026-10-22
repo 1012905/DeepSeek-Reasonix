@@ -3,12 +3,14 @@ package sandbox
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"reasonix/internal/base/hostwrite"
 )
 
 // Command returns the argv to run `command` through sh, wrapped in sandbox-exec
@@ -102,9 +104,17 @@ func seatbeltProfile(spec Spec) string {
 	// rule; (allow default) above keeps reads working everywhere else.
 	for _, p := range forbidReadDirs(spec.ForbidReadRoots) {
 		fmt.Fprintf(&b, "(deny file-read* (subpath %s))\n", sbplString(p))
+		// bubblewrap masks these with an empty tmpfs, which takes writes away
+		// too; without this rule a blind overwrite of an unreadable file works here.
+		fmt.Fprintf(&b, "(deny file-write* (subpath %s))\n", sbplString(p))
 	}
-	if !spec.Network {
+	// After every write allowance: SBPL takes the final match.
+	writeGitMetadataRules(&b, gitMetadataForSpec(spec))
+	switch {
+	case !spec.Network:
 		b.WriteString("(deny network*)\n")
+	case spec.egressPort() > 0:
+		writeEgressRules(&b, spec)
 	}
 	// Authority rules last, and denies before grants: SBPL takes the final
 	// match, so a granted endpoint survives the blanket denial above. Without
@@ -118,53 +128,126 @@ func seatbeltProfile(spec Spec) string {
 	return b.String()
 }
 
+// writeGitMetadataRules denies writes to protected Git metadata. A pin denies
+// only removing or renaming the entry and planting a symlink there, so the
+// entry's own mode and times stay writable. Worktree and submodule gitdirs
+// that exist get exact rules up to a limit; patterns cover the rest and any
+// created later, so the profile stays bounded however many a repository holds.
+func writeGitMetadataRules(b *strings.Builder, meta gitMetadata) {
+	paths := meta.Paths
+	var overWorktrees []string
+	for _, common := range meta.Commons {
+		g := gitGroupsOf(common, gitGroupMaxEntries)
+		paths = append(paths, g.Paths...)
+		if g.WorktreesOver {
+			overWorktrees = append(overWorktrees, common)
+		}
+	}
+	for _, p := range paths {
+		switch {
+		case p.Pin:
+			fmt.Fprintf(b, "(deny file-write-unlink (literal %s))\n", sbplString(p.Path))
+			fmt.Fprintf(b, "(deny file-write-create (require-all (literal %s) (vnode-type SYMLINK)))\n", sbplString(p.Path))
+		case p.Tree:
+			fmt.Fprintf(b, "(deny file-write* (subpath %s))\n", sbplString(p.Path))
+		default:
+			fmt.Fprintf(b, "(deny file-write* (literal %s))\n", sbplString(p.Path))
+		}
+	}
+	for _, common := range meta.Commons {
+		c := sbplRegexQuote(common)
+		modules := "^" + c + "/modules/(" + gitGroupSegment + "/)*"
+		patterns := []string{
+			"^" + c + "/worktrees/[^/]+/(config|config[.]worktree)$",
+			modules + "(config|config[.]worktree|commondir)$",
+			modules + "hooks(/.*)?$",
+		}
+		if slices.Contains(overWorktrees, common) {
+			patterns = append(patterns, "^"+c+"/worktrees/[^/]+/commondir$")
+		}
+		for _, re := range patterns {
+			fmt.Fprintf(b, "(deny file-write* (regex %s))\n", sbplString(re))
+		}
+		fmt.Fprintf(b, "(deny file-write-create (require-all (regex %s) (vnode-type SYMLINK)))\n", sbplString("^"+c+"/(modules|worktrees)/"))
+	}
+}
+
+// gitGroupSegment matches one path segment other than refs and logs, so the
+// submodule patterns do not catch a branch, tag or reflog named config or hooks.
+const gitGroupSegment = `([^/rl][^/]*|r|re|ref|r[^/e][^/]*|re[^/f][^/]*|ref[^/s][^/]*|refs[^/]+|l|lo|log|l[^/o][^/]*|lo[^/g][^/]*|log[^/s][^/]*|logs[^/]+)`
+
+// sbplRegexQuote escapes a path for a Seatbelt regex, whose metacharacters a
+// directory name may legally contain.
+func sbplRegexQuote(path string) string {
+	var b strings.Builder
+	for _, r := range path {
+		if strings.ContainsRune(`\.+*?()|[]{}^$`, r) {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// egressPort is the proxy port a confined profile opens, or 0 for none.
+func (s Spec) egressPort() int {
+	if s.Egress == nil || !s.Network {
+		return 0
+	}
+	return s.Egress.Port()
+}
+
+// writeEgressRules shuts every destination but loopback, Unix sockets and the
+// egress proxy; a host proxy outside ClosedLoopbackPorts stays reachable, and
+// lookups still reach the resolver's socket. Bind, inbound and outbound are
+// separate grants: (local ip "localhost:*") on network* matches the local end
+// of every outbound connection and would admit all of them.
+func writeEgressRules(b *strings.Builder, spec Spec) {
+	b.WriteString("(deny network*)\n")
+	b.WriteString("(allow network-bind (local ip \"localhost:*\"))\n")
+	b.WriteString("(allow network-inbound (local ip \"localhost:*\"))\n")
+	b.WriteString("(allow network-outbound (remote ip \"localhost:*\"))\n")
+	b.WriteString("(allow network-outbound (remote unix-socket))\n")
+	proxyPort := spec.egressPort()
+	for _, port := range spec.ClosedLoopbackPorts {
+		if port > 0 && port != proxyPort {
+			fmt.Fprintf(b, "(deny network-outbound (remote ip \"localhost:%d\"))\n", port)
+		}
+	}
+	fmt.Fprintf(b, "(allow network-outbound (remote ip \"localhost:%d\"))\n", proxyPort)
+}
+
+// EgressSupported reports whether this platform can confine egress to the
+// egress proxy.
+func EgressSupported() bool { return true }
+
+// EgressNeedsSocket reports whether the proxy must also listen on a Unix
+// socket; Seatbelt reaches it on its loopback port.
+func EgressNeedsSocket() bool { return false }
+
 // writeAllowDirs is the deduplicated, symlink-resolved set of directories the
 // sandbox permits writes to: the caller's roots plus temp dirs, /dev, and the
-// common toolchain caches under $HOME. Symlinks are resolved because macOS's
-// /tmp and $TMPDIR live under /private, which is the path Seatbelt matches.
+// common toolchain caches under $HOME. Paths are resolved because macOS's /tmp
+// and $TMPDIR live under /private, which is the path Seatbelt matches.
 func writeAllowDirs(roots []string) []string {
 	return writeAllowDirsForSpec(Spec{WriteRoots: roots})
 }
 
 func writeAllowDirsForSpec(spec Spec) []string {
-	roots := spec.WriteRoots
-	dirs := append([]string{}, roots...)
-	dirs = append(dirs, "/dev")
+	return planWriteRoots(spec, backendWriteDirs(spec)).dirs
+}
+
+// backendWriteDirs are the directories Seatbelt allows beside the caller's
+// roots. The session temp stays writable even under MinimalWrites.
+func backendWriteDirs(spec Spec) []string {
+	dirs := []string{"/dev"}
 	if dir := strings.TrimSpace(spec.SessionTemp); dir != "" {
-		// Session-private temporary directory must be writable under Seatbelt
-		// even when MinimalWrites omits the broad host temp allowances.
 		dirs = append(dirs, dir)
 	}
 	if !spec.MinimalWrites {
-		dirs = append(dirs, "/tmp", "/private/tmp", "/private/var/folders", os.TempDir())
+		dirs = append(dirs, hostwrite.Dirs()...)
 	}
-	if !spec.MinimalWrites {
-		if home, err := os.UserHomeDir(); err == nil {
-			// go build/test → Library/Caches + go; pip/etc → .cache; npm/cargo too.
-			for _, sub := range []string{"Library/Caches", ".cache", ".npm", ".cargo", "go"} {
-				dirs = append(dirs, filepath.Join(home, sub))
-			}
-		}
-	}
-	seen := map[string]bool{}
-	out := make([]string, 0, len(dirs))
-	for _, d := range dirs {
-		if d == "" {
-			continue
-		}
-		abs, err := filepath.Abs(d)
-		if err != nil {
-			continue
-		}
-		if real, err := filepath.EvalSymlinks(abs); err == nil {
-			abs = real
-		}
-		if !seen[abs] {
-			seen[abs] = true
-			out = append(out, abs)
-		}
-	}
-	return out
+	return dirs
 }
 
 // sbplString quotes a path as an SBPL string literal, escaping backslash and
@@ -202,11 +285,15 @@ func forbidReadDirs(roots []string) []string {
 // grantedAuthorityEndpoints are the sockets that must survive a blanket network
 // denial, so revoking external egress does not silently revoke local signing.
 func grantedAuthorityEndpoints(s Spec) []string {
+	getenv := EffectiveGetenv(s.ShellEnv)
 	var out []string
 	for _, a := range GovernedAuthorities() {
 		if s.Granted(a) {
-			out = append(out, existingSockets(authorityEndpoints(a))...)
+			out = append(out, existingSockets(authorityEndpoints(a, getenv))...)
 		}
 	}
 	return out
 }
+
+// bwrapFault: bubblewrap is a Linux backend, so there is no such reason here.
+func bwrapFaultFor(Spec) error { return nil }

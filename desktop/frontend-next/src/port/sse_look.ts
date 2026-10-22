@@ -1,4 +1,5 @@
 import { SseHttp } from "./sse_http";
+import { base64Of, guardUpload, tooLarge, UPLOAD_LIMIT_MB } from "./upload";
 import type { Appearance } from "./port";
 
 // The appearance half of the port. Chained the way the fixture's faces are, so
@@ -13,6 +14,7 @@ export class SseLook extends SseHttp {
       language: look.language ?? "",
       zoom: look.zoom ?? 0,
       readSize: look.readSize ?? 0,
+      textSize: look.textSize ?? 0,
       fontUi: look.fontUi ?? "",
       fontMono: look.fontMono ?? "",
       width: look.width ?? "",
@@ -28,24 +30,10 @@ export class SseLook extends SseHttp {
   // JSON, not raw bytes: csrfGuard admits nothing else, which is what stops a
   // cross-site form from posting here at all.
   async uploadWallpaper(blob: Blob) {
-    const buf = new Uint8Array(await blob.arrayBuffer());
-    let bin = "";
-    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
-    const res = await fetch(this.base + "/appearance/wallpaper", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ mime: blob.type, data: btoa(bin) }),
-    });
-    const body = (await res.json().catch(() => ({}))) as Appearance & { error?: string };
-    if (!res.ok) throw new Error(body.error || `/appearance/wallpaper: ${res.status}`);
-    return body;
+    guardUpload(blob.size, UPLOAD_LIMIT_MB.wallpaper, tooLarge("wallpaper.too_large", "limit"));
+    return this.post0<Appearance>("/appearance/wallpaper", { mime: blob.type, data: await base64Of(blob) });
   }
-  async clearWallpaper() {
-    const res = await fetch(this.base + "/appearance/wallpaper", {
-      method: "DELETE",
-      credentials: "same-origin",
-    });
-    if (!res.ok) throw new Error(`/appearance/wallpaper: ${res.status}`);
+  clearWallpaper() {
+    return this.del("/appearance/wallpaper");
   }
 }

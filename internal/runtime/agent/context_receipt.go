@@ -12,7 +12,7 @@ import (
 	"reasonix/internal/contract/provider"
 )
 
-func (a *Agent) contextMaintenanceInputHash(visible []provider.Message) string {
+func (a *contextWindow) contextMaintenanceInputHash(visible []provider.Message) string {
 	if a == nil {
 		return ""
 	}
@@ -21,31 +21,81 @@ func (a *Agent) contextMaintenanceInputHash(visible []provider.Message) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (a *Agent) contextMaintenanceBlocked(inputHash string) (bool, string) {
+// transientSummaryFailure reports a failure of the summary request itself, which
+// a later attempt can answer differently. Every other class is a property of
+// the input or the install, so retrying the same input cannot change it.
+func transientSummaryFailure(code string) bool {
+	switch CompactionNoopReason(code) {
+	case FailSummaryTruncated, FailSummaryTimeout, FailSummaryCeiling, FailSummaryFailed, FailSummaryNotDigest:
+		return true
+	}
+	return false
+}
+
+// retriesOnGrowth reports a failure the input's growth releases: the summary
+// request failed, the checkpoint was refused for the protected content it would
+// carry, or the fold lost the race to a transcript append (that append is the
+// growth), which a larger input answers differently.
+// Anything else holds, because retrying the same input cannot change it.
+func retriesOnGrowth(code string) bool {
+	return transientSummaryFailure(code) || CompactionNoopReason(code) == NoopCandidateAboveCeiling ||
+		CompactionNoopReason(code) == FailContextChanged
+}
+
+// retryGrowthStep is how much the input must grow past a transient failure
+// before another summary request is worth its cost: an eighth of the trigger,
+// never more than half of what the failure left below the hard ceiling, so the
+// release point always sits short of it.
+func (a *contextWindow) retryGrowthStep(failedAt int) int {
+	return max(1, min(a.compactTrigger()/8, (a.hardInputCeiling()-failedAt)/2))
+}
+
+// blockedReceiptHolds reports whether a blocked or failed receipt still
+// suppresses automatic maintenance at this input size. A failure that growth
+// releases, recorded without a size (older sidecars), is released once.
+func (a *contextWindow) blockedReceiptHolds(r *sessionstore.ContextMaintenanceReceipt, tokens int) bool {
+	if r == nil || (r.Status != "blocked" && r.Status != "failed") {
+		return false
+	}
+	switch {
+	case transientSummaryFailure(r.Code):
+		return r.InputTokens > 0 && tokens < r.InputTokens+a.retryGrowthStep(r.InputTokens)
+	case retriesOnGrowth(r.Code):
+		// Growth releases a protected-content refusal only below the physical
+		// ceiling: past it the request goes out and the provider rules.
+		return r.InputTokens == 0 || tokens < r.InputTokens+a.retryGrowthStep(r.InputTokens) || tokens >= a.hardInputCeiling()
+	}
+	return true
+}
+
+// contextMaintenanceBlocked reports whether automatic maintenance is
+// suppressed. Overflow is a fresh provider refusal, so it passes a failure
+// growth releases; one overflow recovery per request bounds the cost.
+func (a *contextWindow) contextMaintenanceBlocked(inputHash string, tokens int, overflow bool) (bool, string) {
 	if a == nil {
 		return false, ""
 	}
-	a.sess.compactionMu.Lock()
-	defer a.sess.compactionMu.Unlock()
-	r := a.sess.compactionState.LastReceipt
+	a.sess.win.compactionMu.Lock()
+	defer a.sess.win.compactionMu.Unlock()
+	r := a.sess.win.compactionState.LastReceipt
 	if r == nil {
 		// Legacy sidecars may only have BlockedInputHash without a receipt.
-		if a.sess.compactionState.BlockedInputHash != "" &&
-			(inputHash == "" || a.sess.compactionState.BlockedInputHash == inputHash) {
-			return true, a.sess.compactionState.BlockedReason
+		if a.sess.win.compactionState.BlockedInputHash != "" &&
+			(inputHash == "" || a.sess.win.compactionState.BlockedInputHash == inputHash) {
+			return true, a.sess.win.compactionState.BlockedReason
 		}
 		return false, ""
 	}
-	if r.Status != "blocked" && r.Status != "failed" {
+	if overflow && (transientSummaryFailure(r.Code) || retriesOnGrowth(r.Code) && r.InputHash != inputHash) {
 		return false, ""
 	}
-	// Generation-scoped: once this generation fails, automatic maintenance
-	// does not pay for another summary until a successful install, manual
-	// compress, or lineage change advances the generation.
-	return true, firstNonEmpty(a.sess.compactionState.BlockedReason, r.Reason)
+	if !a.blockedReceiptHolds(r, tokens) {
+		return false, ""
+	}
+	return true, firstNonEmpty(a.sess.win.compactionState.BlockedReason, r.Reason)
 }
 
-func (a *Agent) emitContextMaintenance(r *sessionstore.ContextMaintenanceReceipt) {
+func (a *contextWindow) emitContextMaintenance(r *sessionstore.ContextMaintenanceReceipt) {
 	if a == nil || r == nil || a.svc.sink == nil {
 		return
 	}
@@ -61,14 +111,14 @@ func (a *Agent) emitContextMaintenance(r *sessionstore.ContextMaintenanceReceipt
 // compactionFrame stamps the boundary that sent a fold onto one frame. Every
 // emitter carries it, and four copies of the same two lookups is how one of
 // them comes to report a threshold the session is not running under.
-func (a *Agent) compactionFrame(c event.Compaction) event.Compaction {
+func (a *contextWindow) compactionFrame(c event.Compaction) event.Compaction {
 	c.Boundary, c.TriggerTokens = a.compactBoundary(), a.compactTrigger()
 	return c
 }
 
 // compactBoundary names the threshold that decides maintenance right now: the
 // window share, or the absolute visible-input size that does not come from it.
-func (a *Agent) compactBoundary() string {
+func (a *contextWindow) compactBoundary() string {
 	capacity := a.capacityCompactTrigger()
 	if capacity <= 0 || a.compactRatio > 1 {
 		return ""
@@ -83,31 +133,60 @@ func (a *Agent) compactBoundary() string {
 // receipt and advances no generation: nothing was spent and nothing is blocked,
 // so the next round is free to try again — which is exactly why the attempt
 // would otherwise leave no trace at all.
-func (a *Agent) noteMaintenanceNoop(trigger string, reason CompactionNoopReason, inputTokens int) {
+func (a *contextWindow) noteMaintenanceNoop(trigger string, reason CompactionNoopReason, inputTokens int) {
 	if a == nil || reason == "" || a.svc.sink == nil {
 		return
 	}
 	turn := a.activeTurnCreatedAt.Load()
-	if a.sess.compaction.lastNoop.reason == reason && a.sess.compaction.lastNoop.turn == turn {
+	if a.sess.win.compaction.lastReported.reason == reason && a.sess.win.compaction.lastReported.turn == turn {
 		return
 	}
-	a.sess.compaction.lastNoop = maintenanceNoop{reason: reason, turn: turn}
+	a.sess.win.compaction.lastReported = maintenanceReport{reason: reason, turn: turn}
 	a.svc.sink.Emit(event.Event{Kind: event.ContextMaintenanceEvent, Maintenance: &event.ContextMaintenance{
 		Status: "noop", Action: "summary", Trigger: trigger, Code: string(reason),
 		Boundary: a.compactBoundary(), TriggerTokens: a.compactTrigger(), InputTokens: inputTokens,
 	}})
 }
 
+// noteMaintenanceHeld tells the user that compaction is due but a failed attempt
+// still holds the retry. It speaks once per turn and cause; the model is not
+// told, because the hold has no model-visible symptom of its own.
+func (a *contextWindow) noteMaintenanceHeld() {
+	if a == nil || a.svc.sink == nil {
+		return
+	}
+	a.sess.win.compactionMu.Lock()
+	var code string
+	if r := a.sess.win.compactionState.LastReceipt; r != nil {
+		code = r.Code
+	}
+	a.sess.win.compactionMu.Unlock()
+	reason := CompactionNoopReason(code)
+	if reason == "" {
+		reason = FailUnclassified
+	}
+	turn := a.activeTurnCreatedAt.Load()
+	if a.sess.win.compaction.lastReported.reason == reason && a.sess.win.compaction.lastReported.turn == turn {
+		return
+	}
+	a.sess.win.compaction.lastReported = maintenanceReport{reason: reason, turn: turn}
+	a.svc.sink.Emit(event.Event{
+		Kind: event.Notice, Level: event.LevelWarn, Code: event.NoticeCodeCompactHeld, Detail: string(reason),
+		Text: fmt.Sprintf("Automatic compaction is paused: the last attempt did not finish (%s).", reason),
+	})
+	a.noteContextComposition()
+}
+
 // recordContextMaintenanceBlocked persists a generation-scoped blocked receipt.
 // code is empty where the verdict has no identity beyond its sentence.
-func (a *Agent) recordContextMaintenanceBlocked(inputHash, trigger, action string, code CompactionNoopReason, reason string) {
+func (a *contextWindow) recordContextMaintenanceBlocked(inputHash, trigger, action string, code CompactionNoopReason, reason string) {
 	a.recordContextMaintenanceOutcome(inputHash, trigger, action, "blocked", code, reason)
 }
 
 // recordContextMaintenanceOutcome records blocked or failed for the current
 // generation. Automatic Prepare will not re-enter summary until the generation
-// advances (successful install, manual compress, or lineage change).
-func (a *Agent) recordContextMaintenanceOutcome(inputHash, trigger, action, status string, code CompactionNoopReason, reason string) {
+// advances, or, for a transient summary failure, the input has grown.
+func (a *contextWindow) recordContextMaintenanceOutcome(inputHash, trigger, action, status string, code CompactionNoopReason, reason string) {
 	if a == nil || a.sess.conversation == nil {
 		return
 	}
@@ -123,15 +202,17 @@ func (a *Agent) recordContextMaintenanceOutcome(inputHash, trigger, action, stat
 	if status != "failed" {
 		status = "blocked"
 	}
+	visible := a.modelVisibleMessages()
+	inputTokens := a.estimatedVisibleRequestTokens(visible)
 	_, transcriptVersion := a.sess.conversation.SnapshotMessagesVersion()
 	promptCacheKey := a.currentPromptCacheKey()
-	a.sess.compactionMu.Lock()
-	state := a.sess.compactionState
+	a.sess.win.compactionMu.Lock()
+	state := a.sess.win.compactionState
 	previous := state
 	if state.LastReceipt != nil &&
 		(state.LastReceipt.Status == "blocked" || state.LastReceipt.Status == "failed") &&
-		state.LastReceipt.Action == action {
-		a.sess.compactionMu.Unlock()
+		state.LastReceipt.Action == action && !retriesOnGrowth(string(code)) {
+		a.sess.win.compactionMu.Unlock()
 		return
 	}
 	now := time.Now().UTC()
@@ -151,22 +232,22 @@ func (a *Agent) recordContextMaintenanceOutcome(inputHash, trigger, action, stat
 	state.LastReceipt = &sessionstore.ContextMaintenanceReceipt{
 		OperationID: fmt.Sprintf("%s-%s-%d", status, action, state.Generation), Status: status, Action: action,
 		Trigger: trigger, SourceProjection: state.Projection.ProjectionVersion,
-		ProjectionVersion: state.Projection.ProjectionVersion, InputHash: inputHash,
+		ProjectionVersion: state.Projection.ProjectionVersion, InputHash: inputHash, InputTokens: inputTokens,
 		BlockedInputHash: inputHash, Reason: reason, CreatedAt: now,
 		Code: string(code), Boundary: a.compactBoundary(), TriggerTokens: a.compactTrigger(),
 	}
 	state.UpdatedAt = now
-	a.sess.compactionState = state
+	a.sess.win.compactionState = state
 	if err := a.persistCompactionStateLocked(); err != nil {
-		a.sess.compactionState = previous
-		a.sess.compactionMu.Unlock()
+		a.sess.win.compactionState = previous
+		a.sess.win.compactionMu.Unlock()
 		return
 	}
-	a.sess.compactionMu.Unlock()
+	a.sess.win.compactionMu.Unlock()
 	a.emitContextMaintenance(state.LastReceipt)
 }
 
-func (a *Agent) emitCompactionTelemetry(t CompactionTelemetry) {
+func (a *contextWindow) emitCompactionTelemetry(t CompactionTelemetry) {
 	detail := fmt.Sprintf("trigger=%s mode=%s cache=%s src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d user_kept=%d user_dropped=%d",
 		t.Trigger, t.Mode, t.CacheState, t.SourceTokens, t.FoldTokens, t.Spans, t.ProjectionTokens,
 		t.InputTokens, t.OutputTokens, t.CacheHitTokens, t.CacheMissTokens, t.CacheWriteTokens, t.RequestCount,
@@ -186,6 +267,9 @@ func (a *Agent) emitCompactionTelemetry(t CompactionTelemetry) {
 	a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "compaction telemetry", Detail: detail})
 }
 
-func (a *Agent) emitCompactionAborted(trigger string) {
-	a.svc.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{Trigger: trigger}})
+// emitCompactionAborted closes the card of a fold that installed nothing. code
+// is the class the host settled on, so the card can say why rather than only
+// that nothing folded; it is empty where no class applies.
+func (a *contextWindow) emitCompactionAborted(trigger string, code CompactionNoopReason) {
+	a.svc.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{Trigger: trigger, Code: string(code)}})
 }

@@ -51,12 +51,19 @@ type RecallHit struct {
 // RecallResult records both the selected facts and the budget decision. Block
 // returns the exact provider-visible suffix assembled by AutoRecall.
 type RecallResult struct {
-	Query      string
-	Hits       []RecallHit
-	Omitted    int
-	CharBudget int
-	UsedChars  int
-	Suppressed string
+	Query string
+	Hits  []RecallHit
+	// OmittedByLimit and OmittedByBudget split the two reasons a matched fact
+	// never reaches the block: the per-turn hit cap, and the character budget.
+	OmittedByLimit  int
+	OmittedByBudget int
+	CharBudget      int
+	UsedChars       int
+	Suppressed      string
+	// SuppressionCode is Suppressed's typed identity: consumers match this
+	// field, never a prefix cut from the sentence. Empty when hits were injected.
+	SuppressionCode SuppressionCode
+	StoreError      error `json:"-"`
 	// ShadowHits is the Retrieval V2 ranking over the same pool, telemetry
 	// only: it never reaches the model and never affects Hits.
 	ShadowHits []ShadowHit
@@ -71,6 +78,34 @@ type ShadowHit struct {
 }
 
 func (r RecallResult) Block() string { return r.block }
+
+// SuppressionCode is the typed identity of a recall decision that stayed
+// silent. Consumers match this code; the sentence beside it is only for
+// readers. Host callers share the vocabulary, so a turn has one set of codes.
+type SuppressionCode string
+
+const (
+	SuppressCarriedNote  SuppressionCode = "carried-note"
+	SuppressRetrievalOff SuppressionCode = "retrieval-off"
+	SuppressGenericTurn  SuppressionCode = "generic-turn"
+	SuppressEmptyStore   SuppressionCode = "empty-store"
+	SuppressUnreadable   SuppressionCode = "store-unreadable"
+	SuppressNoTerms      SuppressionCode = "no-searchable-terms"
+	SuppressNoMatch      SuppressionCode = "no-distinctive-match"
+	SuppressOverBudget   SuppressionCode = "over-budget"
+)
+
+// SuppressReason renders one suppression decision: stable code, then sentence.
+func SuppressReason(code SuppressionCode, sentence string) string {
+	return string(code) + ": " + sentence
+}
+
+// Suppress records a silenced decision with both its typed identity and the
+// sentence a reader sees, so the two can never drift apart.
+func (r *RecallResult) Suppress(code SuppressionCode, sentence string) {
+	r.SuppressionCode = code
+	r.Suppressed = SuppressReason(code, sentence)
+}
 
 // Override explains one project fact that shadows an equivalent global fact
 // during automatic recall. Both facts remain visible to management surfaces.
@@ -134,11 +169,22 @@ type autoRecallDoc struct {
 func AutoRecall(store Store, query string, opts RecallOptions) RecallResult {
 	result := RecallResult{Query: strings.TrimSpace(query), CharBudget: recallCharBudget(opts.MaxChars)}
 	if genericRecallQuery(result.Query) {
-		result.Suppressed = "generic user turn"
+		result.Suppress(SuppressGenericTurn, "generic user turn")
 		return result
 	}
 
-	return autoRecallIndexed(BuildRecallIndex(store), result, opts)
+	index, err := BuildRecallIndex(store)
+	if err != nil {
+		return recallReadFailure(result, err)
+	}
+	return autoRecallIndexed(index, result, opts)
+}
+
+func recallReadFailure(result RecallResult, err error) RecallResult {
+	result.StoreError = err
+	result.Suppress(SuppressUnreadable, "memory store unreadable")
+	result.block = "Background memory could not be read. Saved facts may exist; recall is unavailable for this turn."
+	return result
 }
 
 // autoRecallIndexed is AutoRecall's scoring core over a prebuilt index. The
@@ -146,7 +192,7 @@ func AutoRecall(store Store, query string, opts RecallOptions) RecallResult {
 // AutoRecall entry builds one on the spot for tools, tests, and the bench.
 func autoRecallIndexed(index *RecallIndex, result RecallResult, opts RecallOptions) RecallResult {
 	if index == nil {
-		result.Suppressed = "memory store is empty"
+		result.Suppress(SuppressEmptyStore, "memory store is empty")
 		return result
 	}
 	// The shadow ranks the full pool before any production gate: what V1
@@ -154,12 +200,12 @@ func autoRecallIndexed(index *RecallIndex, result RecallResult, opts RecallOptio
 	result.ShadowHits = shadowRankV2(result.Query, index.fielded)
 	queryTerms, err := retrieval.QueryTerms(result.Query)
 	if err != nil {
-		result.Suppressed = "no searchable terms"
+		result.Suppress(SuppressNoTerms, "no searchable terms")
 		return result
 	}
 	docs := index.docs
 	if len(docs) == 0 {
-		result.Suppressed = "memory store is empty"
+		result.Suppress(SuppressEmptyStore, "memory store is empty")
 		return result
 	}
 
@@ -208,7 +254,7 @@ func autoRecallIndexed(index *RecallIndex, result RecallResult, opts RecallOptio
 		})
 	}
 	if len(hits) == 0 {
-		result.Suppressed = "no sufficiently distinctive match"
+		result.Suppress(SuppressNoMatch, "no sufficiently distinctive match")
 		return result
 	}
 	sort.SliceStable(hits, func(i, j int) bool {
@@ -223,14 +269,14 @@ func autoRecallIndexed(index *RecallIndex, result RecallResult, opts RecallOptio
 	hits = retrieval.KeepTopRelativeScore(hits, 0.24, func(hit RecallHit) float64 { return hit.Score })
 	limit := recallLimit(opts.Limit)
 	if len(hits) > limit {
-		result.Omitted += len(hits) - limit
+		result.OmittedByLimit = len(hits) - limit
 		hits = hits[:limit]
 	}
 
-	result.Hits, result.block, result.Omitted = buildRecallBlock(hits, result.CharBudget, result.Omitted)
+	result.Hits, result.block, result.OmittedByBudget = buildRecallBlock(hits, result.CharBudget, result.OmittedByLimit)
 	result.UsedChars = utf8.RuneCountInString(result.block)
 	if len(result.Hits) == 0 {
-		result.Suppressed = "matched facts exceeded recall budget"
+		result.Suppress(SuppressOverBudget, "matched facts exceeded recall budget")
 	}
 	return result
 }
@@ -407,13 +453,14 @@ func recallReason(matched []string, scope FactScope) string {
 	return "matched " + strings.Join(matched, ", ") + "; " + string(NormalizeFactScope(string(scope))) + " scope"
 }
 
-func buildRecallBlock(hits []RecallHit, budget, omitted int) ([]RecallHit, string, int) {
+func buildRecallBlock(hits []RecallHit, budget, omittedByLimit int) ([]RecallHit, string, int) {
 	const open = "<memory-recall>\n"
 	const close = "</memory-recall>"
 	prefix := open + autoRecallPreamble + "\n"
 	selected := make([]RecallHit, 0, len(hits))
 	entries := make([]string, 0, len(hits))
 	used := utf8.RuneCountInString(prefix + close)
+	omittedByBudget := 0
 	for _, hit := range hits {
 		entry := recallEntry(hit, hit.Snippet)
 		remaining := budget - used
@@ -421,7 +468,7 @@ func buildRecallBlock(hits []RecallHit, budget, omitted int) ([]RecallHit, strin
 			entry = clippedRecallEntry(hit, remaining)
 		}
 		if entry == "" {
-			omitted++
+			omittedByBudget++
 			continue
 		}
 		selected = append(selected, hit)
@@ -429,17 +476,17 @@ func buildRecallBlock(hits []RecallHit, budget, omitted int) ([]RecallHit, strin
 		used += utf8.RuneCountInString(entry)
 	}
 	if len(selected) == 0 {
-		return nil, "", omitted
+		return nil, "", omittedByBudget
 	}
 	block := prefix + strings.Join(entries, "")
-	if omitted > 0 {
-		note := fmt.Sprintf("- omitted=%d additional relevant fact(s) because of the recall limit or character budget\n", omitted)
+	if total := omittedByLimit + omittedByBudget; total > 0 {
+		note := omittedNote(total, "relevant fact(s)", "the recall limit or character budget") + "\n"
 		if utf8.RuneCountInString(block+note+close) <= budget {
 			block += note
 		}
 	}
 	block += close
-	return selected, block, omitted
+	return selected, block, omittedByBudget
 }
 
 func recallEntry(hit RecallHit, snippet string) string {

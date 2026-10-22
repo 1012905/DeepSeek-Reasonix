@@ -23,8 +23,18 @@ func (c *Client) call(ctx context.Context, method string, params any) (json.RawM
 }
 
 func (c *Client) callOn(ctx context.Context, t transport, method string, params any) (json.RawMessage, error) {
-	params, unregisterProgress := c.withProgress(ctx, t, method, params)
+	if c.modern.version != "" {
+		return c.callModern(ctx, t, method, params)
+	}
+	return c.callOnce(ctx, t, method, params)
+}
+
+func (c *Client) callOnce(ctx context.Context, t transport, method string, params any) (json.RawMessage, error) {
+	params, unregisterProgress := c.withProgress(ctx, t, method, c.withHostContext(ctx, method, params))
 	defer unregisterProgress()
+	if router, ok := t.(elicitTransport); ok && method == "tools/call" {
+		defer router.registerElicitCall(ctx)()
+	}
 
 	callCtx, cancel, timeout := c.contextWithCallTimeout(ctx, method, params)
 	if cancel != nil {
@@ -72,7 +82,8 @@ func (c *Client) withProgress(ctx context.Context, t transport, method string, p
 
 func (c *Client) callTransport(ctx context.Context, t transport, method string, params any) (json.RawMessage, error) {
 	res, err := t.call(ctx, method, params)
-	if err == nil || method == "initialize" || !isHTTPSessionExpired(err) {
+	// A modern server has no session to expire; initialize would be the wrong era.
+	if err == nil || method == "initialize" || c.modern.version != "" || !isHTTPSessionExpired(err) {
 		return res, err
 	}
 	if initErr := c.initializeSessionOn(ctx, t, false); initErr != nil {
@@ -159,6 +170,7 @@ func (c *Client) initializeSessionOn(ctx context.Context, t transport, recordCap
 	if len(mcpRoots(c.spec.WorkspaceRoot)) > 0 {
 		capabilities["roots"] = map[string]any{"listChanged": false}
 	}
+	capabilities["elicitation"] = elicitCapability()
 	versioned, _ := t.(protocolVersioned)
 	if versioned != nil {
 		// A re-initialize starts over: the header belongs to a session, and
@@ -200,11 +212,28 @@ func (c *Client) initializeSessionOn(ctx context.Context, t transport, recordCap
 		slog.Warn("plugin: parse initialize capabilities", "server", c.name, "err", err)
 	}
 	_, c.hasTools = ir.Capabilities["tools"]
+	c.declareToolListChanged(declaresToolListChanged(ir.Capabilities["tools"]))
 	_, c.hasPrompts = ir.Capabilities["prompts"]
 	_, c.hasResources = ir.Capabilities["resources"]
 	c.instructions = strings.TrimSpace(ir.Instructions)
 
 	return c.notifyOn(ctx, t, "notifications/initialized", map[string]any{})
+}
+
+// declaresToolListChanged reads tools.listChanged from the initialize result.
+// Absent or false means the server never announces catalog changes, so nothing
+// subscribes and its catalog stays as listed.
+func declaresToolListChanged(raw json.RawMessage) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var capability struct {
+		ListChanged bool `json:"listChanged"`
+	}
+	if err := json.Unmarshal(raw, &capability); err != nil {
+		return false
+	}
+	return capability.ListChanged
 }
 
 // redial opens a replacement connection for this client's server. It re-clears
@@ -217,6 +246,9 @@ func (c *Client) redial(lifeCtx, callCtx context.Context) (transport, error) {
 		return nil, err
 	}
 	s, err = resolveProjectLaunchAuthorization(callCtx, s)
+	if err == nil {
+		err = checkDeclaredLaunch(s)
+	}
 	if err != nil {
 		return nil, err
 	}

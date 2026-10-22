@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useEscape } from "./dismiss";
 import { t } from "../i18n";
 import type { AgentPort, HookCatalog, HookDryRun, HookEntry } from "../port/port";
@@ -44,9 +44,37 @@ const RECIPES: Recipe[] = [
 
 const SCOPE_LABEL = { user: "我的", project: "这个项目" } as const;
 
+const EVENT_LABELS = new Map<string, () => string>([
+  ["PreToolUse", () => t("工具执行前")],
+  ["PostToolUse", () => t("工具执行后")],
+  ["PostToolUseFailure", () => t("工具执行失败后")],
+  ["PermissionRequest", () => t("请求权限时")],
+  ["UserPromptSubmit", () => t("提交消息时")],
+  ["Stop", () => t("本轮结束时")],
+  ["StopFailure", () => t("本轮失败时")],
+  ["PostLLMCall", () => t("模型响应完成后")],
+  ["SessionStart", () => t("会话开始时")],
+  ["SessionEnd", () => t("会话结束时")],
+  ["SubagentStart", () => t("子代理开始时")],
+  ["SubagentStop", () => t("子代理结束时")],
+  ["Notification", () => t("需要你关注时")],
+  ["PreCompact", () => t("压缩上下文前")],
+]);
+
+function eventLabel(event: string): string {
+  const label = EVENT_LABELS.get(event);
+  return label ? `${label()} (${event})` : event;
+}
+
 interface Props {
   port: AgentPort;
   onChanged: () => void;
+}
+
+interface Trial {
+  rule: HookEntry;
+  result?: HookDryRun;
+  error?: string;
 }
 
 export function Hooks({ port, onChanged }: Props) {
@@ -56,7 +84,8 @@ export function Hooks({ port, onChanged }: Props) {
   useEscape(expert, () => setExpert(false));
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const [tried, setTried] = useState<Record<string, HookDryRun>>({});
+  const [tried, setTried] = useState<Record<string, Trial>>({});
+  const mine = useMemo(() => cat?.hooks.filter((h) => h.scope === (scope === "user" ? "global" : "project")) ?? [], [cat, scope]);
 
   const reload = () => {
     port
@@ -71,7 +100,6 @@ export function Hooks({ port, onChanged }: Props) {
 
   if (!cat) return <div className="empty">{t("无法读取 hooks 配置。")}</div>;
 
-  const mine = cat.hooks.filter((h) => h.scope === (scope === "user" ? "global" : "project"));
   const plugin = cat.hooks.filter((h) => h.scope === "plugin");
   const broken = cat.sources.filter((s) => s.status === "malformed" || s.status === "unreadable");
 
@@ -99,13 +127,16 @@ export function Hooks({ port, onChanged }: Props) {
   };
 
   const tryOne = async (h: HookEntry, key: string) => {
+    const trial: Trial = { rule: h };
+    setTried((t) => ({ ...t, [key]: trial }));
     setBusy(key);
     setError("");
     try {
-      const res = await port.dryRunHook(h);
-      setTried((t) => ({ ...t, [key]: res }));
+      const result = await port.dryRunHook(h);
+      setTried((t) => t[key] === trial ? { ...t, [key]: { ...trial, result } } : t);
     } catch (e) {
-      setError(reason(e));
+      const error = reason(e);
+      setTried((t) => t[key] === trial ? { ...t, [key]: { ...trial, error } } : t);
     } finally {
       setBusy("");
     }
@@ -188,7 +219,7 @@ function Expert({
   rules: HookEntry[];
   plugin: HookEntry[];
   busy: string;
-  tried: Record<string, HookDryRun>;
+  tried: Record<string, Trial>;
   onSave: (next: HookEntry[]) => void;
   onTry: (h: HookEntry, key: string) => void;
 }) {
@@ -204,14 +235,14 @@ function Expert({
       {draft.map((h, i) => {
         const meta = info(h.event);
         const key = `${scope}-${i}`;
-        const res = tried[key];
+        const trial = tried[key]?.rule === h ? tried[key] : undefined;
         return (
           <div className="rule" key={i} data-blocking={meta?.blocking ? "" : undefined}>
             <div className="line">
               <select value={h.event} onChange={(e) => patch(i, { event: e.target.value })}>
                 {cat.events.map((e) => (
                   <option key={e.name} value={e.name}>
-                    {e.name}
+                    {eventLabel(e.name)}
                   </option>
                 ))}
               </select>
@@ -247,7 +278,8 @@ function Expert({
                   button that checks syntax and one that might delete a file. */}
               <span className="note">{t("将实际执行该命令")}</span>
             </div>
-            {res && <DryRun res={res} blocking={!!meta?.blocking} />}
+            {trial?.result && <DryRun res={trial.result} blocking={!!meta?.blocking} />}
+            {trial?.error && <div className="why">{trial.error}</div>}
           </div>
         );
       })}
@@ -269,7 +301,7 @@ function Expert({
           <span className="lb">{t("插件带来的 {n} 条", { n: plugin.length })}</span>
           {plugin.map((h, i) => (
             <div className="hookrow" key={i}>
-              <span className="ev">{h.event}</span>
+              <span className="ev" title={eventLabel(h.event)}>{eventLabel(h.event)}</span>
               <span className="cm">{h.command}</span>
               <span className="sc">{t("只读")}</span>
             </div>

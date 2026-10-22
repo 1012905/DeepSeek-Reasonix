@@ -13,6 +13,7 @@ import (
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/tool"
 	"reasonix/internal/ext/skill"
+	"reasonix/internal/platform/gitcmd"
 	"reasonix/internal/runtime/agent"
 	"reasonix/internal/safety/sandbox"
 	"reasonix/internal/tools/builtin"
@@ -71,9 +72,15 @@ func reviewCommand(args []string) int {
 		return 1
 	}
 
-	// 4. Get the built-in review skill.
+	// 4. The checkout under review is untrusted: what runs — the review skill,
+	// the tools and their binaries — comes from the user's scope only.
 	root, _ := os.Getwd()
-	skillStore := skill.New(skill.Options{ProjectRoot: root, Stderr: os.Stderr})
+	userCfg, err := cfg.Roots().LoadUserConfigReadOnly()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error: failed to load user config:", err)
+		return 1
+	}
+	skillStore := skill.New(skill.Options{Stderr: os.Stderr})
 	reviewSk, ok := skillStore.Read("review")
 	if !ok {
 		fmt.Fprintln(os.Stderr, "error: built-in review skill not found")
@@ -85,23 +92,25 @@ func reviewCommand(args []string) int {
 	}
 
 	// 5. Build a review-scoped sub-agent registry.
-	reg := buildReviewSubagentRegistry(reviewSk, cfg, root)
+	reg, checkTargetAccess := buildReviewSubagentRegistry(reviewSk, userCfg, root)
 
 	// 6. Prepare the review prompt.
 	task := buildReviewTask(diff, *instructions)
 
 	// 7. Run the review subagent.
+	// The reviewed checkout is untrusted input: its own hooks never run here.
+	hooks := boot.NewUserHookRunner(cfg, root, os.Stderr)
+	hooks.SetSessionID(sessionstore.BranchID(sessionstore.NewSessionPath("", "review")))
 	ctx := context.Background()
-	// Deliberately minimal Options: this one-shot CLI path has no gate, no
-	// compaction, and no session, unlike the in-session sub-agent paths built
-	// through TaskTool.subagentOptions / boot's subagentSkillOptions. If a new
-	// Options field becomes load-bearing for sub-agents, decide explicitly
-	// whether this path needs it too.
+	// This one-shot path has no gate or compaction, but admission must use
+	// the same user-only path policy as its tools.
 	result, err := agent.RunReadOnlySubAgentWithSession(ctx, prov, reg, sessionstore.NewSession(reviewSk.Body), task, agent.Options{
-		MaxSteps:      12,
-		Temperature:   cfg.Agent.Temperature,
-		Pricing:       entry.Price,
-		ContextWindow: entry.ContextWindow,
+		MaxSteps:          12,
+		Hooks:             hooks,
+		CheckTargetAccess: checkTargetAccess,
+		Temperature:       cfg.Agent.Temperature,
+		Pricing:           entry.Price,
+		ContextWindow:     entry.ContextWindow,
 	}, event.Discard)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error: review failed:", err)
@@ -112,7 +121,10 @@ func reviewCommand(args []string) int {
 	return 0
 }
 
-func buildReviewSubagentRegistry(reviewSk skill.Skill, cfg *config.Config, root string) *tool.Registry {
+// buildReviewSubagentRegistry takes the user-only config: the search binary and
+// the sandbox are settings a reviewed checkout must not choose. Bind tool
+// confinement and admission together so both enforce the same policy.
+func buildReviewSubagentRegistry(reviewSk skill.Skill, cfg *config.Config, root string) (*tool.Registry, tool.TargetAccessCheck) {
 	// The shared helper strips subagent-unavailable background capabilities while
 	// preserving foreground bash. This direct CLI path does not go through boot,
 	// so it first builds the small parent set from the review skill allow-list.
@@ -131,13 +143,18 @@ func buildReviewSubagentRegistry(reviewSk skill.Skill, cfg *config.Config, root 
 	writeRoots := cfg.WriteRootsForRoot(root)
 	forbidReadRoots := boot.RuntimeForbidReadRoots(cfg, root)
 	guard := builtin.NewSessionDataGuard(config.MemoryUserDir(), cfg.AllowWriteRoots())
-	bashSpec := sandbox.Spec{
+	checkTargetAccess := (builtin.Workspace{
+		WriteRoots: writeRoots, ForbidReadRoots: forbidReadRoots, SessionGuard: guard,
+	}).TargetAccessCheck()
+	bashSpec := sandbox.GrantSpec(sandbox.Spec{
 		Mode:            cfg.BashMode(),
 		WriteRoots:      writeRoots,
+		Pins:            sandbox.PinWriteRoots(writeRoots),
 		ForbidReadRoots: forbidReadRoots,
 		Network:         cfg.Sandbox.Network,
 		HostAuthorities: sandbox.ParseAuthorities(cfg.Sandbox.HostAuthorities),
-	}
+		AllowDevices:    cfg.Sandbox.AllowDevices,
+	}, cfg.Roots().SandboxDir())
 	searchSpec := builtin.ResolveSearch(cfg.Tools.Search.Engine, cfg.Tools.Search.RgPath, os.Stderr)
 	confined := append(builtin.ConfineReaders(forbidReadRoots),
 		builtin.ConfineBash(bashSpec, guard),
@@ -152,9 +169,9 @@ func buildReviewSubagentRegistry(reviewSk skill.Skill, cfg *config.Config, root 
 		// like the in-session runner does (writer tools stripped, bash under the
 		// permission-classified read-only policy) so `reasonix review` is not a
 		// writable backdoor.
-		return agent.ReadOnlySubagentToolRegistry(parentReg, reviewSk.AllowedTools)
+		return agent.ReadOnlySubagentToolRegistry(parentReg, reviewSk.AllowedTools), checkTargetAccess
 	}
-	return agent.SubagentToolRegistry(parentReg, reviewSk.AllowedTools)
+	return agent.SubagentToolRegistry(parentReg, reviewSk.AllowedTools), checkTargetAccess
 }
 
 // getReviewDiff runs the appropriate git diff command and returns its output.
@@ -164,20 +181,30 @@ func buildReviewSubagentRegistry(reviewSk skill.Skill, cfg *config.Config, root 
 func getReviewDiff(base, commit string) (string, error) {
 	cwd, _ := os.Getwd()
 	ctx := context.Background()
+	// Resolved before the review agent runs, and only once.
+	repo, err := gitcmd.Open(ctx, cwd)
+	if err != nil {
+		return "", err
+	}
 	switch {
 	case commit != "":
-		return runGit(ctx, cwd, "diff", commit+"^.."+commit)
+		out, err := runGit(ctx, repo, "diff", commit+"^.."+commit)
+		if err != nil && repo.ObjectsMissing(ctx, commit, commit+"^") {
+			// A partial clone's unfetched objects; host git does not fetch them.
+			return "", fmt.Errorf("commit %s: %w", commit, gitcmd.ErrObjectNotLocal)
+		}
+		return out, err
 	case base != "":
-		return runGit(ctx, cwd, "diff", base+"...HEAD")
+		return runGit(ctx, repo, "diff", base+"...HEAD")
 	default:
 		// Working tree changes: staged + unstaged.
-		out, err := runGit(ctx, cwd, "diff", "HEAD")
+		out, err := runGit(ctx, repo, "diff", "HEAD")
 		if err != nil {
 			return "", err
 		}
 		if out == "" {
 			// No working-tree changes; check for staged-only.
-			out, err = runGit(ctx, cwd, "diff", "--cached")
+			out, err = runGit(ctx, repo, "diff", "--cached")
 		}
 		return out, err
 	}

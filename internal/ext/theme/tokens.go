@@ -19,13 +19,14 @@ const (
 	TokenColour TokenKind = "colour"
 	TokenLength TokenKind = "length"
 	TokenFont   TokenKind = "font"
+	TokenShadow TokenKind = "shadow"
 )
 
 // Tokens is the pack-facing vocabulary; a frontend maps it onto its own CSS
 // variables. Absent on purpose: ok/warn/err/net/deleg carry meaning rather than
 // taste, a pill radius is a shape, and a stretched transition would make the app
-// feel broken. Floating, code and sunken grounds and syntax colours are taste,
-// so a pack sets them instead of leaving them on the default palette.
+// feel broken. link, brand, halo and labelAgent are decoration — a hyperlink, the
+// product accent, an interaction halo, an agent's name — so they are taste.
 var Tokens = map[string]TokenKind{
 	"bg":          TokenColour,
 	"bgSoft":      TokenColour,
@@ -36,8 +37,14 @@ var Tokens = map[string]TokenKind{
 	"fg":          TokenColour,
 	"fgDim":       TokenColour,
 	"fgFaint":     TokenColour,
+	"fgStrong":    TokenColour,
 	"accent":      TokenColour,
 	"accentFg":    TokenColour,
+	"accentInk":   TokenColour,
+	"link":        TokenColour,
+	"brand":       TokenColour,
+	"halo":        TokenColour,
+	"labelAgent":  TokenColour,
 	"float":       TokenColour,
 	"floatHi":     TokenColour,
 	"codeBg":      TokenColour,
@@ -46,6 +53,7 @@ var Tokens = map[string]TokenKind{
 	"synString":   TokenColour,
 	"synNumber":   TokenColour,
 	"synFunction": TokenColour,
+	"shadowFloat": TokenShadow,
 	"radiusXs":    TokenLength,
 	"radiusSm":    TokenLength,
 	"radiusMd":    TokenLength,
@@ -68,6 +76,8 @@ func validToken(name, value string) bool {
 		return isLength(value)
 	case TokenFont:
 		return isFontStack(value)
+	case TokenShadow:
+		return isShadow(value)
 	default:
 		return false
 	}
@@ -103,6 +113,80 @@ func isLength(v string) bool {
 	}
 	n, err := strconv.ParseFloat(digits, 64)
 	return err == nil && n*scale <= maxRadiusPx
+}
+
+// maxShadowLayers and maxShadowPx bound a shadow the way maxRadiusPx bounds a
+// corner: a sanity limit against an accidental wall of paint, not a taste one.
+const (
+	maxShadowLayers = 4
+	maxShadowPx     = 100
+)
+
+// isShadow keeps a box-shadow list: "none", or up to four comma-separated
+// layers of an optional inset, two to four px offsets and a hex colour. The
+// blur and the spread are the third and fourth lengths; a negative blur is not
+// CSS and a spread may be negative. No functions, no named colours.
+func isShadow(v string) bool {
+	v = strings.TrimSpace(v)
+	if v == "none" {
+		return true
+	}
+	if v == "" || len(v) > 240 {
+		return false
+	}
+	// Fields would split on any Unicode space and the stored value is the
+	// original string, which CSS does not read as a separator: ASCII only.
+	for _, r := range v {
+		if r < ' ' || r > '~' {
+			return false
+		}
+	}
+	layers := strings.Split(v, ",")
+	if len(layers) > maxShadowLayers {
+		return false
+	}
+	for _, layer := range layers {
+		if !isShadowLayer(strings.FieldsFunc(layer, func(r rune) bool { return r == ' ' })) {
+			return false
+		}
+	}
+	return true
+}
+
+func isShadowLayer(parts []string) bool {
+	if len(parts) > 0 && parts[0] == "inset" {
+		parts = parts[1:]
+	}
+	if len(parts) < 3 || len(parts) > 5 || !isColour(parts[len(parts)-1]) {
+		return false
+	}
+	lengths := parts[:len(parts)-1]
+	if len(lengths) < 2 || len(lengths) > 4 {
+		return false
+	}
+	for i, l := range lengths {
+		if !isSignedPx(l, i != 2) {
+			return false
+		}
+	}
+	return true
+}
+
+// isSignedPx is a plain px length, or the unitless zero, within maxShadowPx.
+func isSignedPx(v string, mayBeNegative bool) bool {
+	if v == "0" {
+		return true
+	}
+	digits, negative := strings.CutPrefix(v, "-")
+	if negative && !mayBeNegative {
+		return false
+	}
+	digits, ok := strings.CutSuffix(digits, "px")
+	if !ok || !plainDecimal(digits) {
+		return false
+	}
+	n, err := strconv.ParseFloat(digits, 64)
+	return err == nil && n <= maxShadowPx
 }
 
 // plainDecimal is digits with at most one dot — what CSS is written in, minus

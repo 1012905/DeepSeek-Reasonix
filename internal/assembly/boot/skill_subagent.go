@@ -14,6 +14,7 @@ import (
 	"reasonix/internal/platform/environment"
 	"reasonix/internal/runtime/agent"
 	"reasonix/internal/runtime/delegation"
+	"reasonix/internal/runtime/usecap"
 	"reasonix/internal/runtime/writeclaim"
 )
 
@@ -33,12 +34,13 @@ type skillSubagents struct {
 	scheduler  *writeclaim.SubagentScheduler
 	provider   provider.Provider
 	entry      *config.ProviderEntry
-	capRuntime *agent.MCPCapabilityRuntime
+	capRuntime *usecap.MCPCapabilityRuntime
 	maxDepth   int
 	maxSteps   int
 
 	resolveProvider func(modelRef, effort string) (provider.Provider, *provider.Pricing, int, error)
 	identity        func(modelRef, effort string) (string, string)
+	inheritedFor    func(modelRef string) string
 	runOptions      func(ctx context.Context, steps int, price *provider.Pricing, ctxWin, childDepth int) agent.Options
 }
 
@@ -88,11 +90,13 @@ func (r *skillSubagents) stepsFor(runOpts skill.SubagentRunOptions) int {
 }
 
 // resolveModel picks the child's provider: the parent's unless the skill or
-// config names one of its own.
-func (r *skillSubagents) resolveModel(sk skill.Skill) (provider.Provider, *provider.Pricing, int, string, string, error) {
+// config names one of its own, or the images the child is to look at need the
+// vision role.
+func (r *skillSubagents) resolveModel(ctx context.Context, sk skill.Skill) (provider.Provider, *provider.Pricing, int, string, string, error) {
 	prov, price, ctxWin := r.provider, r.entry.Price, r.entry.ContextWindow
 	modelRef := subagentModelRef(r.cfg, sk)
-	effortRef := subagentEffortRef(r.cfg, sk)
+	effortRef := subagentEffortRef(r.cfg, sk, r.inheritedFor)
+	modelRef, effortRef = agent.VisionRefFor(ctx, modelRef), agent.VisionEffortFor(ctx, modelRef, effortRef)
 	if modelRef == "" && effortRef == "" {
 		return prov, price, ctxWin, modelRef, effortRef, nil
 	}
@@ -117,7 +121,8 @@ func (r *skillSubagents) runReadOnly(sctx context.Context, sk skill.Skill, task 
 	}
 	defer releaseSlot()
 	sk = skill.WithCodeGraphTools(sk, skill.CodeGraphReadTools(r.registry))
-	prov, price, ctxWin, modelRef, effortRef, err := r.resolveModel(sk)
+	sctx = agent.BindTaskImages(sctx, task)
+	prov, price, ctxWin, modelRef, effortRef, err := r.resolveModel(sctx, sk)
 	if err != nil {
 		return "", fmt.Errorf("read-only subagent skill %q profile: %w", sk.Name, err)
 	}
@@ -152,7 +157,7 @@ func (r *skillSubagents) runReadOnly(sctx context.Context, sk skill.Skill, task 
 	// the child model's own vision capability. Text-only children retain the
 	// attachment metadata locally but never receive image parts on the wire.
 	childCtx := agent.WithUserImages(sctx, agent.SubagentImageCandidates(sctx))
-	return agent.RunReadOnlySubAgentWithSession(childCtx, prov, subReg, sessionstore.NewSession(sysPrompt), task,
+	return agent.RunReadOnlySubAgentWithSession(childCtx, prov, subReg, sessionstore.NewSession(sysPrompt), agent.SubagentImageNote(sctx)+task,
 		runOptions, delegation.NestedSink(sctx, event.Discard))
 }
 
@@ -187,7 +192,7 @@ func (r *skillSubagents) compile(sctx context.Context, sk skill.Skill, task stri
 			// resolve the profile again would silently drop them.
 			SystemPrompt: r.systemPrompt(sk), UseProfilePrompt: true,
 			Model:  subagentModelRef(r.cfg, sk),
-			Effort: subagentEffortRef(r.cfg, sk),
+			Effort: subagentEffortRef(r.cfg, sk, r.inheritedFor),
 			// A verdict the parent must act on carries an identity, never a
 			// sentence, so the typed report is required at every role setting.
 			// What that verdict may close is the separate grant beside it.
@@ -205,7 +210,7 @@ func (r *skillSubagents) compile(sctx context.Context, sk skill.Skill, task stri
 		// Writer skills without declared paths claim the whole workspace, so
 		// they serialize against fleet and task writers that declared disjoint
 		// ones rather than racing them.
-		whole, err := writeclaim.WholeWorkspaceWriteClaim(r.root)
+		whole, err := r.tasks.UndeclaredWriteClaim()
 		if err != nil {
 			return delegation.ProfileExecSpec{}, fmt.Errorf("subagent skill %q write claim: %w", sk.Name, err)
 		}

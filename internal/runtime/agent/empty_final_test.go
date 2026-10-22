@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"reasonix/internal/state/sessionstore"
 	"strings"
 	"testing"
@@ -186,5 +187,141 @@ func BenchmarkHasVisibleFinalAnswer(b *testing.B) {
 			}
 			_ = got
 		})
+	}
+}
+
+func reasoningOnlyStop(text string) []provider.Chunk {
+	return []provider.Chunk{
+		{Type: provider.ChunkReasoning, Text: text},
+		{Type: provider.ChunkUsage, Usage: &provider.Usage{FinishReason: "stop", TotalTokens: 10}},
+		{Type: provider.ChunkDone},
+	}
+}
+
+func readFileToolRound() []provider.Chunk {
+	return []provider.Chunk{
+		{Type: provider.ChunkReasoning, Text: "read the file"},
+		toolCallChunk("call-1", "read_file", `{}`),
+		{Type: provider.ChunkUsage, Usage: &provider.Usage{FinishReason: "tool_calls", TotalTokens: 10}},
+		{Type: provider.ChunkDone},
+	}
+}
+
+func countUserMessagesContaining(s *sessionstore.Session, needle string) int {
+	n := 0
+	for _, message := range s.Messages {
+		if message.Role == provider.RoleUser && strings.Contains(message.Content, needle) {
+			n++
+		}
+	}
+	return n
+}
+
+func TestRunRetriesReasoningOnlyStopAfterToolRoundOnce(t *testing.T) {
+	prov := &scriptedProvider{name: "p", turns: [][]provider.Chunk{
+		readFileToolRound(),
+		reasoningOnlyStop("I have the file contents; the answer is ready."),
+		{{Type: provider.ChunkText, Text: "The file says contents."}, {Type: provider.ChunkDone}},
+	}}
+	reg := tool.NewRegistry()
+	reg.Add(fakeReadFileTool{})
+	a := New(deepseekThinkingProvider{prov}, reg, sessionstore.NewSession(""), Options{}, event.Discard)
+
+	if err := a.Run(context.Background(), "what does the file say"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if prov.call != 3 {
+		t.Fatalf("provider calls = %d, want tool round + reasoning-only stop + one retry", prov.call)
+	}
+	if got := countUserMessagesContaining(a.sess.conversation, "visible answer"); got != 1 {
+		t.Fatalf("visible-answer retries = %d, want exactly 1", got)
+	}
+	if got := lastAssistantContent(a.sess.conversation); got != "The file says contents." {
+		t.Fatalf("last assistant content = %q, want the visible synthesis", got)
+	}
+}
+
+func TestRunAcceptsSecondReasoningOnlyStopAfterToolRound(t *testing.T) {
+	prov := &scriptedProvider{name: "p", turns: [][]provider.Chunk{
+		readFileToolRound(),
+		reasoningOnlyStop("done thinking"),
+		reasoningOnlyStop("still only thinking"),
+	}}
+	reg := tool.NewRegistry()
+	reg.Add(fakeReadFileTool{})
+	a := New(deepseekThinkingProvider{prov}, reg, sessionstore.NewSession(""), Options{}, event.Discard)
+
+	if err := a.Run(context.Background(), "what does the file say"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if prov.call != 3 {
+		t.Fatalf("provider calls = %d, want a single bounded retry", prov.call)
+	}
+	if got := countUserMessagesContaining(a.sess.conversation, "visible answer"); got != 1 {
+		t.Fatalf("visible-answer retries = %d, want exactly 1", got)
+	}
+}
+
+func lengthCutReasoning(text string) []provider.Chunk {
+	return []provider.Chunk{
+		{Type: provider.ChunkReasoning, Text: text},
+		{Type: provider.ChunkUsage, Usage: &provider.Usage{FinishReason: "length", TotalTokens: 10}},
+		{Type: provider.ChunkDone},
+	}
+}
+
+// A response whose reasoning ran into the output limit has no visible text
+// because it was cut off, not because the model chose to stay silent. Only the
+// host knows which, so the retry has to say it.
+func TestEmptyFinalRetryTellsTheModelItsResponseWasCutOff(t *testing.T) {
+	prov := &mockProvider{name: "p", streams: [][]provider.Chunk{
+		lengthCutReasoning("long thinking"),
+		{{Type: provider.ChunkText, Text: "visible reply"}, {Type: provider.ChunkDone}},
+	}}
+	a := New(prov, tool.NewRegistry(), sessionstore.NewSession(""), Options{}, event.Discard)
+
+	if err := a.Run(context.Background(), "answer me"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(prov.requests) != 2 {
+		t.Fatalf("provider requests = %d, want 2", len(prov.requests))
+	}
+	got := lastUser(prov.requests[1])
+	if !sessionstore.IsSyntheticUserText(got) || !strings.Contains(got, "output-token limit") || !strings.Contains(got, "visible answer") {
+		t.Fatalf("retry message = %q, want the host fact that the response hit the output limit, and the ask for a visible answer", got)
+	}
+}
+
+func TestEmptyFinalRetryWithoutATruncationKeepsTheGenericAsk(t *testing.T) {
+	prov := &mockProvider{name: "p", streams: [][]provider.Chunk{
+		{{Type: provider.ChunkReasoning, Text: "thinking"}, {Type: provider.ChunkUsage, Usage: &provider.Usage{FinishReason: "stop"}}, {Type: provider.ChunkDone}},
+		{{Type: provider.ChunkText, Text: "visible reply"}, {Type: provider.ChunkDone}},
+	}}
+	a := New(prov, tool.NewRegistry(), sessionstore.NewSession(""), Options{}, event.Discard)
+
+	if err := a.Run(context.Background(), "answer me"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := lastUser(prov.requests[1]); strings.Contains(got, "output-token limit") {
+		t.Fatalf("retry message = %q, claims a truncation the host never saw", got)
+	}
+}
+
+func TestRepeatedEmptyFinalCarriesTheFinishReason(t *testing.T) {
+	prov := &scriptedProvider{name: "p", turns: [][]provider.Chunk{
+		lengthCutReasoning("1"), lengthCutReasoning("2"), lengthCutReasoning("3"),
+	}}
+	a := New(prov, tool.NewRegistry(), sessionstore.NewSession(""), Options{}, event.Discard)
+
+	err := a.Run(context.Background(), "answer me")
+	var empty *EmptyFinalError
+	if !errors.As(err, &empty) {
+		t.Fatalf("error = %v, want *EmptyFinalError", err)
+	}
+	if empty.Blocks != 3 || empty.FinishReason != "length" {
+		t.Fatalf("EmptyFinalError = %+v, want 3 blocks ending on finish reason length", empty)
+	}
+	if !strings.Contains(err.Error(), "output-token limit") {
+		t.Fatalf("error text = %q, want the cause the host knows", err)
 	}
 }

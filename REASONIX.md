@@ -9,7 +9,7 @@ agent. It is the Reasonix analog of Claude Code's CLAUDE.md.
 - Go kernel under `internal/`; each package owns one concern. A package's long
   explanation belongs in its `doc.go`, not spread across implementation files.
 - One transport-agnostic `control.Controller` sits behind every frontend (chat
-  TUI, HTTP/SSE serve, Wails desktop). Add behavior to the controller, not a
+  TUI, HTTP/SSE serve, Electron desktop). Add behavior to the controller, not a
   frontend, so all three inherit it.
 - Layering (enforced): utility packages import nothing under `reasonix/` except
   one another — that layer is closed, so a leaf reaching a leaf drags no graph
@@ -36,6 +36,9 @@ agent. It is the Reasonix analog of Claude Code's CLAUDE.md.
   the move this blocks — group by lifetime into a named sub-state instead
   (`agent.perTurnState` is the pattern), which costs one field and removes the
   whole product.
+- The context window (projection, compaction, estimation) owns `windowState`;
+  the loop reaches it via `a.window()`, it reaches the loop via `windowHost`.
+  `window-state` fails any other read of `sess.win`.
 - Judgements read structure, never wording: shell ASTs (`shellparse`), types,
   contracts, tool schemas. Phrase tables and message sniffing have been retired
   in batches (task-policy prose, the planner's approval phrases, the executor
@@ -216,9 +219,11 @@ otherwise the block the model already has goes on reading as current.
 - `#<note>` in chat quick-adds an always-on instruction. The `remember` tool
   instead saves a fallible background fact (frontmatter file + `MEMORY.md`
   index). Fact `type` classifies content; independent `scope` controls whether it
-  is project-only (the default) or explicitly global. The index loads into the
-  stable prefix on the next session; global user/feedback bodies also load as
-  lower-priority compatibility guidance. The current turn receives a tail note.
+  is project-only (the default) or explicitly global.
+- The saved-fact index stays out of the stable prefix and is reached through the
+  `memory` tool; pinned bodies and global user/feedback bodies load into it, the
+  latter as lower-priority compatibility guidance. The current turn receives a
+  tail note.
 
 ## Notes
 
@@ -317,6 +322,31 @@ Use `go test ./path/to/target/` to detect cycles **before** pushing. A `[setup f
 - **Keep the PR diff minimal.** Only the files relevant to the PR's purpose — no stray changes from other branches.
 - **Amend, don't add commits, for review feedback** — keeps the commit history clean.
 
+## Change discipline
+
+**Assess before editing.** For every change, humans and agents list callers,
+consumers of the same state, sibling features, reload/replay/restart paths,
+error and edge states, TUI/CLI and desktop equivalents, and wire mirrors.
+
+A fix that breaks a neighbouring behaviour is a failed fix.
+
+**Test the neighbourhood.** UI changes add or extend interaction tests for
+adjacent functions of the same component or flow (composer: submit, clear,
+queue, withdraw, restore, steer, failure, replay after reload) and run the whole
+affected suite.
+
+Write tests first; they must fail without the change.
+
+**Fix at the owning layer.** Use the existing unified pattern: no special-case
+flags, duplicated paths, or workarounds at the symptom site.
+
+If the design is duplicated or wrong, make the smallest unifying change:
+one path instead of two, deleting what becomes dead. Use current language and
+framework idioms; do not add a new pattern where one exists.
+
+**PR evidence.** Every PR description carries: Cause, Blast radius,
+Neighbouring behaviours tested, and Why this layer.
+
 ## Reasonix host checks
 
 The paths below decide what the agent is allowed to do — a wrong change here
@@ -339,8 +369,14 @@ out of how a path is spelled, which cannot tell `internal/auth` from
 - sensitive: internal/ext/pluginpkg/**
 - sensitive: internal/base/netclient/**
 - sensitive: internal/safety/redirectguard/**
+- sensitive: internal/safety/endpointclient/**
+- sensitive: internal/safety/egress/**
 - sensitive: internal/platform/browser/**
 - sensitive: internal/platform/computer/**
+- sensitive: internal/platform/gitpush/**
+- sensitive: internal/session/control/git_push.go
+- sensitive: internal/frontend/serve/git_push.go
+- sensitive: internal/frontend/serve/host_routes.go
 
 One declaration, two effects: the same list is also the coverage gate's subject.
 `make coverage-gate` holds each path to the coverage it already has, because
@@ -371,14 +407,19 @@ observation, never by a check that ran afterwards.
 What follows bounds Observable today. It is not a restatement of the invariant:
 moving a number here must not move the promise.
 
-- `scanWorkspace` walks the workspace recursively, skips VCS store dirs, and is
-  `complete` only below 50k files. Over that, or past a walk error, it
+- `scanWorkspace` walks the workspace and every granted extra root recursively,
+  skips VCS store dirs, and is `complete` only below 50k files in total. Over that, or past a walk error, it
   establishes nothing and the mutation stays unproven.
 - Symlinks are recorded by `Lstat`, so a write through one lands outside what
   the walk compares. Confining the resolved target is the sandbox's job.
 - `internal/safety/sandbox` confines writes to the workspace, configured extras, temp
-  and toolchain caches — on macOS and Linux. Windows has no OS-level bash
-  sandbox, so there nothing the host enforces bounds `Writable`.
+  and toolchain caches on macOS and Linux.
+- On Windows a user-enabled write-restricted token bounds the *creation* of files
+  (create, append, overwrite, `mkdir`, HKCU writes, global git config, writes through links).
+- There, deleting or renaming away an existing file is not bounded, and with the
+  setting off nothing the host enforces bounds `Writable`.
+- The caches a command may write can be poisoned for the user's later unsandboxed
+  builds, on every platform.
 - The governed host authorities are a *named* set — ssh-agent, docker, podman.
   DBus, Wayland, X11, gpg-agent, keyrings and arbitrary sockets stay reachable,
   so the claim is "these endpoints are governed", never "host IPC is isolated".
@@ -424,9 +465,13 @@ stop a connect. Possession is not authority: the key can be unreadable while an
 agent still signs with it.
 
 A protection claim exists only where a backend has a demonstrated enforcement
-primitive for that dimension. Unsupported dimensions stay explicitly unsupported
-— Windows currently enforces none of the three — because a claim that outruns
-its enforcement is worse than an absent one: it is believed.
+primitive for that dimension. Unsupported dimensions stay explicitly unsupported,
+because a claim that outruns its enforcement is worse than an absent one: it is
+believed.
+
+Windows enforces Integrity on file creation only, when the user turns it on.
+Deletion and rename, Confidentiality and Authority (the named pipes of ssh-agent
+and docker, COM and RPC services) are not enforced there.
 
 **Known unmeasured surface — macOS host-mediated delegation:** Apple Events and
 Mach-service lookup are not denied by the current allow-default profile. Prior

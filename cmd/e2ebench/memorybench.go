@@ -59,12 +59,11 @@ func seedTaskMemory(taskDir, work, stateHome string) error {
 // cleanup drops the root; note reports a failure without aborting the run.
 func taskExperimentEnv(cfg suiteConfig, t task, work string) (env []string, cleanup func(), note string) {
 	cleanup = func() {}
-	if cfg.policy == "memory-off" {
+	memoryOff := cfg.policy == "memory-off"
+	if memoryOff {
 		env = append(env, "REASONIX_EXPERIMENT_NO_MEMORY=1")
 	}
-	// Named without the task id: a run that goes looking for its own name in
-	// the temp root must not find the directory holding its session either.
-	stateHome, err := os.MkdirTemp("", "e2ebench-state-")
+	stateHome, err := makeStateHome(work)
 	if err != nil {
 		return env, cleanup, "state root: " + err.Error()
 	}
@@ -79,10 +78,67 @@ func taskExperimentEnv(cfg suiteConfig, t task, work string) (env []string, clea
 	}
 	cleanup = func() { _ = os.RemoveAll(stateHome); _ = os.RemoveAll(tmpDir) }
 	env = append(env, "TMPDIR="+tmpDir)
+	// The off arm's treatment is that no memory exists. Hiding only the tool
+	// leaves the seeded files on disk for a shell command to read.
+	if memoryOff {
+		return env, cleanup, ""
+	}
 	if err := seedTaskMemory(t.dir, work, stateHome); err != nil {
 		return env, cleanup, "memory seed: " + err.Error()
 	}
 	return env, cleanup, ""
+}
+
+// benchStateBase is the directory every run's state root is made in. It is
+// outside the temp root holding the workdirs: a sibling of the workdir is one
+// `cd ..` and a find away from a run hunting for its seeded answers.
+var benchStateBase = func() (string, error) {
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cache, "reasonix-bench-state"), nil
+}
+
+// makeStateHome creates one run's state root. Its name is random and carries
+// neither the task id nor any part of the workdir's name, so a run searching
+// the disk for its own name does not find the directory holding its session.
+func makeStateHome(work string) (string, error) {
+	base, err := benchStateBase()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(base, 0o700); err != nil {
+		return "", err
+	}
+	home, err := os.MkdirTemp(base, "")
+	if err != nil {
+		return "", err
+	}
+	if within(resolvedPath(filepath.Dir(work)), resolvedPath(home)) {
+		_ = os.RemoveAll(home)
+		return "", fmt.Errorf("%s is inside the workdir's parent %s", home, filepath.Dir(work))
+	}
+	return home, nil
+}
+
+func resolvedPath(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		p = abs
+	}
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		p = resolved
+	}
+	return p
+}
+
+// within reports whether path is dir or lies below it.
+func within(dir, path string) bool {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 // applyMemoryStats folds one trajectory's recall behavior into the result row.
@@ -116,10 +172,11 @@ func scanMemoryRecall(path string, markers []string, markersInPrefix bool) memor
 	defer f.Close()
 	type record struct {
 		MemoryRecall *struct {
-			Hits       []struct{ ID string } `json:"hits"`
-			UsedChars  int                   `json:"used_chars"`
-			Suppressed string                `json:"suppressed"`
-			ShadowHits []struct{ ID string } `json:"shadow_hits"`
+			Hits            []struct{ ID string } `json:"hits"`
+			UsedChars       int                   `json:"used_chars"`
+			Suppressed      string                `json:"suppressed"`
+			SuppressionCode string                `json:"suppression_code"`
+			ShadowHits      []struct{ ID string } `json:"shadow_hits"`
 		} `json:"memory_recall"`
 		Event *struct {
 			Kind string `json:"kind"`
@@ -149,7 +206,10 @@ func scanMemoryRecall(path string, markers []string, markersInPrefix bool) memor
 				if len(mr.ShadowHits) > 0 && mr.ShadowHits[0].ID == mr.Hits[0].ID {
 					stats.ShadowAgree++
 				}
-			} else if mr.Suppressed != "" {
+			} else if mr.SuppressionCode != "" || mr.Suppressed != "" {
+				// The typed code is the identity. A record written before the
+				// code existed carries only the sentence, whose presence still
+				// means recall stayed silent.
 				stats.Suppressed++
 			}
 		}

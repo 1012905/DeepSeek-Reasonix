@@ -12,6 +12,19 @@ import (
 // moves, not whether one write happens.
 const ExtendWritePaths = "extend_write_paths"
 
+// NetworkEgress asks whether bash may reach a host outside [sandbox]
+// allowed_domains; the subject is the host.
+const NetworkEgress = "network_egress"
+
+// PaidSearch asks whether web_search may use a backend the vendor charges for;
+// the subject is the backend. Only the user can agree to be charged.
+const PaidSearch = "paid_search"
+
+// MCPSignIn asks whether the browser may be sent to an authorization host to sign
+// in to an MCP server; the subject names the server and the host. The server
+// chose that host, so only the user answers.
+const MCPSignIn = "mcp_signin"
+
 // subjectSensitiveTools maps each tool whose authorization reads its subject to
 // the question it asks of that subject. Membership is one declaration carrying
 // three consequences, so none can arrive without the others: the decision
@@ -19,6 +32,9 @@ const ExtendWritePaths = "extend_write_paths"
 // rather than answering for them, and a grant must name the subject it covers.
 var subjectSensitiveTools = map[string]func(subject string) bool{
 	ExtendWritePaths:  func(string) bool { return true },
+	NetworkEgress:     func(string) bool { return true },
+	PaidSearch:        func(string) bool { return true },
+	MCPSignIn:         func(string) bool { return true },
 	installSourceTool: func(s string) bool { return strings.HasPrefix(s, selfExtendHumanRisk) },
 }
 

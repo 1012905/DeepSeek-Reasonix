@@ -13,47 +13,33 @@ import (
 	fileencoding "reasonix/internal/base/fileutil/encoding"
 )
 
-// SettingsPath returns the file a scope's hooks are written to. A project scope
-// with no root has no path — the caller must refuse rather than fall back to the
-// global file, which would silently widen a project rule to every project.
-func SettingsPath(scope Scope, projectRoot string) string {
+// SettingsPathFor resolves the editor against the same home as hook loading.
+func SettingsPathFor(scope Scope, opts LoadOptions) string {
 	if scope == ScopeProject {
-		if strings.TrimSpace(projectRoot) == "" {
+		if strings.TrimSpace(opts.ProjectRoot) == "" {
 			return ""
 		}
-		return ProjectSettingsPath(projectRoot)
+		return ProjectSettingsPath(opts.ProjectRoot)
 	}
-	return GlobalSettingsPath("")
+	return filepath.Join(reasonixHomeForOptions(opts), SettingsFilename)
 }
 
 // Save replaces the hooks block of one scope's settings.json. Every other key in
 // that file is preserved: settings.json is shared with unrelated configuration,
 // and a hooks editor has no business dropping it.
 func Save(scope Scope, projectRoot string, settings Settings) error {
-	path := SettingsPath(scope, projectRoot)
+	return SaveFor(scope, LoadOptions{ProjectRoot: projectRoot}, settings)
+}
+
+// SaveFor writes the scope the runtime loaded, preserving unrelated settings.
+func SaveFor(scope Scope, opts LoadOptions, settings Settings) error {
+	path := SettingsPathFor(scope, opts)
 	if path == "" {
 		return fmt.Errorf("no project workspace to save project hooks into")
 	}
-	hooks := map[Event][]HookConfig{}
-	for event, list := range settings.Hooks {
-		if !validEvent(event) {
-			return fmt.Errorf("unknown hook event %q", event)
-		}
-		for _, cfg := range list {
-			cmd := strings.TrimSpace(cfg.Command)
-			if cmd == "" {
-				// An empty command is a half-finished row, not a hook. Writing it
-				// would produce a file Load silently skips and Inspect flags.
-				continue
-			}
-			hooks[event] = append(hooks[event], HookConfig{
-				Match:       strings.TrimSpace(cfg.Match),
-				Command:     NormalizeCommand(cmd),
-				Description: strings.TrimSpace(cfg.Description),
-				Timeout:     cfg.Timeout,
-				Cwd:         strings.TrimSpace(cfg.Cwd),
-			})
-		}
+	hooks, err := normalizedHooks(settings)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
 	}
 	raw := map[string]json.RawMessage{}
 	if body, err := fileencoding.ReadFileUTF8(path); err == nil {
@@ -75,6 +61,47 @@ func Save(scope Scope, projectRoot string, settings Settings) error {
 		return err
 	}
 	return fileutil.AtomicWriteFile(path, body, 0o644)
+}
+
+// normalizedHooks is the hooks block Save writes for settings.
+func normalizedHooks(settings Settings) (map[Event][]HookConfig, error) {
+	hooks := map[Event][]HookConfig{}
+	for event, list := range settings.Hooks {
+		if !validEvent(event) {
+			return nil, fmt.Errorf("unknown hook event %q", event)
+		}
+		for i, cfg := range list {
+			cmd := strings.TrimSpace(cfg.Command)
+			if cmd == "" {
+				// An empty command is a half-finished row, not a hook. Writing it
+				// would produce a file Load silently skips and Inspect flags.
+				continue
+			}
+			if UsesToolMatcher(event) {
+				if _, err := matchTool(ResolvedHook{HookConfig: cfg, Event: event}, ""); err != nil {
+					return nil, fmt.Errorf("hooks.%s[%d] match %q: %w", event, i, strings.TrimSpace(cfg.Match), err)
+				}
+			}
+			cfg = NormalizeConfig(cfg)
+			hooks[event] = append(hooks[event], HookConfig{
+				Match:       cfg.Match,
+				Command:     cfg.Command,
+				Description: cfg.Description,
+				Timeout:     cfg.Timeout,
+				Cwd:         cfg.Cwd,
+			})
+		}
+	}
+	return hooks, nil
+}
+
+// NormalizeConfig applies settings-file normalization without dropping metadata.
+func NormalizeConfig(cfg HookConfig) HookConfig {
+	cfg.Match = strings.TrimSpace(cfg.Match)
+	cfg.Command = NormalizeCommand(strings.TrimSpace(cfg.Command))
+	cfg.Description = strings.TrimSpace(cfg.Description)
+	cfg.Cwd = strings.TrimSpace(cfg.Cwd)
+	return cfg
 }
 
 // DryRunResult is one trial invocation, in the terms the user asked the question
@@ -145,7 +172,13 @@ func samplePayload(event Event, cwd string) Payload {
 		}
 	case UserPromptSubmit:
 		p.Prompt = "把这个仓库跑一遍测试"
-	case Stop, StopFailure, SubagentStop:
+	case SubagentStart:
+		p.CallID = "call_1"
+		p.ToolArgs = json.RawMessage(`{"prompt":"把这个仓库跑一遍测试"}`)
+	case SubagentStop:
+		p.CallID = "call_1"
+		p.LastAssistant = "测试全绿。"
+	case Stop, StopFailure:
 		p.LastAssistant = "测试全绿。"
 		p.Turn = 1
 	case PostLLMCall:

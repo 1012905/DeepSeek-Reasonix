@@ -770,7 +770,7 @@ func TestCoordinatorNudgesExecutorThatAnswersWithoutActing(t *testing.T) {
 
 	execReg := tool.NewRegistry()
 	execReg.Add(coordinatorTestTool{name: "write_file", readOnly: false, output: "wrote file", writesPaths: true})
-	executor := agent.New(exec, execReg, sessionstore.NewSession("exec-sys"), agent.Options{}, event.Discard)
+	executor := agent.New(exec, execReg, sessionstore.NewSession("exec-sys"), agent.Options{CheckTargetAccess: func(context.Context, tool.Tool, json.RawMessage) error { return nil }}, event.Discard)
 	coord := NewCoordinator(planner, sessionstore.NewSession("planner-sys"), nil, agent.PlannerToolRegistry(tool.NewRegistry()), agent.Options{}, executor, 0, event.Discard, nil)
 
 	if err := coord.Run(context.Background(), "install the skill"); err != nil {
@@ -846,7 +846,7 @@ func TestCoordinatorNudgesWorkTaskEvenIfPlannerMentionsUserGuidance(t *testing.T
 
 	execReg := tool.NewRegistry()
 	execReg.Add(coordinatorTestTool{name: "write_file", readOnly: false, output: "wrote file", writesPaths: true})
-	executor := agent.New(exec, execReg, sessionstore.NewSession("exec-sys"), agent.Options{}, event.Discard)
+	executor := agent.New(exec, execReg, sessionstore.NewSession("exec-sys"), agent.Options{CheckTargetAccess: func(context.Context, tool.Tool, json.RawMessage) error { return nil }}, event.Discard)
 	coord := NewCoordinator(planner, sessionstore.NewSession("planner-sys"), nil, agent.PlannerToolRegistry(tool.NewRegistry()), agent.Options{}, executor, 0, event.Discard, nil)
 
 	if err := coord.Run(context.Background(), "fix the bug"); err != nil {
@@ -879,7 +879,7 @@ func TestCoordinatorNudgesMixedGuidanceAndWorkTask(t *testing.T) {
 
 	execReg := tool.NewRegistry()
 	execReg.Add(coordinatorTestTool{name: "write_file", readOnly: false, output: "wrote file", writesPaths: true})
-	executor := agent.New(exec, execReg, sessionstore.NewSession("exec-sys"), agent.Options{}, event.Discard)
+	executor := agent.New(exec, execReg, sessionstore.NewSession("exec-sys"), agent.Options{CheckTargetAccess: func(context.Context, tool.Tool, json.RawMessage) error { return nil }}, event.Discard)
 	coord := NewCoordinator(planner, sessionstore.NewSession("planner-sys"), nil, agent.PlannerToolRegistry(tool.NewRegistry()), agent.Options{}, executor, 0, event.Discard, nil)
 
 	if err := coord.Run(context.Background(), "summarize the current behavior and update the README"); err != nil {
@@ -1755,5 +1755,27 @@ func TestCoordinatorSkipsApprovalGateForNegatedApprovalWording(t *testing.T) {
 	}
 	if len(exec.requests) == 0 {
 		t.Fatal("executor should run directly for negated approval wording")
+	}
+}
+
+// The nudge is the executor's one chance inside the turn; an executor that
+// still changes nothing is held by the plan deliverable rather than let through.
+func TestCoordinatorHoldsAnExecutorThatStillChangesNothingAfterTheNudge(t *testing.T) {
+	planner := &mockProvider{name: "planner", streams: submitPlanCall(`{"objective":"install the skill","steps":[{"title":"write the requested skill file","candidate_files":["kan-tu.md"]}]}`)}
+	exec := &mockProvider{name: "executor", streams: [][]provider.Chunk{
+		{{Type: provider.ChunkText, Text: "Looks straightforward."}, {Type: provider.ChunkDone}},
+		{{Type: provider.ChunkText, Text: "Done."}, {Type: provider.ChunkDone}},
+	}}
+	execReg := tool.NewRegistry()
+	execReg.Add(coordinatorTestTool{name: "write_file", readOnly: false, output: "wrote file", writesPaths: true})
+	executor := agent.New(exec, execReg, sessionstore.NewSession("exec-sys"), agent.Options{}, event.Discard)
+	coord := NewCoordinator(planner, sessionstore.NewSession("planner-sys"), nil, agent.PlannerToolRegistry(tool.NewRegistry()), agent.Options{}, executor, 0, event.Discard, nil)
+
+	err := coord.Run(context.Background(), "install the skill")
+	if err == nil || !strings.Contains(err.Error(), "names files to change") {
+		t.Fatalf("Run = %v, want the plan deliverable to hold the answer", err)
+	}
+	if got := len(exec.requests); got != 2 {
+		t.Fatalf("executor requests = %d, want the answer and the one nudge before the hold", got)
 	}
 }

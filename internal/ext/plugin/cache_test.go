@@ -60,7 +60,7 @@ func TestCacheRoundTrip(t *testing.T) {
 	if err := SaveCachedSchema(spec.Name, cs); err != nil {
 		t.Fatalf("SaveCachedSchema: %v", err)
 	}
-	body, err := os.ReadFile(cachePath(spec.Name))
+	body, err := os.ReadFile(specCachePath(spec.Name, key))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func TestCacheLoadQuarantinesMalformedToolSchema(t *testing.T) {
 	if len(got.Tools) != 1 || got.Tools[0].Name != "do_thing" {
 		t.Fatalf("cached tools = %+v, want only valid do_thing", got.Tools)
 	}
-	if schema := string(got.Tools[0].Schema); schema != `{"properties":{},"type":"object"}` {
+	if schema := string(got.Tools[0].Schema); schema != `{"properties":{},"required":[],"type":"object"}` {
 		t.Fatalf("valid cached schema = %s", schema)
 	}
 }

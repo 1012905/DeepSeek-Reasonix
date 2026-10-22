@@ -9,11 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os/exec"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
+	fileenc "reasonix/internal/base/fileutil/encoding"
 	"reasonix/internal/base/proc"
 	"reasonix/internal/contract/tool"
 )
@@ -66,10 +69,7 @@ type Request struct {
 // Result is the structured outcome of a foreground run.
 type Result struct {
 	Combined string
-	// OutputTail is the bounded tail of combined output, populated only when the
-	// run did not complete successfully. Stdout and stderr share one pipe so the
-	// model-visible ordering is preserved, which makes a stderr-only tail
-	// impossible; in practice the last bytes before a failure are the diagnosis.
+	// OutputTail is the bounded tail of failed combined output.
 	OutputTail   string
 	ExitCode     *int
 	Started      bool
@@ -114,13 +114,11 @@ func RunForeground(ctx context.Context, req Request) Result {
 		pw := newProgressWriter(req.Progress, progressOutputMaxBytes, progressOutputTruncated)
 		pw.suppress = req.SuppressLine
 		writers = append(writers, pw)
+		defer pw.Flush()
 	}
-	// Stdout and Stderr must stay the *same* writer value: os/exec then hands the
-	// child a single pipe, so the two streams interleave in the order the child
-	// wrote them and only one copy goroutine calls Progress. Two MultiWriters
-	// would mean two pipes, and combined output would be reordered per stream.
-	// The bounded tail therefore covers combined output rather than stderr only;
-	// failing commands routinely report on stdout, so the tail stays useful.
+	// Keep Stdout and Stderr the same writer: os/exec then creates one pipe, so
+	// they interleave in write order and Progress has a single caller. Separate
+	// MultiWriters would reorder streams and require two pipes.
 	w := io.MultiWriter(writers...)
 	cmd.Stdout = w
 	cmd.Stderr = w
@@ -141,7 +139,6 @@ func RunForeground(ctx context.Context, req Request) Result {
 		ShellPath:       req.ShellPath,
 		CommandPreview:  req.CommandPreview,
 	})
-
 	out := Result{
 		Combined:   collector.combinedString(),
 		OutputTail: collector.tailString(),
@@ -198,9 +195,17 @@ func RunForeground(ctx context.Context, req Request) Result {
 		out.FailurePhase = tool.ShellPhaseExecution
 	} else {
 		out.FailurePhase = tool.ShellPhaseLaunch
+		warnInterpreterStartFailure(source, req, err)
 	}
 	out.Err = err
 	return out
+}
+
+func warnInterpreterStartFailure(source string, req Request, err error) {
+	// Every command in this session fails the same way; name the shell and spawn
+	// error so the tool card contains the executable that was asked for.
+	slog.Warn("shellrun: the interpreter could not be started",
+		"shell", req.ShellKind, "path", req.ShellPath, "source", source, "err", err)
 }
 
 func processStarted(cmd *exec.Cmd, err error) bool {
@@ -264,11 +269,11 @@ func newOutputCollector(combinedLimit, tailLimit int) *outputCollector {
 func (c *outputCollector) tailString() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return decodeShellOutput(c.tail.buf)
+	return decodeShellOutput(c.tail.buf, fileenc.Cut{Head: c.tail.cut})
 }
 
 func (c *outputCollector) combinedString() string {
-	return decodeShellOutput(c.combined.Bytes())
+	return decodeShellOutput(c.combined.Bytes(), fileenc.Cut{})
 }
 
 // boundedBuffer keeps complete output up to limit. Once output crosses the
@@ -340,6 +345,7 @@ type tailWriter struct {
 	mu    *sync.Mutex
 	limit int
 	buf   []byte
+	cut   bool // bytes before buf were dropped to hold the limit
 }
 
 func (w *tailWriter) Write(p []byte) (int, error) {
@@ -348,6 +354,7 @@ func (w *tailWriter) Write(p []byte) (int, error) {
 	w.buf = append(w.buf, p...)
 	if w.limit > 0 && len(w.buf) > w.limit {
 		w.buf = append([]byte(nil), w.buf[len(w.buf)-w.limit:]...)
+		w.cut = true
 	}
 	return len(p), nil
 }
@@ -357,6 +364,7 @@ type progressWriter struct {
 	emit      func(string)
 	limit     int
 	forwarded int
+	accepted  int
 	marker    string
 	truncated bool
 	// suppress is a line the host appended to the command for its own use. The
@@ -364,6 +372,7 @@ type progressWriter struct {
 	// here rather than only from the finished output.
 	suppress string
 	held     []byte
+	pending  []byte
 }
 
 func newProgressWriter(emit func(string), limit int, marker string) *progressWriter {
@@ -386,19 +395,91 @@ func (w *progressWriter) Write(p []byte) (int, error) {
 			return written, nil
 		}
 	}
-	remaining := max(0, w.limit-w.forwarded)
+	remaining := max(0, w.limit-w.accepted)
 	forward := min(len(p), remaining)
 	if forward > 0 {
-		w.emit(string(p[:forward]))
-		w.forwarded += forward
+		w.accepted += forward
+		w.writeDecoded(p[:forward])
 	}
-	if forward < len(p) {
-		w.truncated = true
-		if w.marker != "" {
-			w.emit(w.marker)
-		}
+	if forward < len(p) && !w.truncated {
+		w.flushPending(fileenc.Cut{Tail: true})
+		w.truncate()
 	}
 	return written, nil
+}
+
+// Flush releases the last line after the child exits. Until then, non-ASCII
+// bytes stay together so a code-page character split across pipe reads is not
+// mistaken for invalid UTF-8 and permanently recorded as a replacement rune.
+func (w *progressWriter) Flush() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.truncated {
+		w.flushPending(fileenc.Cut{})
+	}
+}
+
+func (w *progressWriter) writeDecoded(p []byte) {
+	w.pending = append(w.pending, p...)
+	for !w.truncated {
+		end := bytes.IndexByte(w.pending, '\n')
+		if end < 0 {
+			break
+		}
+		w.emitDecoded(w.pending[:end+1], fileenc.Cut{})
+		w.pending = w.pending[end+1:]
+	}
+	if w.truncated {
+		w.pending = nil
+		return
+	}
+	// ASCII has the same meaning in UTF-8 and the Windows code pages. Forward
+	// it immediately so progress without a newline (dots, prompts) stays live.
+	safe := 0
+	for safe < len(w.pending) && w.pending[safe] < utf8.RuneSelf {
+		safe++
+	}
+	if safe > 0 {
+		w.emitDecoded(w.pending[:safe], fileenc.Cut{})
+		w.pending = w.pending[safe:]
+	}
+}
+
+func (w *progressWriter) flushPending(cut fileenc.Cut) {
+	if len(w.pending) > 0 {
+		w.emitDecoded(w.pending, cut)
+		w.pending = nil
+	}
+}
+
+func (w *progressWriter) emitDecoded(data []byte, cut fileenc.Cut) {
+	decoded := decodeShellOutput(data, cut)
+	remaining := max(0, w.limit-w.forwarded)
+	clipped := len(decoded) > remaining
+	if clipped {
+		end := remaining
+		for end > 0 && !utf8.RuneStart(decoded[end]) {
+			end--
+		}
+		decoded = decoded[:end]
+	}
+	if decoded != "" {
+		w.forwarded += len(decoded)
+		w.emit(decoded)
+	}
+	if clipped {
+		w.truncate()
+	}
+}
+
+func (w *progressWriter) truncate() {
+	if w.truncated {
+		return
+	}
+	w.truncated = true
+	if w.marker != "" {
+		w.emit(w.marker)
+	}
 }
 
 // withoutSuppressed drops whole lines carrying the suppressed text and holds

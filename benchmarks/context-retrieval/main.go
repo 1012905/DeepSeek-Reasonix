@@ -54,15 +54,22 @@ func main() {
 	case "preflight":
 		os.Exit(runPreflight(tasks, root))
 	case "run-search":
-		os.Exit(runExperiment(experimentSearch, root, *dry, tasks))
+		os.Exit(runExperiment(*mode, experimentSearch, root, *dry, tasks))
 	case "run-boundary":
-		os.Exit(runBoundaries(root))
+		os.Exit(runBoundaries(*mode, root))
 	case "snippet":
 		os.Exit(runSnippetAudit(root, 100))
 	case "adversarial":
 		os.Exit(runAdversarial(root))
 	case "run-index":
-		os.Exit(runExperiment(experimentIndex, root, *dry, tasks))
+		batch := tasks
+		if *only == "" {
+			// A batch measures the efficiency substrate only. Naming one task
+			// with -task runs that task, role included, so the stopping corpus
+			// stays measurable on its own.
+			batch = efficiencyTasks()
+		}
+		os.Exit(runExperiment(*mode, experimentIndex, root, *dry, batch))
 	default:
 		fmt.Fprintf(os.Stderr, "unknown mode %q\n", *mode)
 		os.Exit(2)

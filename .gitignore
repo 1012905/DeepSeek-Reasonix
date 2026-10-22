@@ -15,8 +15,10 @@
 /runtime-resume
 /extension-protocol-gen
 /reasonix-plugin-example
+/mcp-line-counter-kit
 /reasonix-studio-host
 /signpath-contract
+/studio-delta
 /covergate
 /pricecheck
 /repolint
@@ -93,3 +95,4 @@ scripts/official-theme-art/__pycache__/
 # running, which on Windows is every rebuild while Studio is open.
 *.exe
 *.exe~
+/relayfake

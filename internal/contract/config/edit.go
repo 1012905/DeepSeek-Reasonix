@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"golang.org/x/text/unicode/norm"
 
 	"reasonix/internal/base/fileutil"
 	fileencoding "reasonix/internal/base/fileutil/encoding"
@@ -377,7 +378,7 @@ func (c *Config) SetColdResumePrune(enabled bool) error {
 	return nil
 }
 
-// SetDesktopTelemetry sets whether the desktop sends the anonymous launch ping.
+// SetDesktopTelemetry sets whether the desktop sends the anonymous daily ping.
 func (c *Config) SetDesktopTelemetry(enabled bool) error {
 	c.Desktop.Telemetry = &enabled
 	return nil
@@ -405,16 +406,15 @@ func (c *Config) SetCLITelemetryMode(mode string) error {
 }
 
 // SetDesktopConversationWidth sets the max transcript width preference.
-// standard = 960px fixed; full = 90% of the parent, with a 960px floor.
-// An empty value resets to standard.
+// standard reads; full widens the transcript; full-all the composer too.
 func (c *Config) SetDesktopConversationWidth(width string) error {
 	switch strings.ToLower(strings.TrimSpace(width)) {
 	case "", "standard":
 		c.Desktop.ConversationWidth = "standard"
-	case "full":
-		c.Desktop.ConversationWidth = "full"
+	case "full", "full-all":
+		c.Desktop.ConversationWidth = strings.ToLower(strings.TrimSpace(width))
 	default:
-		return fmt.Errorf("conversation width %q: must be standard|full", width)
+		return fmt.Errorf("conversation width %q: must be standard|full|full-all", width)
 	}
 	return nil
 }
@@ -472,101 +472,7 @@ func (c *Config) modelRefTargetsProvider(ref, name string) bool {
 	return false
 }
 
-// RemoveProvider deletes the named provider. References to the removed provider
-// are migrated to the first remaining configured provider when possible. The
-// default model is required, so removal is refused when no fallback exists;
-// optional planner/subagent refs are cleared instead of being left dangling.
-// ErrProviderNotFound is a removal of a provider the file does not hold.
-var ErrProviderNotFound = errors.New("no such provider")
-
-func (c *Config) RemoveProvider(name string) error {
-	name = strings.TrimSpace(name)
-	idx := -1
-	for i := range c.Providers {
-		if c.Providers[i].Name == name {
-			idx = i
-			break
-		}
-	}
-	if idx < 0 {
-		return fmt.Errorf("remove provider %q: %w", name, ErrProviderNotFound)
-	}
-
-	defaultRefsProvider := c.modelRefTargetsProvider(c.DefaultModel, name)
-	plannerRefsProvider := c.modelRefTargetsProvider(c.Agent.PlannerModel, name)
-	subagentRefsProvider := c.modelRefTargetsProvider(c.Agent.SubagentModel, name)
-	subagentModelRefsProvider := map[string]bool{}
-	for skill, ref := range c.Agent.SubagentModels {
-		if c.modelRefTargetsProvider(ref, name) {
-			subagentModelRefsProvider[skill] = true
-		}
-	}
-
-	fallback := ""
-	if defaultRefsProvider || plannerRefsProvider || subagentRefsProvider || len(subagentModelRefsProvider) > 0 {
-		fallback = c.providerRemovalFallback(name)
-	}
-	c.Providers = append(c.Providers[:idx], c.Providers[idx+1:]...)
-
-	if defaultRefsProvider {
-		c.DefaultModel = fallback
-	}
-	if plannerRefsProvider {
-		c.Agent.PlannerModel = fallback
-	}
-	if subagentRefsProvider {
-		c.Agent.SubagentModel = fallback
-	}
-	for skill := range subagentModelRefsProvider {
-		if fallback != "" {
-			c.Agent.SubagentModels[skill] = fallback
-		} else {
-			delete(c.Agent.SubagentModels, skill)
-		}
-	}
-	return nil
-}
-
-func (c *Config) providerRemovalFallback(name string) string {
-	for i := range c.Providers {
-		p := &c.Providers[i]
-		if p.Name == name || !p.Configured() || len(p.ModelList()) == 0 {
-			continue
-		}
-		return p.Name
-	}
-	return ""
-}
-
 // validateProvider checks the fields a provider can't function without.
-func validateProvider(e ProviderEntry) error {
-	switch {
-	case strings.TrimSpace(e.Name) == "":
-		return fmt.Errorf("provider: name is required")
-	case strings.TrimSpace(e.Kind) == "":
-		return fmt.Errorf("provider %q: kind is required", e.Name)
-	case strings.TrimSpace(e.BaseURL) == "":
-		return fmt.Errorf("provider %q: base_url is required", e.Name)
-	case !providerHasAnyModel(e):
-		return fmt.Errorf("provider %q: model is required", e.Name)
-	case strings.TrimSpace(e.APIKeyEnv) != "" && !IsValidCredentialKey(e.APIKeyEnv):
-		return fmt.Errorf("provider %q: api_key_env %q is not a valid environment variable name", e.Name, e.APIKeyEnv)
-	}
-	return nil
-}
-
-func providerHasAnyModel(e ProviderEntry) bool {
-	if strings.TrimSpace(e.Model) != "" {
-		return true
-	}
-	for _, m := range e.Models {
-		if strings.TrimSpace(m) != "" {
-			return true
-		}
-	}
-	return false
-}
-
 // SetPermissionMode sets the writer-fallback mode. Accepts "ask", "allow", or
 // "deny" (case-insensitive); anything else errors rather than silently
 // defaulting, so a UI surfaces a typo instead of installing a surprising mode.
@@ -735,8 +641,9 @@ func (c *Config) SetSkillEnabled(name string, enabled bool) error {
 	name = strings.TrimSpace(name)
 	key := SkillNameKey(name)
 	if key == "" {
-		return fmt.Errorf("skill name %q: use letters, digits, '_', '-', '.', 1-64 chars, starting alphanumeric", name)
+		return fmt.Errorf("skill name %q: use Unicode letters or numbers and '_', '-', '.', 1-64 characters, starting alphanumeric", name)
 	}
+	name = norm.NFC.String(name)
 	next := c.DisabledSkillNames()
 	idx := -1
 	for i, existing := range next {
@@ -843,10 +750,7 @@ func (c *Config) ClearPluginAuthentication(name string) (PluginEntry, bool, erro
 }
 
 func pluginTOMLSourcePathForRoot(root, name string) string {
-	projectTOML := "reasonix.toml"
-	if resolved := resolveRoot(root); resolved != "." {
-		projectTOML = filepath.Join(resolved, "reasonix.toml")
-	}
+	projectTOML := ProjectConfigPath(resolveRoot(root))
 	paths := append([]string{projectTOML}, processRoots().userConfigCandidatePaths()...)
 	for _, path := range paths {
 		if strings.TrimSpace(path) == "" {
@@ -868,10 +772,9 @@ func pluginTOMLSourcePathForRoot(root, name string) string {
 // the highest priority.
 func MCPConfigPathForEntry(root string, entry PluginEntry) string {
 	resolvedRoot := resolveRoot(root)
-	projectTOML := "reasonix.toml"
+	projectTOML := ProjectConfigPath(resolvedRoot)
 	projectMCPJSON := mcpJSONFile
 	if resolvedRoot != "." {
-		projectTOML = filepath.Join(resolvedRoot, "reasonix.toml")
 		projectMCPJSON = filepath.Join(resolvedRoot, mcpJSONFile)
 	}
 	switch entry.Source {
@@ -1078,14 +981,10 @@ func RemovePluginFromEffectiveSourceForRoot(root, name string) (PluginEntry, boo
 // of a now-shadowed source.
 func mcpConfigSourcePathsForRoot(root string) []string {
 	resolvedRoot := resolveRoot(root)
-	projectTOML := "reasonix.toml"
-	projectMCPJSON := mcpJSONFile
-	if resolvedRoot != "." {
-		projectTOML = filepath.Join(resolvedRoot, "reasonix.toml")
-		projectMCPJSON = filepath.Join(resolvedRoot, mcpJSONFile)
-	}
+	projectMCPJSON := filepath.Join(resolvedRoot, mcpJSONFile)
 	paths := append([]string{}, processRoots().userConfigCandidatePaths()...)
-	paths = append(paths, projectTOML, projectMCPJSON)
+	paths = append(paths, ProjectConfigPaths(resolvedRoot)...)
+	paths = append(paths, projectMCPJSON)
 	if legacy := legacyConfigPath(); strings.TrimSpace(legacy) != "" {
 		paths = append(paths, legacy)
 	}
@@ -1261,7 +1160,7 @@ func validatePlugin(e PluginEntry) error {
 	default:
 		return fmt.Errorf("plugin %q: unknown type %q (want stdio|http|sse)", e.Name, e.Type)
 	}
-	return nil
+	return validateDisabledTools(e)
 }
 
 // SaveTo writes the configuration to path as annotated TOML, atomically: it
@@ -1271,8 +1170,8 @@ func validatePlugin(e PluginEntry) error {
 //
 // For project configs (./reasonix.toml) the write is incremental: only sections
 // and fields that differ from built-in defaults are written, so the file never
-// accumulates fields that override the user's global config. User configs still
-// write the full annotated template since they are the user's own settings store.
+// accumulates fields that override the user's global config. An existing user
+// config is rewritten only at the keys the save changed; see userConfigBody.
 func (c *Config) SaveTo(path string) error {
 	if c == nil {
 		return fmt.Errorf("save config: nil config")
@@ -1292,6 +1191,9 @@ func (c *Config) SaveTo(path string) error {
 	}
 	if scope == RenderScopeProject {
 		return c.saveProjectIncrementalResolved(path, resolved)
+	}
+	if scope == RenderScopeUser {
+		return c.writeUserConfig(path, resolved, func(body string) error { return writeConfigFileResolved(resolved, body, configFilePerm(path)) })
 	}
 	return writeConfigFileResolved(resolved, RenderTOMLForScope(c, scope), configFilePerm(path))
 }
@@ -1315,6 +1217,9 @@ func (c *Config) SaveToScope(path string, scope RenderScope) error {
 	resolved, err := resolveConfigAccessPath(path, userConfig)
 	if err != nil {
 		return err
+	}
+	if scope == RenderScopeUser {
+		return c.writeUserConfig(path, resolved, func(body string) error { return writeConfigFileResolved(resolved, body, configFilePerm(path)) })
 	}
 	return writeConfigFileResolved(resolved, RenderTOMLForScope(c, scope), configFilePerm(path))
 }
@@ -1371,58 +1276,6 @@ func (c *Config) saveProjectIncrementalResolved(logicalPath, resolvedPath string
 		body = upsertTOMLSectionKey(body, "desktop", "provider_access", "provider_access = "+renderStringArray(c.Desktop.ProviderAccess))
 	}
 	return writeConfigFileResolved(resolvedPath, body, configFilePerm(logicalPath))
-}
-
-// projectSkillsKeysToRemove reports whether an existing project [skills]
-// section contains a field whose current edit value is the built-in default.
-// Project saves are incremental, so an empty RenderTOMLProjectDelta cannot
-// remove a stale override without this explicit cleanup pass.
-func projectSkillsKeysToRemove(body string, c *Config) bool {
-	if c == nil || !tomlBodyHasSection(body, "skills") {
-		return false
-	}
-	for _, key := range projectSkillKeys {
-		if projectSkillKeyIsDefault(c, key) {
-			if _, ok := tomlSectionKeyValue(body, "skills", key); ok {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-var projectSkillKeys = [...]string{"paths", "excluded_paths", "disabled_skills", "disable_implicit_invocation", "max_depth"}
-
-func projectSkillKeyIsDefault(c *Config, key string) bool {
-	if c != nil && c.keepsProjectSkillKey(key) {
-		return false
-	}
-	switch key {
-	case "paths":
-		return len(c.Skills.Paths) == 0
-	case "excluded_paths":
-		return len(c.Skills.ExcludedPaths) == 0
-	case "disabled_skills":
-		return len(c.Skills.DisabledSkills) == 0
-	case "disable_implicit_invocation":
-		return !c.Skills.DisableImplicitInvocation
-	case "max_depth":
-		return c.Skills.MaxDepth == 0
-	default:
-		return false
-	}
-}
-
-func cleanupProjectSkillsKeys(body string, c *Config) string {
-	if c == nil {
-		return body
-	}
-	for _, key := range projectSkillKeys {
-		if projectSkillKeyIsDefault(c, key) {
-			body = removeTOMLSectionKey(body, "skills", key)
-		}
-	}
-	return body
 }
 
 func shouldRemoveIneffectiveProjectSandboxBash(body string, c *Config) bool {
@@ -2157,7 +2010,7 @@ func IsUserConfigPath(path string) bool {
 func (c *Config) Save() error {
 	path := SourcePath()
 	if path == "" {
-		path = "reasonix.toml"
+		path = ProjectConfigPath(".")
 	}
 	return c.SaveTo(path)
 }
@@ -2167,10 +2020,7 @@ func (c *Config) Save() error {
 // are edited from their own TOML only, never from a runtime user+project merge.
 func (c *Config) SaveForRoot(root string) error {
 	root = resolveRoot(root)
-	projectTOML := "reasonix.toml"
-	if root != "." {
-		projectTOML = filepath.Join(root, "reasonix.toml")
-	}
+	projectTOML := ProjectConfigPath(root)
 	if _, err := os.Stat(projectTOML); err == nil {
 		projectCfg := LoadForEditWithoutCredentials(projectTOML)
 		return projectCfg.SaveTo(projectTOML)

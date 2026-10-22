@@ -11,42 +11,42 @@ const check = (name, ok, detail = "") => {
 
 const browser = await chromium.launch();
 
+// What a loop reports is where it is drawn: the run mark reports the turn, the
+// sidebar's reading row reports the first tree read, a
+// call's state mark (or its folded group's) reports that call. Anything else
+// looping while work runs is decoration.
 const runningLoops = (page) => page.evaluate(() =>
-  document.getAnimations({ subtree: true }).filter((a) => {
-    if (a.playState !== "running" || a.effect?.getTiming().iterations !== Infinity) return false;
+  document.getAnimations({ subtree: true }).flatMap((a) => {
+    if (a.playState !== "running" || a.effect?.getTiming().iterations !== Infinity) return [];
     const el = a.effect?.target;
-    if (!(el instanceof Element)) return false;
+    if (!(el instanceof Element)) return [];
     const box = el.getBoundingClientRect();
     const s = getComputedStyle(el);
-    return s.visibility !== "hidden" && s.display !== "none" && box.width > 0 && box.height > 0;
-  }).map((a) => a.animationName),
+    if (s.visibility === "hidden" || s.display === "none" || box.width === 0 || box.height === 0) return [];
+    const call = el.closest(".call[data-running] .tool-state, .activity-group[data-running] > summary .activity-status-icon");
+    const owner = el.closest(".rmark") ? "run" : call ? "call" : el.closest(".ws-reading") ? "reading" : "";
+    return [{ name: a.animationName, owner, target: el.closest(".rmark, .tool-state, .activity-status-icon, .ws-reading") }];
+  }).map((l, _, all) => ({
+    name: l.name, owner: l.owner,
+    shared: all.filter((o) => o.target && o.target === l.target).length,
+    calls: document.querySelectorAll(".call[data-running]").length,
+  })),
 );
 
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme: "dark" });
 await page.goto(PAGE, { waitUntil: "networkidle" });
 await page.waitForSelector(".compose");
 
-await page.getByRole("tab", { name: "任务", exact: true }).click();
-await page.waitForTimeout(320);
-// 快捷操作已经从「卡中套卡」改成一行一条，反馈也跟着换了通道：容器不再有自己
-// 的边和影，悬停落在那一行上 —— 底色浮起来，行首让开 8px，箭头前移。问的还是
-// 同一件事（悬停要有反馈，且是克制的那种），只是问在它现在画的地方。
-const row = page.locator(".tk-acts button").first();
-const before = await row.evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, pad: getComputedStyle(el).paddingLeft }));
-await row.hover();
-await page.waitForTimeout(260);
-const after = await row.evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, pad: getComputedStyle(el).paddingLeft }));
-check("任务快捷操作悬停有克制的层次反馈", before.bg !== after.bg && before.pad !== after.pad, `${before.bg} / ${before.pad} → ${after.bg} / ${after.pad}`);
-
-await page.getByRole("tab", { name: "对话", exact: true }).click();
 const located = await page.evaluate(() => {
   const card = [...document.querySelectorAll(".call[data-k='write']")].at(-1);
-  const head = card?.querySelector(":scope > .c > .hl");
+  const head = card?.querySelector(":scope > .c > .tool-disclosure > .hl, :scope > .c > .hl");
   const name = head?.querySelector(".nm");
   const arg = head?.querySelector(".arg");
   if (!(card instanceof HTMLElement) || !(name instanceof HTMLElement) || !(arg instanceof HTMLElement)) return null;
+  const before = getComputedStyle(card).backgroundColor;
   card.setAttribute("data-hit", "");
   return {
+    before,
     cardAnimations: card.getAnimations({ subtree: false }).map((a) => a.animationName),
     cardBackground: getComputedStyle(card).backgroundColor,
     nameAnimation: getComputedStyle(name).animationName,
@@ -56,7 +56,7 @@ const located = await page.evaluate(() => {
 check(
   "定位 Update 时只强调标题而不闪整张输出",
   located?.cardAnimations.length === 0
-    && located.cardBackground === "rgba(0, 0, 0, 0)"
+    && located.cardBackground === located.before
     && located.nameAnimation === "hitmark"
     && located.argAnimation === "hitmark",
   JSON.stringify(located),
@@ -67,7 +67,10 @@ await page.evaluate(() => {
 });
 await page.waitForTimeout(120);
 const loops = await runningLoops(page);
-check("运行态只保留两个核心循环信号", loops.length <= 2, loops.join(", "));
+const names = loops.map((l) => `${l.name}@${l.owner || "?"}`).join(", ");
+check("运行态的循环只报告在跑的事，没有装饰", loops.every((l) => l.owner), names);
+check("运行态的轮次记号只有一个", loops.filter((l) => l.owner === "run").every((l, _, run) => l.shared === run.length), names);
+check("每个在跑的调用至多一个循环记号", loops.filter((l) => l.owner === "call").length <= (loops[0]?.calls ?? 0), names);
 
 await page.evaluate(() => window.__feed({
   kind: "approval_request",
@@ -103,8 +106,7 @@ check("窄屏消息定位轨让出正文宽度", narrow.lane === "24px", narrow.
 check("窄屏面包屑保持单行", narrow.oneLine);
 check("窄屏没有横向溢出", narrow.overflow <= 1, `${narrow.overflow}px`);
 
-const thumb = page.locator(".srail-view");
-await thumb.focus();
+await page.locator('[data-pane="flow"]').focus();
 await page.keyboard.press("End");
 await page.waitForTimeout(80);
 check("消息定位轨可用键盘滚动", await page.evaluate(() => document.querySelector('[data-pane="flow"]').scrollTop > 0));
@@ -122,7 +124,7 @@ await reduced.evaluate(() => {
 });
 await reduced.waitForTimeout(80);
 const stillLoops = await runningLoops(reduced);
-check("减少动态效果时没有循环动画", stillLoops.length === 0, stillLoops.join(", "));
+check("减少动态效果时没有循环动画", stillLoops.length === 0, stillLoops.map((l) => l.name).join(", "));
 
 await browser.close();
 console.log(fails.length ? `\n失败 ${fails.length} 项：\n- ${fails.join("\n- ")}` : "\n动效节奏、窄屏与减弱动态全部通过。");

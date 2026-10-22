@@ -4,17 +4,34 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"reasonix/internal/base/i18n"
 	"reasonix/internal/contract/config"
+	"reasonix/internal/platform/notify"
 )
 
 // NotifyPrefs is what a window can be asked about the desktop notifications it
-// sends on this machine's behalf. Enabled gates the other three, which are what
-// is worth being interrupted for.
+// sends on this machine's behalf. Enabled gates the system notification; Sound
+// is a chime of its own. The others say which events either is for.
 type NotifyPrefs struct {
+	Enabled       bool `json:"enabled"`
+	TurnDone      bool `json:"turnDone"`
+	Approval      bool `json:"approval"`
+	Ask           bool `json:"ask"`
+	FeedbackReply bool `json:"feedbackReply"`
+	DiskLow       bool `json:"diskLow"`
+	Sound         bool `json:"sound"`
+	// Phone is what this desktop tells its enrolled phones about.
+	Phone PhoneNotifyPrefs `json:"phone"`
+}
+
+// PhoneNotifyPrefs is the desktop's half of phone notifications: the master
+// switch and which occasions it reports. Only the kind of occasion and a count
+// are ever sent.
+type PhoneNotifyPrefs struct {
 	Enabled  bool `json:"enabled"`
-	TurnDone bool `json:"turnDone"`
 	Approval bool `json:"approval"`
-	Ask      bool `json:"ask"`
+	Input    bool `json:"input"`
+	Error    bool `json:"error"`
 }
 
 const codeNotifyRejected = "notifications.rejected"
@@ -28,6 +45,9 @@ func (h *Hub) registerNotifyRoutes(mux *http.ServeMux) {
 	}
 	mux.HandleFunc("GET /notifications", h.readNotifyPrefs)
 	mux.HandleFunc("PUT /notifications", h.writeNotifyPrefs)
+	if h.opts.NotifySender != nil {
+		mux.HandleFunc("POST /notifications/feedback-reply", h.announceFeedbackReply)
+	}
 }
 
 func (h *Hub) readNotifyPrefs(w http.ResponseWriter, _ *http.Request) {
@@ -42,7 +62,8 @@ func (h *Hub) NotifyPrefs() NotifyPrefs {
 		return NotifyPrefs{}
 	}
 	cfg := config.LoadForEdit(config.UserConfigPath()).Notifications
-	return NotifyPrefs{Enabled: cfg.Enabled, TurnDone: cfg.TurnDone, Approval: cfg.ApprovalRequest, Ask: cfg.AskRequest}
+	return NotifyPrefs{Enabled: cfg.Enabled, TurnDone: cfg.TurnDone, Approval: cfg.ApprovalRequest, Ask: cfg.AskRequest, FeedbackReply: cfg.FeedbackReply, DiskLow: cfg.DiskLow, Sound: cfg.Sound,
+		Phone: PhoneNotifyPrefs{Enabled: cfg.Phone.Enabled, Approval: cfg.Phone.Approval, Input: cfg.Phone.Input, Error: cfg.Phone.Error}}
 }
 
 // SetNotifyPrefs persists the switches and hands the holder the same answer, so
@@ -54,6 +75,10 @@ func (h *Hub) SetNotifyPrefs(next NotifyPrefs) (NotifyPrefs, error) {
 		TurnDone:        next.TurnDone,
 		ApprovalRequest: next.Approval,
 		AskRequest:      next.Ask,
+		FeedbackReply:   next.FeedbackReply,
+		DiskLow:         next.DiskLow,
+		Sound:           next.Sound,
+		Phone:           config.PhoneNotificationsConfig{Enabled: next.Phone.Enabled, Approval: next.Phone.Approval, Input: next.Phone.Input, Error: next.Phone.Error},
 	}
 	path := config.UserConfigPath()
 	edit := config.LoadForEdit(path)
@@ -68,15 +93,35 @@ func (h *Hub) SetNotifyPrefs(next NotifyPrefs) (NotifyPrefs, error) {
 }
 
 func (h *Hub) writeNotifyPrefs(w http.ResponseWriter, r *http.Request) {
-	var body NotifyPrefs
+	// A page written before phone notifications existed does not send the phone
+	// switches; they are kept as they were rather than read as all off.
+	var body struct {
+		NotifyPrefs
+		Phone *PhoneNotifyPrefs `json:"phone"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		missingField(w, "enabled")
 		return
 	}
-	got, err := h.SetNotifyPrefs(body)
+	next := body.NotifyPrefs
+	if body.Phone != nil {
+		next.Phone = *body.Phone
+	} else {
+		next.Phone = h.NotifyPrefs().Phone
+	}
+	got, err := h.SetNotifyPrefs(next)
 	if err != nil {
 		refuse(w, http.StatusInternalServerError, codeNotifyRejected, err.Error(), nil)
 		return
 	}
 	writeJSON(w, got)
+}
+
+// announceFeedbackReply says a reply arrived. The window decides when that is
+// worth saying, because only it knows whether anyone is looking; whether the
+// person allowed it is answered here, from the durable setting.
+func (h *Hub) announceFeedbackReply(w http.ResponseWriter, _ *http.Request) {
+	cfg := config.LoadForEdit(config.UserConfigPath())
+	notify.SendFeedbackReply(h.opts.NotifySender, i18n.CatalogFor(cfg.DesktopLanguage()), cfg.Notifications)
+	w.WriteHeader(http.StatusNoContent)
 }

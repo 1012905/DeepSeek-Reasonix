@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useEscape } from "./dismiss";
 import { t } from "../i18n";
 import type { AgentPort, McpDraftServer, McpInstallResult, McpInstallScope, McpRisk } from "../port/port";
@@ -26,7 +26,14 @@ interface Props {
   onInstalled: () => void;
 }
 
-export function AddServer({ port, canProject, onClose, onInstalled }: Props) {
+export function AddServer(props: Props) {
+  const [connection, setConnection] = useState({ port: props.port, generation: 0 });
+  if (connection.port !== props.port) setConnection({ port: props.port, generation: connection.generation + 1 });
+  return <ServerInput key={connection.generation} {...props} />;
+}
+
+function ServerInput({ port, canProject, onClose, onInstalled }: Props) {
+  const sourceLabel = useId();
   // Mounted only while open, so this component is the layer Escape closes.
   useEscape(true, onClose);
   const [text, setText] = useState("");
@@ -35,8 +42,11 @@ export function AddServer({ port, canProject, onClose, onInstalled }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [results, setResults] = useState<McpInstallResult[]>([]);
+  const remaining = draft?.servers.filter((s) => !results.some((r) => r.name === s.name && r.state !== "issue")) ?? [];
+  const hasSaved = results.some((r) => r.state !== "issue");
 
   const parse = async () => {
+    if (busy || !text.trim()) return;
     setBusy(true);
     setError("");
     try {
@@ -53,19 +63,19 @@ export function AddServer({ port, canProject, onClose, onInstalled }: Props) {
     if (!draft) return;
     setBusy(true);
     setError("");
+    const out: McpInstallResult[] = [];
     try {
-      const out: McpInstallResult[] = [];
-      for (const s of draft.servers) out.push(await port.installMcp(s, scope));
-      setResults(out);
-      if (out.some((r) => r.state !== "issue")) onInstalled();
+      for (const s of remaining) out.push(await port.installMcp(s, scope));
     } catch (e) {
       setError(reason(e));
     } finally {
+      setResults((previous) => [...new Map([...previous, ...out].map((r) => [r.name, r])).values()]);
       setBusy(false);
+      if (out.some((r) => r.state !== "issue")) onInstalled();
     }
   };
 
-  if (results.length > 0) {
+  if (results.length > 0 && remaining.length === 0 && !error && !busy) {
     return (
       <div className="addsrv" data-stage="done">
         {results.map((r) => (
@@ -81,23 +91,28 @@ export function AddServer({ port, canProject, onClose, onInstalled }: Props) {
   }
 
   return (
-    <div className="addsrv" data-stage={draft ? "confirm" : "paste"}>
+    <div className="addsrv" data-stage={draft ? "confirm" : "paste"} aria-busy={busy}>
       {!draft && (
         <>
           <textarea
             className="paste"
+            aria-labelledby={sourceLabel}
             data-action-keydown="mcp.inspect"
             rows={4}
             autoFocus
             value={text}
+            disabled={busy}
             placeholder={PLACEHOLDER}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void parse();
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                e.preventDefault();
+                void parse();
+              }
             }}
           />
           <div className="acts">
-            <span className="note">{t("一段 JSON、一行命令，或一个 https 地址")}</span>
+            <span className="note" id={sourceLabel}>{t("一段 JSON、一行命令，或一个 https 地址")}</span>
             <button className="act" onClick={onClose}>
               {t("取消")}
             </button>
@@ -110,7 +125,8 @@ export function AddServer({ port, canProject, onClose, onInstalled }: Props) {
 
       {draft && (
         <>
-          {draft.servers.map((s) => (
+          {results.map((r) => <Outcome key={r.name} r={r} />)}
+          {remaining.map((s) => (
             <div className="cand" key={s.name}>
               <div className="cand-hd">
                 <span className="nm">{s.name}</span>
@@ -121,7 +137,7 @@ export function AddServer({ port, canProject, onClose, onInstalled }: Props) {
                 .map((k) => (
                   <div className="risk" key={k.field} data-kind={k.kind}>
                     <span className="lb">{t(KIND_LABEL[k.kind] ?? k.kind)}</span>
-                    <span className="dt">{k.kind === "secret" ? k.field.split(".").pop() : k.detail}</span>
+                    <span className="dt">{k.kind === "secret" ? k.field.split(".").pop() : k.kind === "unknown-host" ? (s.displayUrl ?? "<redacted>") : [s.displayCommand ?? "<redacted>", ...(s.displayArgs ?? [])].join(" ")}</span>
                     {k.kind === "secret" && <span className="why">{k.detail}</span>}
                   </div>
                 ))}
@@ -130,14 +146,31 @@ export function AddServer({ port, canProject, onClose, onInstalled }: Props) {
           {/* Installing is a global act; how far it reaches is a separate
               question. Only the third option edits a tracked file, so it is the
               one that has to say so out loud — and it is never the default. */}
-          <div className="scope" role="radiogroup" aria-label={t("安装位置")}>
-            <button role="radio" aria-checked={scope === "user"} onClick={() => setScope("user")}>
+          <div className="scope" role="radiogroup" aria-label={t("安装位置")} data-action-keydown="mcp.scope"
+            onKeyDown={(e) => {
+              if (busy || hasSaved || e.altKey || e.ctrlKey || e.metaKey) return;
+              const radios = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')].filter((radio) => !radio.disabled);
+              const index = radios.indexOf(document.activeElement as HTMLButtonElement);
+              if (index < 0) return;
+              const next = e.key === "ArrowRight" || e.key === "ArrowDown" ? (index + 1) % radios.length
+                : e.key === "ArrowLeft" || e.key === "ArrowUp" ? (index + radios.length - 1) % radios.length
+                : e.key === "Home" ? 0 : e.key === "End" ? radios.length - 1 : undefined;
+              if (next === undefined) return;
+              e.preventDefault();
+              e.stopPropagation();
+              radios[next].focus();
+              radios[next].click();
+            }}>
+            <button role="radio" aria-checked={scope === "user"} tabIndex={scope === "user" ? 0 : -1}
+              data-action="mcp.scope" disabled={busy || hasSaved} onClick={() => setScope("user")}>
               {t("我的")}<i>{t("所有项目均可使用")}</i>
             </button>
             <button
               role="radio"
               aria-checked={scope === "local"}
-              disabled={!canProject}
+              tabIndex={scope === "local" ? 0 : -1}
+              data-action="mcp.scope"
+              disabled={busy || hasSaved || !canProject}
               onClick={() => setScope("local")}
             >
               {t("仅当前项目")}<i>{t("不写入仓库，他人不会获得")}</i>
@@ -145,7 +178,9 @@ export function AddServer({ port, canProject, onClose, onInstalled }: Props) {
             <button
               role="radio"
               aria-checked={scope === "project"}
-              disabled={!canProject}
+              tabIndex={scope === "project" ? 0 : -1}
+              data-action="mcp.scope"
+              disabled={busy || hasSaved || !canProject}
               onClick={() => setScope("project")}
             >
               {t("写进仓库")}<i>{t("clone 仓库的人也会获得")}</i>
@@ -155,7 +190,7 @@ export function AddServer({ port, canProject, onClose, onInstalled }: Props) {
             <div className="warn">{t("这会修改仓库中的配置文件，属于一处待提交的改动。")}</div>
           )}
           <div className="acts">
-            <button className="act" onClick={() => setDraft(null)}>
+            <button className="act" disabled={busy} onClick={() => { setDraft(null); setResults([]); setError(""); }}>
               {t("返回")}
             </button>
             <button className="act" data-action="mcp.add" data-primary disabled={busy} onClick={() => void install()}>

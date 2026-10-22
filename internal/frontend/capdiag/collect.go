@@ -13,6 +13,7 @@ import (
 	"reasonix/internal/ext/hook"
 	"reasonix/internal/ext/plugin"
 	"reasonix/internal/ext/pluginpkg"
+	"reasonix/internal/ext/rules"
 	"reasonix/internal/ext/skill"
 	"reasonix/internal/state/memory"
 )
@@ -159,6 +160,12 @@ func collectInstructions(root, home string, disp func(string) string) (Instructi
 			SettingsTab: "memory",
 		})
 	}
+	for _, d := range rules.Load(rules.Options{WorkspaceRoot: root, UserDir: userDir}).Diagnostics {
+		issues = append(issues, Issue{
+			Severity: "warning", Code: d.Code, Subsystem: "instructions", Source: disp(d.Path), Message: d.Message,
+			Remediation: "Fix or remove the rule file, then start a new session", SettingsTab: "memory",
+		})
+	}
 	return out, issues
 }
 
@@ -277,7 +284,7 @@ func collectHooks(root, home, reasonixHome string, cfg *config.Config, disp func
 	})
 	runtimeOptions := hook.RuntimeOptions{}
 	if cfg != nil {
-		runtimeOptions = hook.RuntimeOptionsForShell(cfg.Tools.Shell.Prefer, cfg.Tools.Shell.Path)
+		runtimeOptions = hook.RuntimeOptionsForShell(cfg.Tools.Shell.Prefer, cfg.Tools.Shell.Path, cfg.Tools.Shell.Args...)
 	}
 	rep := HookReport{
 		// Retained in schema v1 for compatibility; project hooks are enabled by
@@ -416,7 +423,7 @@ func collectPlugins(reasonixHome string, disp func(string) string) (PluginPackag
 		if p.ManifestKind == "" {
 			info.ManifestKind = pkg.ManifestKind
 		}
-		for _, w := range warnings {
+		for _, w := range pluginpkg.DisplayLines(warnings) {
 			info.Warnings = append(info.Warnings, w)
 			issues = append(issues, Issue{
 				Severity: "warning", Code: "plugin.compatibility", Subsystem: "plugins",

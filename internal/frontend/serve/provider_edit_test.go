@@ -2,6 +2,7 @@ package serve
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -50,6 +51,12 @@ func newRichProviderServer(t *testing.T) *httptest.Server {
 // the tests that need it to answer differently about what it is doing.
 func newRichProviderServerAs(t *testing.T, wrap func(control.SessionAPI) control.SessionAPI) *httptest.Server {
 	t.Helper()
+	return newRichProviderServerWith(t, wrap, nil)
+}
+
+// newRichProviderServerWith also lets the test shape the controller it starts on.
+func newRichProviderServerWith(t *testing.T, wrap func(control.SessionAPI) control.SessionAPI, shape func(*control.Options)) *httptest.Server {
+	t.Helper()
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
 	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
 	if _, err := config.SetCredential("RICH_API_KEY", "sk-rich"); err != nil {
@@ -63,12 +70,17 @@ func newRichProviderServerAs(t *testing.T, wrap func(control.SessionAPI) control
 		t.Fatal(err)
 	}
 	bc := NewBroadcaster()
-	ctrl := control.New(control.Options{
+	opts := control.Options{
 		Sink: bc, Label: "alpha", ModelRef: "rich/alpha", SessionDir: testenv.TempDir(t),
-	})
+		ModelEntry: richModelEntry(t),
+	}
+	if shape != nil {
+		shape(&opts)
+	}
+	ctrl := control.New(opts)
 	s := New(wrap(ctrl), bc, config.ServeConfig{})
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	t.Cleanup(srv.Close)
 	return srv
 }
@@ -235,7 +247,7 @@ api_key_env = "DEEPSEEK_API_KEY"
 func TestEditProviderKeepsCompatibilityFields(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	body := `{"name":"existing","models":["model-a"],"default":"model-a","contextWindow":128000,` +
@@ -270,7 +282,7 @@ func TestEditProviderKeepsCompatibilityFields(t *testing.T) {
 func TestEditProviderLeavesCompatibilityFieldsAloneWhenUnsent(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	first := postProvider(t, srv.URL, "/providers/edit",
@@ -294,7 +306,7 @@ func TestEditProviderLeavesCompatibilityFieldsAloneWhenUnsent(t *testing.T) {
 func TestEditProviderRejectsNullInExtraBody(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp := postProvider(t, srv.URL, "/providers/edit",
@@ -454,4 +466,430 @@ func loadEntry(t *testing.T, ref string) (*config.ProviderEntry, bool) {
 		t.Fatal(err)
 	}
 	return cfg.ResolveModel(ref)
+}
+
+func gaugeWindow(t *testing.T, base string) int {
+	t.Helper()
+	resp, err := http.Get(base + "/context")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var got struct {
+		Window int `json:"window"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	return got.Window
+}
+
+// The window is bound into the agent at assembly, so an edit to the source the
+// open conversation runs on has to reach that conversation too — otherwise the
+// gauge and the fold point keep counting against the number the form replaced.
+func TestEditProviderReachesTheConversationRunningOnIt(t *testing.T) {
+	srv := newRichProviderServer(t)
+
+	resp := postProvider(t, srv.URL, "/providers/edit", `{
+		"name":"rich","models":["alpha","beta"],"default":"alpha","contextWindow":1000000
+	}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		b, _ := readAllString(resp)
+		t.Fatalf("POST /providers/edit = %d: %s", resp.StatusCode, b)
+	}
+	if got := gaugeWindow(t, srv.URL); got != 1000000 {
+		t.Fatalf("the open conversation's window = %d, want the saved 1000000", got)
+	}
+}
+
+// Mid-turn the write lands and only the rebuild waits, which is a different
+// answer from a failed save and from a refused one.
+func TestEditProviderMidTurnSaysTheConversationKeepsItsSettings(t *testing.T) {
+	srv := newRichProviderServerAs(t, func(c control.SessionAPI) control.SessionAPI { return midTurn{c} })
+
+	resp := postProvider(t, srv.URL, "/providers/edit", `{
+		"name":"rich","models":["alpha","beta"],"default":"alpha","contextWindow":1000000
+	}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		b, _ := readAllString(resp)
+		t.Fatalf("POST /providers/edit mid-turn = %d, want 409: %s", resp.StatusCode, b)
+	}
+	var got struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Code != "provider.saved_while_running" {
+		t.Fatalf("code = %q, want provider.saved_while_running", got.Code)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, _ := cfg.Provider("rich")
+	if entry.ContextWindow != 1000000 {
+		t.Fatalf("window on disk = %d — the refusal said it was saved, so it has to be", entry.ContextWindow)
+	}
+}
+
+// Unticking the model the conversation runs on is a saved edit, not a failed
+// one: there is nothing on the entry left to rebuild that conversation on.
+func TestEditProviderDroppingTheRunningModelIsStillSaved(t *testing.T) {
+	srv := newRichProviderServer(t)
+
+	resp := postProvider(t, srv.URL, "/providers/edit", `{
+		"name":"rich","models":["beta"],"default":"beta"
+	}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		b, _ := readAllString(resp)
+		t.Fatalf("POST /providers/edit without the running model = %d, want 204: %s", resp.StatusCode, b)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, _ := cfg.Provider("rich")
+	if !slices.Equal(entry.Models, []string{"beta"}) {
+		t.Fatalf("models on disk = %v, want [beta]", entry.Models)
+	}
+}
+
+// The form sends every field, so a key rotation arrives looking like a full
+// edit. The key is read per request; mid-turn it must not be answered as a
+// change the running conversation will miss.
+func TestEditProviderKeyOnlyMidTurnNeedsNoRebuild(t *testing.T) {
+	srv := newRichProviderServerAs(t, func(c control.SessionAPI) control.SessionAPI { return midTurn{c} })
+
+	resp := postProvider(t, srv.URL, "/providers/edit", `{
+		"name":"rich","baseUrl":"https://gateway.invalid/v1","apiKey":"sk-rotated",
+		"models":["alpha","beta"],"default":"alpha","vision":[],
+		"contextWindow":131072,"maxOutputTokens":0,"reasoningProtocol":"",
+		"supportedEfforts":[],"defaultEffort":"","headers":{},"extraBody":{}
+	}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		b, _ := readAllString(resp)
+		t.Fatalf("key-only edit mid-turn = %d, want 204: %s", resp.StatusCode, b)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, _ := cfg.Provider("rich")
+	if got := entry.APIKey(); got != "sk-rotated" {
+		t.Fatalf("stored key = %q, want the rotated one", got)
+	}
+}
+
+// Once the running model is off the entry, a later edit the agent binds at
+// assembly cannot reach the conversation; the answer has to say why rather
+// than report a change that never applies.
+func TestEditProviderAfterDroppingTheRunningModelSaysItIsUnlisted(t *testing.T) {
+	srv := newRichProviderServer(t)
+
+	drop := postProvider(t, srv.URL, "/providers/edit", `{"name":"rich","models":["beta"],"default":"beta"}`)
+	drop.Body.Close()
+	if drop.StatusCode != http.StatusNoContent {
+		t.Fatalf("dropping the running model = %d, want 204", drop.StatusCode)
+	}
+	resp := postProvider(t, srv.URL, "/providers/edit", `{
+		"name":"rich","models":["beta"],"default":"beta","contextWindow":1000000
+	}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		b, _ := readAllString(resp)
+		t.Fatalf("editing the window after the drop = %d, want 409: %s", resp.StatusCode, b)
+	}
+	var got struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Code != "provider.saved_model_unlisted" {
+		t.Fatalf("code = %q, want provider.saved_model_unlisted", got.Code)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, _ := cfg.Provider("rich")
+	if entry.ContextWindow != 1000000 {
+		t.Fatalf("window on disk = %d — the refusal said it was saved, so it has to be", entry.ContextWindow)
+	}
+}
+
+func idleTimeoutOf(t *testing.T, name string) int {
+	t.Helper()
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := cfg.Provider(name)
+	if !ok {
+		t.Fatalf("provider %q went missing", name)
+	}
+	return entry.IdleTimeoutSeconds
+}
+
+func TestEditProviderStoresTheIdleTimeoutAndListsIt(t *testing.T) {
+	srv := newRichProviderServer(t)
+	for _, want := range []int{1, 90, 32767} {
+		resp := postProvider(t, srv.URL, "/providers/edit", fmt.Sprintf(
+			`{"name":"rich","models":["alpha"],"default":"alpha","vision":[],"idleTimeoutSeconds":%d}`, want))
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent {
+			t.Fatalf("idleTimeoutSeconds=%d: status = %d", want, resp.StatusCode)
+		}
+		if got := idleTimeoutOf(t, "rich"); got != want {
+			t.Fatalf("stored %d, want %d", got, want)
+		}
+	}
+	listed, err := http.Get(srv.URL + "/providers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listed.Body.Close()
+	var rows []struct {
+		Name               string `json:"name"`
+		IdleTimeoutSeconds int    `json:"idleTimeoutSeconds"`
+		IdleTimeoutDefault int    `json:"idleTimeoutDefault"`
+	}
+	if err := json.NewDecoder(listed.Body).Decode(&rows); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		if r.Name == "rich" && r.IdleTimeoutDefault != 300 {
+			t.Fatalf("listed idleTimeoutDefault = %d, want the kernel's 300", r.IdleTimeoutDefault)
+		}
+		if r.Name == "rich" && r.IdleTimeoutSeconds != 32767 {
+			t.Fatalf("listed idleTimeoutSeconds = %d, want 32767", r.IdleTimeoutSeconds)
+		}
+	}
+}
+
+func TestEditProviderZeroIdleTimeoutMeansTheDefault(t *testing.T) {
+	srv := newRichProviderServer(t)
+	postProvider(t, srv.URL, "/providers/edit", `{"name":"rich","models":["alpha"],"default":"alpha","vision":[],"idleTimeoutSeconds":45}`).Body.Close()
+	resp := postProvider(t, srv.URL, "/providers/edit", `{"name":"rich","models":["alpha"],"default":"alpha","vision":[],"idleTimeoutSeconds":0}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", resp.StatusCode)
+	}
+	if got := idleTimeoutOf(t, "rich"); got != 0 {
+		t.Fatalf("stored %d, want 0 (the default)", got)
+	}
+}
+
+func TestEditProviderRefusesAnIdleTimeoutOutOfRange(t *testing.T) {
+	srv := newRichProviderServer(t)
+	postProvider(t, srv.URL, "/providers/edit", `{"name":"rich","models":["alpha"],"default":"alpha","vision":[],"idleTimeoutSeconds":45}`).Body.Close()
+	for _, bad := range []string{"-1", "32768", "1.5", `"abc"`} {
+		resp := postProvider(t, srv.URL, "/providers/edit", `{"name":"rich","models":["alpha"],"default":"alpha","vision":[],"idleTimeoutSeconds":`+bad+`}`)
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("idleTimeoutSeconds=%s: status = %d, want 400", bad, resp.StatusCode)
+		}
+		var reason Reason
+		_ = json.NewDecoder(resp.Body).Decode(&reason)
+		resp.Body.Close()
+		if bad == "-1" || bad == "32768" {
+			if reason.Code != "provider.bad_idle_timeout" {
+				t.Fatalf("idleTimeoutSeconds=%s: code = %q, want provider.bad_idle_timeout", bad, reason.Code)
+			}
+		}
+		if got := idleTimeoutOf(t, "rich"); got != 45 {
+			t.Fatalf("a refused edit changed the stored value to %d", got)
+		}
+	}
+}
+
+func TestEditProviderLeavesTheIdleTimeoutAloneWhenUnsent(t *testing.T) {
+	srv := newRichProviderServer(t)
+	postProvider(t, srv.URL, "/providers/edit", `{"name":"rich","models":["alpha"],"default":"alpha","vision":[],"idleTimeoutSeconds":45}`).Body.Close()
+	postProvider(t, srv.URL, "/providers/edit", `{"name":"rich","models":["alpha"],"default":"alpha","vision":[]}`).Body.Close()
+	if got := idleTimeoutOf(t, "rich"); got != 45 {
+		t.Fatalf("an unsent field was cleared: %d", got)
+	}
+}
+
+func TestIdleTimeoutChangeReachesTheRunningConversation(t *testing.T) {
+	a, b := &config.ProviderEntry{Name: "x", BaseURL: "u"}, &config.ProviderEntry{Name: "x", BaseURL: "u", IdleTimeoutSeconds: 60}
+	if assemblyShape(a) == assemblyShape(b) {
+		t.Fatal("the idle timeout is bound at assembly, so changing it must count as a change that needs a rebuild")
+	}
+}
+
+func TestEditProviderStillRefusesNegativeLimitsAndAcceptsAZeroWindow(t *testing.T) {
+	srv := newRichProviderServer(t)
+	for field, code := range map[string]string{"contextWindow": "provider.bad_context_window", "maxOutputTokens": "provider.bad_max_output_tokens"} {
+		resp := postProvider(t, srv.URL, "/providers/edit",
+			fmt.Sprintf(`{"name":"rich","models":["alpha"],"default":"alpha","vision":[],%q:-1}`, field))
+		var reason Reason
+		_ = json.NewDecoder(resp.Body).Decode(&reason)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest || reason.Code != code {
+			t.Fatalf("%s=-1: status %d code %q, want 400 %s", field, resp.StatusCode, reason.Code, code)
+		}
+	}
+	resp := postProvider(t, srv.URL, "/providers/edit", `{"name":"rich","models":["alpha"],"default":"alpha","vision":[],"contextWindow":0}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("a zero window turns compaction off and must be accepted, got %d", resp.StatusCode)
+	}
+}
+
+func richModelEntry(t *testing.T) *config.ProviderEntry {
+	t.Helper()
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := cfg.ResolveModel("rich/alpha")
+	if !ok {
+		t.Fatal("rich/alpha does not resolve")
+	}
+	return entry
+}
+
+func storedKind(t *testing.T, name string) string {
+	t.Helper()
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := cfg.Provider(name)
+	if !ok {
+		t.Fatalf("provider %q went missing", name)
+	}
+	return entry.Kind
+}
+
+// withIdleProvider adds a source nothing is running on, so an edit to it is a
+// plain save and does not need the test controller to speak every wire.
+func withIdleProvider(t *testing.T) {
+	t.Helper()
+	f, err := os.OpenFile(config.UserConfigPath(), os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	const idle = "\n[[providers]]\nname = \"idle\"\nkind = \"openai\"\nbase_url = \"https://idle.invalid/v1\"\nmodels = [\"m1\"]\ndefault = \"m1\"\ncontext_window = 131072\napi_key_env = \"IDLE_API_KEY\"\n"
+	if _, err := f.WriteString(idle); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEditProviderChangesTheProtocolAndKeepsTheRest(t *testing.T) {
+	srv := newRichProviderServer(t)
+	withIdleProvider(t)
+
+	resp := postProvider(t, srv.URL, "/providers/edit", `{"name":"idle","kind":"anthropic","models":["m1"],"default":"m1"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		b, _ := readAllString(resp)
+		t.Fatalf("POST /providers/edit = %d: %s", resp.StatusCode, b)
+	}
+	if got := storedKind(t, "idle"); got != "anthropic" {
+		t.Fatalf("kind = %q, want anthropic", got)
+	}
+	cfg, _ := config.Load()
+	entry, _ := cfg.Provider("idle")
+	if entry.ContextWindow != 131072 || entry.APIKeyEnv != "IDLE_API_KEY" {
+		t.Fatalf("the protocol change cost the entry its other fields: %+v", entry)
+	}
+}
+
+func TestEditProviderLeavesTheProtocolAloneWhenUnsent(t *testing.T) {
+	srv := newRichProviderServer(t)
+
+	resp := postProvider(t, srv.URL, "/providers/edit", `{"name":"rich","models":["alpha"],"default":"alpha"}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("POST /providers/edit = %d", resp.StatusCode)
+	}
+	if got := storedKind(t, "rich"); got != "openai" {
+		t.Fatalf("kind = %q, want openai", got)
+	}
+}
+
+func TestEditProviderRefusesAProtocolItCannotSwitchTo(t *testing.T) {
+	srv := newRichProviderServer(t)
+
+	for name, kind := range map[string]string{
+		"an unknown wire":                  "carrier-pigeon",
+		"a decision wire on a chat source": "typesafe",
+	} {
+		resp := postProvider(t, srv.URL, "/providers/edit", fmt.Sprintf(`{"name":"rich","kind":%q,"models":["alpha"],"default":"alpha"}`, kind))
+		var body struct {
+			Code string `json:"code"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnprocessableEntity || body.Code != "provider.kind_unsupported" {
+			t.Errorf("%s: status %d code %q, want 422 provider.kind_unsupported", name, resp.StatusCode, body.Code)
+		}
+		if got := storedKind(t, "rich"); got != "openai" {
+			t.Errorf("%s: kind = %q, the refused edit was written", name, got)
+		}
+	}
+}
+
+func TestEditProviderKindChangeRebuildsTheRunningConversation(t *testing.T) {
+	srv := newRichProviderServer(t)
+
+	resp := postProvider(t, srv.URL, "/providers/edit", `{"name":"rich","kind":"anthropic","models":["alpha","beta"],"default":"alpha"}`)
+	var body struct {
+		Code string `json:"code"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	resp.Body.Close()
+	if body.Code != "runtime.rebuild_failed" {
+		t.Fatalf("code = %q (status %d), want a rebuild attempt: the test runtime cannot build an anthropic provider", body.Code, resp.StatusCode)
+	}
+	if got := storedKind(t, "rich"); got != "anthropic" {
+		t.Fatalf("kind = %q, the edit must be saved before the rebuild", got)
+	}
+}
+
+func TestEditProviderRefusesAProtocolChangeOnAPinnedEndpoint(t *testing.T) {
+	srv := newRichProviderServer(t)
+	withIdleProvider(t)
+	f, err := os.OpenFile(config.UserConfigPath(), os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = f.WriteString("\n[[providers]]\nname = \"pinned\"\nkind = \"openai\"\nbase_url = \"https://p.invalid/v1\"\nrequest_url = \"https://p.invalid/v1/chat/completions\"\nmodels = [\"m1\"]\ndefault = \"m1\"\napi_key_env = \"P_API_KEY\"\n")
+	f.Close()
+
+	resp := postProvider(t, srv.URL, "/providers/edit", `{"name":"pinned","kind":"anthropic","models":["m1"],"default":"m1"}`)
+	var body struct {
+		Code string `json:"code"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict || body.Code != "provider.kind_pinned_endpoint" {
+		t.Fatalf("status %d code %q, want 409 provider.kind_pinned_endpoint", resp.StatusCode, body.Code)
+	}
+	if got := storedKind(t, "pinned"); got != "openai" {
+		t.Fatalf("kind = %q, the refused edit was written", got)
+	}
+	same := postProvider(t, srv.URL, "/providers/edit", `{"name":"pinned","kind":"openai","models":["m1"],"default":"m1"}`)
+	same.Body.Close()
+	if same.StatusCode != http.StatusNoContent {
+		t.Fatalf("an unchanged protocol on a pinned endpoint = %d, want 204", same.StatusCode)
+	}
+}
+
+func TestEditProviderStoresTheCanonicalProtocolName(t *testing.T) {
+	srv := newRichProviderServer(t)
+	withIdleProvider(t)
+	resp := postProvider(t, srv.URL, "/providers/edit", `{"name":"idle","kind":"dashscope-responses","models":["m1"],"default":"m1"}`)
+	resp.Body.Close()
+	if got := storedKind(t, "idle"); resp.StatusCode != http.StatusNoContent || got != "responses" {
+		t.Fatalf("status %d kind %q, want the canonical responses", resp.StatusCode, got)
+	}
 }

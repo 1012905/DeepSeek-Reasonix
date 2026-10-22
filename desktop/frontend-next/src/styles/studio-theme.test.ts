@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 const CSS = import.meta.glob("./studio.css", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+const ROWS = import.meta.glob("./treerows.css", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 const MARKER = "Theme token closure";
 
 describe("the Studio shell closes over the active theme", () => {
@@ -11,6 +12,18 @@ describe("the Studio shell closes over the active theme", () => {
   it("keeps the compatibility layer last so prototype literals cannot win later", () => {
     expect(at).toBeGreaterThan(0);
     expect(css.slice(at + MARKER.length)).not.toContain(MARKER);
+  });
+
+  it("shares plain reading surfaces and weight with foundation palettes", () => {
+    expect(css).toContain(':root[data-theme="light"]:not([data-bg]) {');
+    expect(css).toContain(':root[data-theme="light"]:not([data-bg]):not([data-weight]) {');
+  });
+
+  it("previews the default from its own palette even while a pack is active", () => {
+    const preview = css.match(/\.pal\[data-value=""\] \.pal-art\s*\{([^}]*)\}/s)?.[1] ?? "";
+    for (const name of ["page", "surface", "panel", "border", "text", "dim", "accent"]) {
+      expect(preview).toContain(`--pal-${name}: var(--default-${name})`);
+    }
   });
 
   it("covers every persistent product surface", () => {
@@ -29,17 +42,13 @@ describe("the Studio shell closes over the active theme", () => {
     }
   });
 
-  // Selection was a 4% darkening of the surface, invisible under a theme pack:
-  // the open conversation read as unselected. It is the same short bar a
-  // running row gets, in the theme's accent. The row itself stays a plain
-  // surface — a filled one is the loudest thing in the list at any saturation.
-  it("marks the open conversation with a bar, not a filled row", () => {
-    const selected = closure.match(/\.rail \.sessrow\[aria-selected="true"\]\s*\{([^}]*)\}/s)?.[1] ?? "";
-    expect(selected).toContain("var(--overlay)");
-    expect(selected).not.toContain("var(--accent)");
-    expect(selected).toContain("box-shadow: none");
-    const css = Object.values(CSS)[0];
-    expect(css).toMatch(/\.rail \.sessrow\[aria-selected="true"\]::before/);
+  it("gives selection a stronger neutral fill than hover and no extra bar", () => {
+    const rows = Object.values(ROWS)[0];
+    expect(rows).toMatch(/\.sessrow\[aria-selected="true"\][^{]*\{[^}]*var\(--text\) 13%/);
+    expect(rows).toMatch(/\.sessrow\[aria-selected="true"\]:not\(:focus-visible\)[^{]*\{[^}]*outline: 1px solid/);
+    expect(rows).toMatch(/\.sessrow:hover[^{]*\{[^}]*var\(--text\) 4%/);
+    expect(rows).not.toContain("inset 2px");
+    expect(Object.values(CSS)[0]).not.toMatch(/\.sessrow\[aria-selected="true"\]::before/);
   });
 
   // The scale is the reader's size and weight, not a literal: a pack states
@@ -47,18 +56,19 @@ describe("the Studio shell closes over the active theme", () => {
   it("pins the composer to the Studio type scale even when a theme pack is active", () => {
     expect(closure).toMatch(/\.compose textarea\s*\{[^}]*font:\s*var\(--w-reg\) var\(--read\)\/1\.65 var\(--ui\)/s);
     expect(closure).toMatch(/\.compose textarea::placeholder\s*\{[^}]*font:\s*inherit/s);
-    expect(closure).toMatch(/\.compose \.queue\s*\{[^}]*font:\s*500 10px\/1\.35 var\(--ui\)/s);
-    expect(closure).toMatch(/\.compose \.mode,[\s\S]*?font-size:\s*11px !important/s);
+    expect(closure).toMatch(/\.compose \.queue\s*\{[^}]*font:\s*500 calc\(10px \* var\(--fs-scale, 1\)\)\/1\.35 var\(--ui\)/s);
+    expect(closure).toMatch(/\.compose \.mode,[\s\S]*?font-size:\s*calc\(11px \* var\(--fs-scale, 1\)\) !important/s);
   });
 
   it("keeps the sidebar brand on the same title-bar row as the chrome", () => {
     expect(closure).toMatch(/\.studio-brand\s*\{[^}]*height:\s*var\(--chrome-h\)/s);
-    expect(closure).toMatch(/\.studio-collapse\s*\{[^}]*width:\s*30px[^}]*height:\s*30px/s);
+    expect(css).toMatch(/\.studio-menu\s*\{[^}]*position:\s*fixed[^}]*width:\s*30px[^}]*height:\s*30px/s);
   });
 
-  it("gives light-theme run data and composer metrics their own readable surfaces", () => {
-    expect(closure).toMatch(/\.studio-meterrail\s*\{[^}]*background:\s*color-mix\([^}]*var\(--surface\)/s);
-    expect(closure).toMatch(/:root\[data-theme="light"\] \.studio-meterrail\s*\{[^}]*var\(--float\)/s);
+  it("gives light-theme run data readable surfaces and leaves the composer metrics unframed", () => {
+    const rails = [...closure.matchAll(/(?:^|\})\s*((?::root\[data-theme="light"\] )?\.studio-meterrail)\s*\{([^}]*)\}/g)];
+    expect(rails.length).toBeGreaterThan(0);
+    for (const [, , body] of rails) expect(body).not.toMatch(/\b(border|background|box-shadow|backdrop-filter)\s*:/);
     expect(closure).toMatch(/\.scroll\[data-pane="analysis"\]\s*\{[^}]*background:\s*transparent/s);
     expect(closure).toMatch(/\.run-budget, \.run-signals, \.run-rounds\s*\{[^}]*background:[^}]*var\(--raised\)/s);
   });

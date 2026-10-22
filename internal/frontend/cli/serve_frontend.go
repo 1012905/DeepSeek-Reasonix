@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"net"
 	"net/http"
@@ -16,10 +17,13 @@ import (
 	"syscall"
 
 	"reasonix/internal/base/i18n"
+	"reasonix/internal/base/secrets"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/surface"
+	"reasonix/internal/ext/mcpsetup"
 	"reasonix/internal/frontend/serve"
+	"reasonix/internal/frontend/termrender"
 	"reasonix/internal/platform/telemetry"
 	"reasonix/internal/session/control"
 )
@@ -35,6 +39,7 @@ type serveHost interface {
 	RunGracefulListener(ctx context.Context, ln net.Listener) error
 	StartRecoveryGC(ctx context.Context)
 	EnableProviderSetupForListener(addr string) bool
+	AllowHost(host string)
 }
 
 // runServe exposes the controller's HTTP and SSE frontend.
@@ -61,10 +66,16 @@ type serveFrontendOptions struct {
 	pidFile     string
 	openBrowser bool
 	hasSession  bool
+	// publicURL is what a phone opens to reach this server, when that is not
+	// the bound address: a TLS proxy's origin, say.
+	publicURL string
 	// brokered is a serve whose provider credentials come from the machine that
 	// started it. It holds none of its own, so anything reading them here fails
 	// by design rather than because something is wrong.
 	brokered bool
+	// launchTokenPath names the file holding the launch token, so the
+	// terminal shows a path rather than the secret.
+	launchTokenPath string
 }
 
 type serveFrontendResources struct {
@@ -131,6 +142,7 @@ func (r *serveFrontendResources) release(closeListener bool) {
 }
 
 func runServeFrontend(ctrl *control.Controller, srv serveHost, cfg config.ServeConfig, opts serveFrontendOptions) int {
+	warnHeldProjectServers(os.Stderr, ctrl)
 	resources, err := prepareServeFrontend(opts)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
@@ -138,6 +150,15 @@ func runServeFrontend(ctrl *control.Controller, srv serveHost, cfg config.ServeC
 	}
 	defer resources.release(false)
 	srv.EnableProviderSetupForListener(resources.displayAddr)
+	if public, err := url.Parse(strings.TrimSpace(opts.publicURL)); err == nil && public.Hostname() != "" {
+		srv.AllowHost(public.Hostname())
+	}
+	if srv.AuthMode() == "none" || srv.AuthMode() == "token" {
+		if opts.launchTokenPath, err = launchTokenLocation(srv.AuthToken(), opts, resources); err != nil {
+			fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
+			return 1
+		}
+	}
 	reportServeFrontend(ctrl, srv, cfg, resources.displayAddr, opts)
 	// Not for a brokered kernel: its credentials live on the machine that
 	// started it, so this fails by design into a log only opened during a
@@ -150,19 +171,32 @@ func runServeFrontend(ctrl *control.Controller, srv serveHost, cfg config.ServeC
 
 func reportServeFrontend(ctrl *control.Controller, srv serveHost, cfg config.ServeConfig, address string, opts serveFrontendOptions) {
 	fmt.Printf("reasonix %s — %s on http://%s\n", opts.command, ctrl.Label(), address)
-	if srv.AuthMode() == "token" {
-		fmt.Println("  auth: token")
-		// Supervised Serve already owns the token file, so avoid logging its value.
-		if opts.portFile != "" && opts.tokenFile != "" {
-			fmt.Printf("  share: http://%s/ (token in %s)\n", address, opts.tokenFile)
-		} else {
-			fmt.Printf("  share: http://%s/#token=%s\n", address, url.QueryEscape(srv.AuthToken()))
-		}
-	} else if srv.AuthMode() == "password" {
-		fmt.Printf("  auth: password (login at http://%s/login)\n", address)
+	origin := "http://" + address
+	if public := strings.TrimRight(strings.TrimSpace(opts.publicURL), "/"); public != "" {
+		origin = public
+	}
+	reportServeAuth(os.Stdout, srv.AuthMode(), origin, opts.launchTokenPath)
+	supervised := opts.portFile != "" && opts.tokenFile != ""
+	if !supervised && isTTY(os.Stdout) && termrender.ANSIConsoleReady() {
+		reportShareQR(os.Stdout, srv.AuthMode(), srv.AuthToken(), address, opts.publicURL)
 	}
 	if warning := serve.PlainHTTPAuthWarning(cfg, address); warning != "" {
 		fmt.Fprintf(os.Stderr, "  %s\n", warning)
+	}
+}
+
+// reportServeAuth names the file holding the launch token, never the token: a
+// sandboxed command can read back a terminal multiplexer's scrollback.
+func reportServeAuth(w io.Writer, mode, origin, tokenPath string) {
+	switch mode {
+	case "token":
+		fmt.Fprintln(w, "  auth: token")
+		fmt.Fprintf(w, "  share: %s/#token=<token> (token in %s)\n", origin, tokenPath)
+	case "password":
+		fmt.Fprintf(w, "  auth: password (login at %s/login)\n", origin)
+	case "none":
+		fmt.Fprintln(w, "  auth: none (changes and approvals still require the launch token)")
+		fmt.Fprintf(w, "  approvals: %s/#token=<token> (token in %s)\n", origin, tokenPath)
 	}
 }
 
@@ -199,9 +233,9 @@ func serveFrontendLoop(ctrl *control.Controller, srv serveHost, resources *serve
 		serveErr = runServeListenerAfterReady(ctx, srv, resources.listener, resources.displayAddr, func() {
 			browserURL, err := launchWebBrowser(srv, resources.displayAddr, sessionID)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "  browser: could not open %s — %v\n", browserURL, err)
+				fmt.Fprintf(os.Stderr, "  browser: could not open %s — %v\n", withoutFragment(browserURL), err)
 			} else {
-				fmt.Printf("  browser: %s\n", browserURL)
+				fmt.Printf("  browser: %s\n", withoutFragment(browserURL))
 			}
 		})
 	} else {
@@ -221,7 +255,8 @@ func runServeWithOptions(args []string, opts serveRunOptions) int {
 	fs := flag.NewFlagSet(opts.command, flag.ContinueOnError)
 	model := fs.String("model", "", "provider name (default: config default_model)")
 	profileFlag := fs.String("profile", "", "deprecated: use --preset (economy|balanced|delivery)")
-	presetFlag := fs.String("preset", "balanced", "agent execution setting: light | balanced | delivery")
+	presetFlag := fs.String("preset", "balanced", presetFlagUsage())
+	agentComposition := fs.String("agent-composition", "", "Agent composition ID (builtin:, user: or project:)")
 	maxSteps := fs.Int("max-steps", 0, "one-off max tool-call rounds (0 = automatic)")
 	addr := fs.String("addr", "127.0.0.1:8787", "listen address")
 	resume := fs.String("resume", "", "resume a saved session file")
@@ -229,7 +264,7 @@ func runServeWithOptions(args []string, opts serveRunOptions) int {
 	if opts.command == "web" {
 		sessionID = fs.String("session-id", "", "bind a fresh Web session identity (used by /web handoff)")
 	}
-	authHelp := "auth mode: none, token, or password (default: config/none)"
+	authHelp := "auth mode: none, token, or password (default: config, else a generated token; none still requires the token for changes)"
 	if opts.command == "web" {
 		authHelp = "auth mode: none, token, or password (default: generated token)"
 	}
@@ -238,10 +273,15 @@ func runServeWithOptions(args []string, opts serveRunOptions) int {
 	password := fs.String("password", "", "password for auth=password (use --hash-password to store a hash instead)")
 	hashPassword := fs.Bool("hash-password", false, "print a bcrypt hash of --password and exit")
 	behindProxy := fs.Bool("behind-proxy", false, "trust X-Forwarded-For / X-Forwarded-Proto headers from a reverse proxy")
+	publicURL := fs.String("public-url", "", "the address a phone opens to reach this server, e.g. https://agent.example.com behind a TLS proxy; used for the share link and its QR code")
 	portFile := fs.String("port-file", "", "write the actual bound listen address (host:port) to this file after binding")
 	tokenFile := fs.String("token-file", "", "read the auth=token pre-shared token from this file (overrides --token; keeps the secret out of argv)")
 	pidFile := fs.String("pid-file", "", "write the server process id to this file")
 	page := fs.String("page", "", "directory holding a built Studio page, served under /_studio/ (default: look beside the binary)")
+	// The project this server works in. Every other verb takes it from the
+	// shared run flags; serve did not, and without it the only way to name a
+	// project was the process working directory.
+	dir := fs.String("dir", "", "change to this directory first (project root); config, sandbox and file tools resolve from here")
 	broker := registerBrokerFlags(fs)
 	openBrowser := fs.Bool("open", opts.openBrowser, "open the Web UI in the default browser")
 	noOpen := fs.Bool("no-open", false, "do not open the Web UI in the default browser")
@@ -264,9 +304,13 @@ func runServeWithOptions(args []string, opts serveRunOptions) int {
 			return 2
 		}
 	}
+	workspaceRoot, code := enterProjectDir(*dir)
+	if code != 0 {
+		return code
+	}
 	profileRaw := strings.TrimSpace(*profileFlag)
 	if profileRaw != "" {
-		fmt.Fprintln(os.Stderr, "warning: --profile is deprecated; use --preset light|balanced|delivery")
+		warnProfileDeprecated()
 	} else {
 		profileRaw = strings.TrimSpace(*presetFlag)
 	}
@@ -294,46 +338,12 @@ func runServeWithOptions(args []string, opts serveRunOptions) int {
 	})
 
 	// Build serve config, merging CLI flags over config file.
-	serveCfg := serveConfigWithCommandDefaults(opts.command, authExplicit, cfg.Serve)
-	// `reasonix web` is a local browser entry point and defaults to a freshly
-	// generated token. `reasonix serve` keeps its existing config-driven default,
-	// and an explicit --auth always wins for both commands.
-	if *auth != "" {
-		serveCfg.AuthMode = *auth
-	}
-	if *token != "" {
-		serveCfg.Token = *token
-	}
-	if *tokenFile != "" {
-		tok, err := readServeTokenFile(*tokenFile)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
-			return 1
-		}
-		serveCfg.Token = tok
-	}
-	if *behindProxy {
-		serveCfg.BehindProxy = true
-	}
-	mode, err := serve.NormalizeAuthMode(serveCfg.AuthMode)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
-		return 1
-	}
-	serveCfg.AuthMode = mode
-	if *password != "" && serveCfg.AuthMode == "password" {
-		// Hash the password at startup so the config never stores plaintext.
-		// If a PasswordHash is already set in config, the CLI password overrides it.
-		h, err := serve.HashPassword(*password)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, "failed to hash password:", err)
-			return 1
-		}
-		serveCfg.PasswordHash = h
-	}
-	if serveCfg.AuthMode == "password" && strings.TrimSpace(serveCfg.PasswordHash) == "" {
-		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, "auth mode password requires --password or serve.password_hash")
-		return 1
+	serveCfg, code := serveConfigFromFlags(opts.command, authExplicit, cfg.Serve, serveFlagValues{
+		auth: *auth, token: *token, tokenFile: *tokenFile,
+		password: *password, behindProxy: *behindProxy,
+	})
+	if code != 0 {
+		return code
 	}
 
 	// Own the active session file for the server's lifetime; the serve
@@ -372,7 +382,12 @@ func runServeWithOptions(args []string, opts serveRunOptions) int {
 	// rebuilds this controller in place before the normal web UI is exposed.
 	paneSink := reporter.Wrap(bc)
 	ctrl, err := setupProfileWithOverrides(ctx, *model, *maxSteps, false, paneSink, profile, cliBuildOverrides{
-		Version: opts.version, OnSessionRecovered: cliSessionRecoveredHandler(leases),
+		AgentComposition: freshCompositionName(*agentComposition, resumeSession), Composition: resumedComposition(resumeSession),
+		NativeSurfaces: true,
+		// The project named on the command line, empty when there was none: boot
+		// then falls back to the working directory exactly as before.
+		WorkspaceRoot: workspaceRoot,
+		Version:       opts.version, OnSessionRecovered: cliSessionRecoveredHandler(leases),
 		ProviderResolver: providerResolver,
 	})
 	if err != nil {
@@ -382,7 +397,6 @@ func runServeWithOptions(args []string, opts serveRunOptions) int {
 	defer ctrl.Close()
 	SetTaskJobKiller(ctrlKillerAdapter{ctrl})
 
-	// Auto-save target: reuse the resumed file, else a fresh one — same as chat.
 	if *resume != "" {
 		_ = ctrl.Resume(resumeSession, *resume)
 	} else if *sessionID != "" {
@@ -403,14 +417,80 @@ func runServeWithOptions(args []string, opts serveRunOptions) int {
 
 	// A hub, so this frontend drives several sessions at once the way the studio
 	// window does. The session this command was started for is the first pane.
-	hub := serve.NewHub(serve.HubOptions{Serve: serveCfg, DecorateSink: reporter.Wrap, ProviderResolver: providerResolver, Page: pageOrWarn(*page)})
+	hub := serve.NewHub(serve.HubOptions{Serve: serveCfg, NativeSurfaces: true, DecorateSink: reporter.Wrap, ProviderResolver: providerResolver, Page: pageOrWarn(*page)})
 	adoptFirstPane(hub, ctrl, bc, paneSink, serveCfg, leases)
 	return runServeFrontend(ctrl, hub, serveCfg, serveFrontendOptions{
 		command: opts.command, address: *addr,
 		portFile: *portFile, tokenFile: *tokenFile, pidFile: *pidFile,
 		openBrowser: *openBrowser && !*noOpen, brokered: providerResolver != nil,
 		hasSession: *resume != "" || *sessionID != "",
+		publicURL:  *publicURL,
 	})
+}
+
+// applyServePassword settles password auth before anything is served: a
+// --password is hashed at startup so the config never holds plaintext, and
+// overrides a configured hash; password mode with neither refuses to start.
+func applyServePassword(serveCfg *config.ServeConfig, password string) int {
+	if password != "" && serveCfg.AuthMode == "password" {
+		h, err := serve.HashPassword(password)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, "failed to hash password:", err)
+			return 1
+		}
+		serveCfg.PasswordHash = h
+	}
+	if serveCfg.AuthMode == "password" && strings.TrimSpace(serveCfg.PasswordHash) == "" {
+		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, "auth mode password requires --password or serve.password_hash")
+		return 1
+	}
+	return 0
+}
+
+// serveFlagValues are the serve flags whose effect lands on the serve config
+// rather than on the frontend.
+type serveFlagValues struct {
+	auth        string
+	token       string
+	tokenFile   string
+	password    string
+	behindProxy bool
+}
+
+// serveConfigFromFlags merges the serve flags over the config file. Both
+// commands default to a freshly generated token, an explicit --auth wins, and
+// serve also honours a configured auth_mode. A token read from a file replaces
+// --token and is registered as a host secret so it stays out of argv.
+func serveConfigFromFlags(command string, authExplicit bool, base config.ServeConfig, flags serveFlagValues) (config.ServeConfig, int) {
+	serveCfg := serveConfigWithCommandDefaults(command, authExplicit, base)
+	if flags.auth != "" {
+		serveCfg.AuthMode = flags.auth
+	}
+	if flags.token != "" {
+		serveCfg.Token = flags.token
+	}
+	if flags.tokenFile != "" {
+		tok, err := readServeTokenFile(flags.tokenFile)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
+			return serveCfg, 1
+		}
+		serveCfg.Token = tok
+		secrets.RegisterHostSecretPath(flags.tokenFile)
+	}
+	if flags.behindProxy {
+		serveCfg.BehindProxy = true
+	}
+	mode, err := serve.NormalizeAuthMode(serveCfg.AuthMode)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
+		return serveCfg, 1
+	}
+	serveCfg.AuthMode = mode
+	if code := applyServePassword(&serveCfg, flags.password); code != 0 {
+		return serveCfg, code
+	}
+	return serveCfg, 0
 }
 
 // pageOrWarn resolves the built Studio page this serve mounts under
@@ -434,4 +514,17 @@ func adoptFirstPane(hub *serve.Hub, ctrl *control.Controller, bc *serve.Broadcas
 	srv.SetPaneSink(paneSink)
 	_ = srv.SetSessionLeases(leases) // same live keeper was bound above
 	_, _ = hub.Adopt(srv, bc)
+}
+
+// warnHeldProjectServers says on stderr which project servers this serve holds
+// off and how to let one run: a headless host has no settings screen to show it.
+func warnHeldProjectServers(w io.Writer, ctrl *control.Controller) {
+	if ctrl == nil {
+		return
+	}
+	for _, p := range ctrl.PendingMCPApprovals() {
+		name := mcpsetup.DisplayName(p.Name)
+		fmt.Fprintf(w, "warning: MCP server %q: %s; run `reasonix mcp enable %s` to approve the command shown. command: %s\n",
+			name, p.Reason.Text(), name, p.Launch)
+	}
 }

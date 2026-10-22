@@ -95,11 +95,13 @@ func RunProbesWithOptions(ctx context.Context, commands []string, opts ProbeOpti
 	key := probeFingerprint(commands, opts)
 	now := probeNow()
 	if results, ok := cachedProbeResults(key, now); ok && reusableHere(results, opts.DenyRoots) {
+		adoptSnapshot(opts.SnapshotDir, key, results, now)
 		return results
 	}
 	if call, ok := beginProbe(key); ok {
 		<-call.done
 		if reusableHere(call.results, opts.DenyRoots) {
+			adoptSnapshot(opts.SnapshotDir, key, call.results, now)
 			return cloneProbeResults(call.results)
 		}
 		// Someone else's answer ran something this workspace will not. Its own
@@ -377,7 +379,7 @@ func FormatSection(results []ProbeResult, osName, shellPath string, overrides ma
 	}
 	b.WriteString("- OS: " + osName + "\n")
 	if shellPath != "" {
-		b.WriteString("- Shell: " + redactHome(shellPath) + "\n")
+		b.WriteString("- Shell used by the bash tool: " + redactHome(shellPath) + "\n")
 	}
 	if len(overrides) > 0 {
 		b.WriteString("\nConfigured tools:\n")

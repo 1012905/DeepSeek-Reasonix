@@ -7,8 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"reasonix/internal/base/testenv"
+
 	"reasonix/internal/state/history"
 	"reasonix/internal/state/historycatalog"
+	"reasonix/internal/state/stats"
 )
 
 // isolateConfigHome redirects user config and cache paths to a per-test temp
@@ -29,12 +32,23 @@ func isolateConfigHome(t *testing.T) string {
 	return dir
 }
 
+// statedBootHome is a Reasonix home a test hands Build as Options.Home rather
+// than installing in the process, so the test leaves the environment alone and
+// may run in parallel. Cleanup closes no process-wide catalog: none lives here.
+func statedBootHome(t *testing.T) string {
+	t.Helper()
+	return testenv.TempDir(t)
+}
+
 func closeBootTestHistoryCatalog(t *testing.T) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testenv.Budget(t))
 	defer cancel()
 	if err := history.CloseSharedCatalog(ctx); err != nil {
 		t.Fatalf("close shared history catalog: %v", err)
+	}
+	if err := stats.CloseUsageCatalogs(ctx); err != nil {
+		t.Fatalf("close usage catalogs: %v", err)
 	}
 }
 

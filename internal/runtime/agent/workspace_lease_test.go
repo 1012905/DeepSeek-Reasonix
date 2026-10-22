@@ -39,9 +39,10 @@ func (*workspaceLeaseTestHooks) PostToolUseFailure(context.Context, string, json
 func (*workspaceLeaseTestHooks) PostLLMCall(_ context.Context, reasoning string, _ int) string {
 	return reasoning
 }
-func (*workspaceLeaseTestHooks) HasPostLLMCall() bool                      { return false }
-func (*workspaceLeaseTestHooks) SubagentStop(context.Context, string)      {}
-func (*workspaceLeaseTestHooks) PreCompact(context.Context, string) string { return "" }
+func (*workspaceLeaseTestHooks) HasPostLLMCall() bool                                   { return false }
+func (*workspaceLeaseTestHooks) SubagentStart(context.Context, string, json.RawMessage) {}
+func (*workspaceLeaseTestHooks) SubagentStop(context.Context, string, string, error)    {}
+func (*workspaceLeaseTestHooks) PreCompact(context.Context, string) string              { return "" }
 
 func (t *workspaceLeaseTestTool) Name() string        { return t.name }
 func (t *workspaceLeaseTestTool) Description() string { return t.name }
@@ -60,7 +61,7 @@ func deliveryLeaseTestAgent(t *testing.T, owner *workspacelease.Owner, tools ...
 	for _, candidate := range tools {
 		reg.Add(candidate)
 	}
-	a := New(nil, reg, sessionstore.NewSession(""), Options{DeliveryProfile: true, WorkspaceLease: owner}, event.Discard)
+	a := New(nil, reg, sessionstore.NewSession(""), Options{DeliveryProfile: true, WorkspaceLease: owner, CheckTargetAccess: allowTestFileAccess}, event.Discard)
 	a.turn.deliveryCriteriaEstablished = true
 	a.setTodoState([]evidence.TodoItem{{Content: "mutate", Status: "in_progress"}})
 	return a
@@ -138,4 +139,68 @@ func TestDeniedDeliveryWriterDoesNotAcquireWorkspaceLease(t *testing.T) {
 
 func providerToolCall(id, name string) provider.ToolCall {
 	return provider.ToolCall{ID: id, Name: name, Arguments: `{}`}
+}
+
+type yieldingWriter struct {
+	workspaceLeaseTestTool
+	owner      *workspacelease.Owner
+	heldDuring bool
+	// asking makes the yield the call's own question to a person, made from the
+	// context the call runs under; otherwise it is some other wait.
+	asking bool
+}
+
+func (w *yieldingWriter) Execute(ctx context.Context, args json.RawMessage) (string, error) {
+	yieldCtx := context.Background()
+	if w.asking {
+		yieldCtx = ctx
+	}
+	resume := w.owner.Yield(yieldCtx)
+	w.heldDuring = w.owner.State().Acquired
+	_, _ = resume(ctx)
+	return w.workspaceLeaseTestTool.Execute(ctx, args)
+}
+
+func TestWriterKeepsItsClaimAgainstAYieldWhileItExecutes(t *testing.T) {
+	root, locks := testenv.TempDir(t), testenv.TempDir(t)
+	owner, err := workspacelease.New(root, locks, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := &yieldingWriter{workspaceLeaseTestTool: workspaceLeaseTestTool{name: "yield_writer"}, owner: owner}
+	a := deliveryLeaseTestAgent(t, owner, w)
+	owner.BeginRun()
+	defer owner.EndRun()
+	if outcome := a.executeOne(context.Background(), &a.turn, providerToolCall("w", w.Name())); outcome.errMsg != "" {
+		t.Fatalf("writer outcome = %+v", outcome)
+	}
+	if !w.heldDuring {
+		t.Fatal("a yield gave the claim back under a tool that was still writing")
+	}
+	resume := owner.Yield(context.Background())
+	if owner.State().Acquired {
+		t.Fatal("the claim stayed counted as in flight after the call returned")
+	}
+	_, _ = resume(context.Background())
+}
+
+func TestWriterThatAsksBeforeWritingGivesItsClaimBackWhileItWaits(t *testing.T) {
+	root, locks := testenv.TempDir(t), testenv.TempDir(t)
+	owner, err := workspacelease.New(root, locks, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := &yieldingWriter{workspaceLeaseTestTool: workspaceLeaseTestTool{name: "asking_writer"}, owner: owner, asking: true}
+	a := deliveryLeaseTestAgent(t, owner, w)
+	owner.BeginRun()
+	defer owner.EndRun()
+	if outcome := a.executeOne(context.Background(), &a.turn, providerToolCall("w", w.Name())); outcome.errMsg != "" {
+		t.Fatalf("writer outcome = %+v", outcome)
+	}
+	if w.heldDuring {
+		t.Fatal("a call waiting on a person before it wrote kept the workspace claim from every other session")
+	}
+	if !owner.State().Acquired {
+		t.Fatal("the call was not put back under the claim once it was answered")
+	}
 }

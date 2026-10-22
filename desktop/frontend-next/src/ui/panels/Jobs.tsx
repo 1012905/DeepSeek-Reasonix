@@ -1,9 +1,21 @@
 import { useEffect, useState } from "react";
 import { t } from "../../i18n";
 import type { JobEntry } from "../../port/port";
+import { StudioIcon } from "../StudioIcon";
+import { JobName, jobName } from "./JobName";
 
-export function Jobs({ jobs }: { jobs: JobEntry[] }) {
+// How an ended job finished, by the kernel's status: only "done" is a success,
+// and a job someone stopped is neither a success nor a fault.
+const ENDED: Record<string, { label: string; tone: string }> = {
+  done: { label: "已完成", tone: "var(--ok)" },
+  failed: { label: "失败", tone: "var(--err)" },
+  killed: { label: "已停止", tone: "var(--faint)" },
+  interrupted: { label: "已中断", tone: "var(--faint)" },
+};
+
+export function Jobs({ jobs, onCancel, onView }: { jobs: JobEntry[]; onCancel?: (id: string) => Promise<void>; onView?: (id: string) => void }) {
   const [, tick] = useState(0);
+  const [stopping, setStopping] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     if (!jobs.some((j) => j.status === "running")) return;
@@ -25,15 +37,44 @@ export function Jobs({ jobs }: { jobs: JobEntry[] }) {
       <div className="jobs">
         {jobs.map((j) => {
           const running = j.status === "running";
+          const ended = ENDED[j.status];
           return (
-            <div className="job" key={j.id} data-done={running ? undefined : ""}>
+            <div className="job" key={j.id} data-done={running ? undefined : ""} data-status={j.status}>
               <i
                 className="pip"
-                data-settled={running ? undefined : ""}
-                style={running ? { background: "var(--net)", animation: "tick 1.6s ease-in-out infinite" } : undefined}
+                style={running ? { background: "var(--net)", animation: "tick 1.6s ease-in-out infinite" } : { background: ended?.tone ?? "var(--faint)" }}
               />
-              <span className="cmd">{j.label || j.id}</span>
-              <span className="rt">{running ? `${Math.floor((Date.now() - j.startedAt) / 1000)}s` : j.status}</span>
+              <JobName job={j}>
+                {running && onView ? (
+                  <button type="button" className="cmd job-view" data-action="job.view" data-target={j.id} aria-label={t("查看输出：{cmd}", { cmd: jobName(j) })} onClick={() => onView(j.id)}>
+                    {jobName(j)}
+                  </button>
+                ) : (
+                  <span className="cmd" tabIndex={0}>{jobName(j)}</span>
+                )}
+              </JobName>
+              <span className="rt">{running ? `${Math.floor((Date.now() - j.startedAt) / 1000)}s` : ended ? t(ended.label) : j.status}</span>
+              {running && onCancel && (
+                <button
+                  type="button"
+                  className="job-stop"
+                  data-action="job.cancel"
+                  data-target={j.id}
+                  disabled={stopping.has(j.id)}
+                  title={t("停止")}
+                  aria-label={t("停止后台任务：{cmd}", { cmd: jobName(j) })}
+                  onClick={() => {
+                    setStopping((prev) => new Set(prev).add(j.id));
+                    void onCancel(j.id).finally(() => setStopping((prev) => {
+                      const next = new Set(prev);
+                      next.delete(j.id);
+                      return next;
+                    }));
+                  }}
+                >
+                  <StudioIcon name="stop" />
+                </button>
+              )}
             </div>
           );
         })}

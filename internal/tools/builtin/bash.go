@@ -6,14 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -35,38 +32,10 @@ const (
 
 func init() { tool.RegisterBuiltin(bash{}) }
 
-var bashShellPATH = cachedBashShellPATH
-
 var (
 	bashSandboxCommand             = sandbox.Command
 	bashSandboxEscapePromptEnabled = func() bool { return runtime.GOOS == "windows" }
 )
-
-// cachedBashShellPATH memoizes the login-shell PATH probe per login shell so a
-// shell isn't spawned on every bash tool call (the probe runs up to three
-// interactive-login shells with a 2s timeout each). Empty results are cached too,
-// so a host without a usable login shell doesn't re-probe each command.
-var (
-	bashPathMu    sync.Mutex
-	bashPathCache = map[string]string{}
-)
-
-func cachedBashShellPATH(ctx context.Context) string {
-	key := loginShell()
-	bashPathMu.Lock()
-	if v, ok := bashPathCache[key]; ok {
-		bashPathMu.Unlock()
-		return v
-	}
-	bashPathMu.Unlock()
-
-	v := defaultBashShellPATH(ctx)
-
-	bashPathMu.Lock()
-	bashPathCache[key] = v
-	bashPathMu.Unlock()
-	return v
-}
 
 // bash runs a shell command. sb, when it enforces, wraps the command in an OS
 // sandbox; the zero value registered at init runs unconfined and is overridden
@@ -103,6 +72,7 @@ type bashParams struct {
 	PreserveBackgroundProcesses bool   `json:"preserve_background_processes"`
 	TimeoutSeconds              int    `json:"timeout_seconds"`
 	Verifies                    string `json:"verifies"`
+	Description                 string `json:"description"`
 }
 
 func (bash) Name() string { return "bash" }
@@ -156,7 +126,7 @@ func (b bash) resolved() sandbox.Shell {
 }
 
 func (bash) Schema() json.RawMessage {
-	return json.RawMessage(`{"type":"object","properties":{"command":{"type":"string","description":"Shell command to execute"},"run_in_background":{"type":"boolean","description":"Run detached: returns a job id immediately and keeps running across turns (no foreground timeout). Read new output with bash_output, wait with wait, stop it with kill_shell. Use for long-running commands like servers, watchers, or builds you don't need to block on."},"preserve_background_processes":{"type":"boolean","description":"After the shell command exits normally, keep any process-group members it intentionally left behind. Use only for deliberate daemonization, browser/GUI/session launchers such as playwright-cli open, or nohup/disown/setsid; cancellation and timeouts still kill the process group."},"timeout_seconds":{"type":"integer","description":"Deadline for this foreground call. Only tightens the host cap — a larger value is clamped to it. Output collected before the deadline is still returned, so set it low when a command's cost is unpredictable (a broad filesystem walk, a network fetch) instead of paying the full cap to find out. For work that legitimately runs long, use run_in_background.","minimum":1},"verifies":{"type":"string","description":"Name what this call decides (e.g. \"balances.json keys are sorted\") to record it as a check. The exit status becomes the verdict, so the command must be one command or an && chain; a ';', a pipe, or '||' hands the status to something else and the call is refused."}},"required":["command"]}`)
+	return json.RawMessage(`{"type":"object","properties":{"command":{"type":"string","description":"Shell command to execute"},"description":{"type":"string","description":"Optional short name for this call, in the user's language, shown in task lists."},"run_in_background":{"type":"boolean","description":"Run detached: returns a job id immediately and keeps running across turns (no foreground timeout). Read new output with bash_output, wait with wait, stop it with kill_shell. Use for long-running commands like servers, watchers, or builds you don't need to block on."},"preserve_background_processes":{"type":"boolean","description":"After the shell command exits normally, keep any process-group members it intentionally left behind. Use only for deliberate daemonization, browser/GUI/session launchers such as playwright-cli open, or nohup/disown/setsid; cancellation and timeouts still kill the process group."},"timeout_seconds":{"type":"integer","description":"Deadline for this foreground call. Only tightens the host cap — a larger value is clamped to it. Output collected before the deadline is still returned, so set it low when a command's cost is unpredictable (a broad filesystem walk, a network fetch) instead of paying the full cap to find out. For work that legitimately runs long, use run_in_background.","minimum":1},"verifies":{"type":"string","description":"Name what this call decides (e.g. \"balances.json keys are sorted\") to record it as a check. The exit status becomes the verdict, so the command must be one command or an && chain; a ';', a pipe, or '||' hands the status to something else and the call is refused."}},"required":["command"]}`)
 }
 
 // ReadOnly is false: bash's effect cannot be inferred from args (rm, curl,
@@ -201,10 +171,6 @@ func (b bash) ExecuteDetailed(ctx context.Context, args json.RawMessage) (tool.D
 	if p.Command == "" {
 		return notRun(ex, start, fmt.Errorf("command is required"))
 	}
-	if err := b.refuseExternalRef(p.Command); err != nil {
-		return notRun(ex, start, err)
-	}
-
 	sh := b.resolved()
 	if !sh.SupportsChaining() && (hasUnquotedSeq(p.Command, "&&") || hasUnquotedSeq(p.Command, "||")) {
 		return notRun(ex, start, fmt.Errorf("this shell is Windows PowerShell, which does not parse '&&' or '||'. "+
@@ -215,16 +181,13 @@ func (b bash) ExecuteDetailed(ctx context.Context, args json.RawMessage) (tool.D
 	// Pin the session-private temporary generation before any launch path so
 	// foreground, background, and host-terminal runs share one directory, and
 	// so a failed start still releases the lease.
-	prepared, probe, lease, err := b.prepareLaunch(ctx, sh, p, args)
+	prepared, probe, lease, err := b.prepareGuardedLaunch(ctx, sh, p, args)
 	if err != nil {
-		ex.State = tool.ShellStateNotRun
-		ex.FailurePhase = tool.ShellPhaseAuthorization
+		phase := tool.ShellPhaseAuthorization
 		if errors.Is(err, errSessionTemp) {
-			ex.FailurePhase = tool.ShellPhaseLaunch
+			phase = tool.ShellPhaseLaunch
 		}
-		ex.MutationRisk = tool.ShellMutationNotStarted
-		ex.DurationMs = time.Since(start).Milliseconds()
-		return tool.DetailedResult{Execution: ex}, err
+		return refusedBeforeLaunch(ex, start, phase, err)
 	}
 	nul := armNULWatch(runtime.GOOS, sh, b.workDir)
 	// Background jobs take ownership of the lease until the job goroutine ends.
@@ -243,7 +206,7 @@ func (b bash) ExecuteDetailed(ctx context.Context, args json.RawMessage) (tool.D
 	// would leak the credentials the user asked to strip), and never for
 	// background jobs. ok=false falls back to local execution unchanged.
 	if b.terminal != nil && !p.RunInBackground && !b.sb.Enforce() && !secrets.FilterSubprocessEnv() {
-		envMap := sandbox.SessionTempEnvMap(prepared.SessionTemp, prepared.LinuxSandboxed)
+		envMap := shellEnvMap(b.sb.ShellEnv, sandbox.SessionTempEnvMap(prepared.SessionTemp, prepared.LinuxSandboxed))
 		if out, ok, termErr := b.terminal.RunCommand(ctx, p.Command, b.workDir, b.foregroundTimeout(p.TimeoutSeconds), envMap); ok {
 			out = appendSessionDataHint(appendSessionDataHint(out, b.guard.CommandHint(b.workDir, p.Command)), nul.note())
 			applyTerminalResult(ex, termErr)
@@ -253,7 +216,10 @@ func (b bash) ExecuteDetailed(ctx context.Context, args json.RawMessage) (tool.D
 	}
 
 	argv, wrapped := prepared.Argv, prepared.Wrapped
-	cmdEnv := applyEnvOverrides(bashCommandEnv(ctx), prepared.EnvOverrides)
+	cmdEnv := applyEnvOverrides(shellrun.CommandEnv(ctx), append(shellEnvOverrides(b.sb.ShellEnv), prepared.EnvOverrides...))
+	if err := checkCommandLine(argv); err != nil {
+		return refusedBeforeLaunch(ex, start, tool.ShellPhasePreflight, err)
+	}
 
 	if p.RunInBackground {
 		jm, ok := jobs.FromContext(ctx)
@@ -285,8 +251,9 @@ func (b bash) ExecuteDetailed(ctx context.Context, args json.RawMessage) (tool.D
 			if shouldReapAfterRun(jobCtx, sh, p.Command, p.PreserveBackgroundProcesses) {
 				reapShellProcess(cmd, tracked) // reap process-group stragglers the job left running (#3702)
 			}
-			return "", normalizeBashRunError(jobCtx, runErr, p.PreserveBackgroundProcesses)
-		})
+			b.writeEgressNote(out, prepared.EgressToken)
+			return "", jobExit(normalizeBashRunError(jobCtx, runErr, p.PreserveBackgroundProcesses))
+		}, jobs.WithPresentation(p.Description, p.Command))
 		msg := fmt.Sprintf("Started background job %q. It keeps running across turns; read new output with bash_output(job_id=%q), wait for it with wait, or stop it with kill_shell(job_id=%q).", job.ID, job.ID, job.ID)
 		// Background start is not a completed execution: completion is reported
 		// later by bash_output/wait. Do not masquerade as success with exit 0.
@@ -303,7 +270,7 @@ func (b bash) ExecuteDetailed(ctx context.Context, args json.RawMessage) (tool.D
 	mergeRunInto(ex, runEx)
 	ex.DurationMs = time.Since(start).Milliseconds()
 	return tool.DetailedResult{
-		Output:    appendSessionDataHint(appendSessionDataHint(out, b.guard.CommandHint(b.workDir, p.Command)), nul.note()),
+		Output:    appendSessionDataHint(appendSessionDataHint(b.confinementNotes(out, wrapped, prepared.EgressToken), b.guard.CommandHint(b.workDir, p.Command)), nul.note()),
 		Execution: ex,
 	}, err
 }
@@ -423,6 +390,10 @@ func (b bash) prepareLaunch(ctx context.Context, sh sandbox.Shell, p bashParams,
 		prepared.LinuxSandboxed = false
 		prepared.EnvOverrides = sandbox.SessionTempEnv(sessionDir, false)
 	}
+	if err := refuseLinkedGitMetadata(prepared.Wrapped, spec, lease); err != nil {
+		return sandbox.Prepared{}, probe, nil, err
+	}
+	b.routeEgress(ctx, &prepared)
 	return prepared, probe, lease, nil
 }
 
@@ -439,7 +410,7 @@ func applyEnvOverrides(env, overrides []string) []string {
 		if !ok || key == "" {
 			continue
 		}
-		env = setEnvValue(env, key, value)
+		env = shellrun.SetEnvValue(env, key, value)
 	}
 	return env
 }
@@ -649,147 +620,9 @@ func commandPreview(cmd string) string {
 	return cmd
 }
 
-func bashCommandEnv(ctx context.Context) []string {
-	env := secrets.ProcessEnv()
-	if runtime.GOOS == "windows" {
-		return env
-	}
-	currentPath, _ := envValue(env, "PATH")
-	if shellPath := strings.TrimSpace(bashShellPATH(ctx)); shellPath != "" {
-		if merged := mergePathLists(shellPath, currentPath); merged != currentPath {
-			env = setEnvValue(env, "PATH", merged)
-		}
-	}
-	return env
-}
-
-func defaultBashShellPATH(ctx context.Context) string {
-	if runtime.GOOS == "windows" {
-		return ""
-	}
-	shell := loginShell()
-	if shell == "" {
-		return ""
-	}
-	const marker = "__REASONIX_BASH_PATH__="
-	script := "printf '\\n" + marker + "%s\\n' \"$PATH\""
-	for _, args := range [][]string{
-		{"-l", "-i", "-c", script},
-		{"-l", "-c", script},
-		{"-c", script},
-	} {
-		out := runShellPATHCommand(ctx, shell, args)
-		if path := parseShellPATH(out, marker); path != "" {
-			return path
-		}
-	}
-	return ""
-}
-
-func loginShell() string {
-	if shell := strings.TrimSpace(os.Getenv("SHELL")); shell != "" {
-		if hasPathSeparator(shell) {
-			if isExecutableFile(shell) {
-				return shell
-			}
-		} else if p, err := exec.LookPath(shell); err == nil {
-			return p
-		}
-	}
-	for _, shell := range []string{"/bin/zsh", "/bin/bash", "/bin/sh"} {
-		if isExecutableFile(shell) {
-			return shell
-		}
-	}
-	return ""
-}
-
-func runShellPATHCommand(parent context.Context, shell string, args []string) []byte {
-	ctx, cancel := context.WithTimeout(parent, 2*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, shell, args...)
-	// Explicit env so the login-shell probe honors [secrets]
-	// filter_subprocess_env instead of inheriting the full environment.
-	cmd.Env = secrets.ProcessEnv()
-	proc.PrepareShellPATHProbe(cmd)
-	cmd.Stdin = strings.NewReader("")
-	out, _ := cmd.CombinedOutput()
-	return out
-}
-
-func parseShellPATH(out []byte, marker string) string {
-	lines := strings.Split(strings.ReplaceAll(string(out), "\r\n", "\n"), "\n")
-	for _, line := range slices.Backward(lines) {
-		if rest, ok := strings.CutPrefix(line, marker); ok {
-			return strings.TrimSpace(rest)
-		}
-	}
-	return ""
-}
-
-func hasPathSeparator(s string) bool {
-	return strings.ContainsAny(s, `/\`)
-}
-
-func isExecutableFile(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil || info.IsDir() {
-		return false
-	}
-	return info.Mode().Perm()&0o111 != 0
-}
-
-func setEnvValue(env []string, key, value string) []string {
-	out := make([]string, 0, len(env)+1)
-	replaced := false
-	for _, kv := range env {
-		k, _, ok := strings.Cut(kv, "=")
-		if ok && envKeyEqual(k, key) {
-			if !replaced {
-				out = append(out, key+"="+value)
-				replaced = true
-			}
-			continue
-		}
-		out = append(out, kv)
-	}
-	if !replaced {
-		out = append(out, key+"="+value)
-	}
-	return out
-}
-
-func envValue(env []string, key string) (string, bool) {
-	for _, entry := range slices.Backward(env) {
-		k, v, ok := strings.Cut(entry, "=")
-		if ok && envKeyEqual(k, key) {
-			return v, true
-		}
-	}
-	return "", false
-}
-
 func envKeyEqual(a, b string) bool {
 	if runtime.GOOS == "windows" {
 		return strings.EqualFold(a, b)
 	}
 	return a == b
-}
-
-func mergePathLists(primary, secondary string) string {
-	var out []string
-	seen := map[string]bool{}
-	add := func(path string) {
-		for _, part := range filepath.SplitList(path) {
-			part = strings.TrimSpace(part)
-			if part == "" || seen[part] {
-				continue
-			}
-			seen[part] = true
-			out = append(out, part)
-		}
-	}
-	add(primary)
-	add(secondary)
-	return strings.Join(out, string(os.PathListSeparator))
 }

@@ -22,6 +22,10 @@ type Change struct {
 	Path    string `json:"path"`
 	OldPath string `json:"oldPath,omitempty"`
 	Status  string `json:"status"`
+	// Staged: the index differs from HEAD for this path. Unstaged: the work tree
+	// differs from the index, or the path is untracked. One path can be both.
+	Staged   bool `json:"staged,omitempty"`
+	Unstaged bool `json:"unstaged,omitempty"`
 	// How much the file differs by. Nil is "git did not say" — a binary file,
 	// or one nothing counted — and it stays nil rather than becoming a zero,
 	// which reads as "changed by nothing" and is a different fact.
@@ -35,22 +39,23 @@ func (c Change) Deleted() bool { return strings.Contains(c.Status, "D") }
 // Added reports whether the path is new — staged or still untracked.
 func (c Change) Added() bool { return strings.Contains(c.Status, "A") || c.Status == "??" }
 
-// Status lists the working tree's changes under root. A root that is not a git
-// repository reports ok=false rather than an error: not every workspace is
-// version-controlled, and a caller should fall back rather than show a failure.
-func Status(ctx context.Context, root string) (changes []Change, ok bool, err error) {
-	if strings.TrimSpace(root) == "" {
+// Status lists the changes under repo.Dir, the workspace repo was resolved for
+// when it opened. An unresolved repo — a workspace that is not version
+// controlled — reports ok=false rather than an error, so a caller falls back.
+func Status(ctx context.Context, repo gitcmd.Repo) (changes []Change, ok bool, err error) {
+	root := repo.Dir
+	if !repo.Valid() || strings.TrimSpace(root) == "" {
 		return nil, false, nil
 	}
-	// Porcelain paths stay repository-relative even when -C points at a
+	// Porcelain paths stay repository-relative even when run from a
 	// subdirectory, and Windows spells one directory as both an 8.3 and a long
 	// path — so take the prefix from git rather than from filepath.Rel.
-	prefixRaw, err := gitcmd.Command(ctx, "", "-C", root, "rev-parse", "--show-prefix").Output()
+	prefixRaw, err := repo.Command(ctx, "rev-parse", "--show-prefix").Output()
 	if err != nil {
-		return nil, false, nil
+		return nil, false, err
 	}
 	prefix := strings.TrimSpace(string(prefixRaw))
-	raw, err := gitcmd.Command(ctx, "", "-C", root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ".").Output()
+	raw, err := repo.Command(ctx, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ".").Output()
 	if err != nil {
 		return nil, false, err
 	}
@@ -63,15 +68,16 @@ func Status(ctx context.Context, root string) (changes []Change, ok bool, err er
 		c.OldPath = relFromPrefix(root, prefix, c.OldPath)
 		out = append(out, c)
 	}
-	countLines(ctx, root, out)
+	countLines(ctx, repo, out)
 	return out, true, nil
 }
 
 // countLines fills in how much each path differs by. Tracked paths come from
 // one numstat; git spells a binary file "-", which stays uncounted. Untracked
 // files have nothing to diff against, so their whole length is the addition.
-func countLines(ctx context.Context, root string, changes []Change) {
-	raw, err := gitcmd.Command(ctx, "", "-C", root, "diff", "--numstat", "-z", "HEAD", "--", ".").Output()
+func countLines(ctx context.Context, repo gitcmd.Repo, changes []Change) {
+	root := repo.Dir
+	raw, err := repo.Command(ctx, "diff", "--numstat", "-z", "HEAD", "--", ".").Output()
 	if err == nil {
 		byPath := ParseNumstatZ(raw)
 		for i := range changes {
@@ -94,16 +100,34 @@ func countLines(ctx context.Context, root string, changes []Change) {
 // numstat is one path's counts, either of which git may decline to give.
 type numstat struct{ added, removed *int }
 
-// ParseNumstatZ decodes `git diff --numstat -z`. Added and removed come first,
-// then the path; a rename spends two more fields on old and new.
+// ParseNumstatZ decodes `git diff --numstat -z`. A plain record is the counts
+// and the path. A rename or copy is the counts, a tab, NUL, the old path, NUL
+// and the new path; the counts are filed under the new path, which is the
+// name porcelain status reports. Trimming the record first would eat that tab
+// and make the rename look like a short line.
 func ParseNumstatZ(raw []byte) map[string]numstat {
 	out := map[string]numstat{}
-	for line := range bytes.SplitSeq(raw, []byte{0}) {
-		fields := strings.SplitN(strings.TrimSpace(string(line)), "\t", 3)
-		if len(fields) != 3 || fields[2] == "" {
+	parts := bytes.Split(raw, []byte{0})
+	for i := 0; i < len(parts); i++ {
+		if len(parts[i]) == 0 {
 			continue
 		}
-		out[fields[2]] = numstat{added: countOrNil(fields[0]), removed: countOrNil(fields[1])}
+		fields := strings.SplitN(string(parts[i]), "\t", 3)
+		if len(fields) != 3 {
+			continue
+		}
+		path := fields[2]
+		if path == "" {
+			if i+2 >= len(parts) {
+				break
+			}
+			i += 2
+			path = string(parts[i])
+			if path == "" {
+				continue
+			}
+		}
+		out[path] = numstat{added: countOrNil(fields[0]), removed: countOrNil(fields[1])}
 	}
 	return out
 }
@@ -149,6 +173,8 @@ func ParsePorcelainZ(raw []byte) []Change {
 		}
 		status := string(part[:2])
 		entry := Change{Path: string(part[3:]), Status: strings.TrimSpace(status)}
+		entry.Staged = status[0] != ' ' && status[0] != '?'
+		entry.Unstaged = status[1] != ' '
 		if strings.ContainsAny(status, "RC") && i+1 < len(parts) {
 			i++
 			entry.OldPath = string(parts[i])
@@ -223,21 +249,18 @@ func safeRel(root, rel string) (string, error) {
 // against HEAD so a staged change is included with an unstaged one. Untracked
 // files are diffed against the null device instead: they have nothing in HEAD,
 // and that is the only way git prints them without first writing to the index.
-func Diff(ctx context.Context, root, path string) (text string, truncated bool, err error) {
-	rel, err := safeRel(root, path)
+func Diff(ctx context.Context, repo gitcmd.Repo, path string) (text string, truncated bool, err error) {
+	rel, err := safeRel(repo.Dir, path)
 	if err != nil {
 		return "", false, err
 	}
-	// root goes through the dir parameter, not an "-C" argument: gitcmd hardens
-	// only a subcommand it can see at args[0], and a diff against someone else's
-	// repository is exactly the invocation those flags are for.
 	var raw []byte
-	if tracked(ctx, root, rel) {
-		raw, err = gitcmd.Command(ctx, root, "diff", "--no-color", "HEAD", "--", rel).Output()
+	if tracked(ctx, repo, rel) {
+		raw, err = repo.Command(ctx, "diff", "--no-color", "HEAD", "--", rel).Output()
 		if err != nil {
 			// A repository with no commits has no HEAD to name; everything in
 			// it is either staged or untracked.
-			raw, err = gitcmd.Command(ctx, root, "diff", "--no-color", "--", rel).Output()
+			raw, err = repo.Command(ctx, "diff", "--no-color", "--", rel).Output()
 			if err != nil {
 				return "", false, err
 			}
@@ -245,7 +268,7 @@ func Diff(ctx context.Context, root, path string) (text string, truncated bool, 
 	} else {
 		// --no-index exits 1 when the two sides differ, which is the whole
 		// point of asking. Only the output matters here.
-		raw, _ = gitcmd.Command(ctx, root, "diff", "--no-color", "--no-index", "--", os.DevNull, rel).Output()
+		raw, _ = repo.Command(ctx, "diff", "--no-color", "--no-index", "--", os.DevNull, rel).Output()
 	}
 	if len(raw) > MaxDiffBytes {
 		return string(raw[:MaxDiffBytes]), true, nil
@@ -257,6 +280,6 @@ func Diff(ctx context.Context, root, path string) (text string, truncated bool, 
 // of the two diffs above can say anything at all, so it is asked rather than
 // inferred from an empty result — an unchanged tracked file and an untracked
 // one both diff to nothing against HEAD.
-func tracked(ctx context.Context, root, rel string) bool {
-	return gitcmd.Command(ctx, root, "ls-files", "--error-unmatch", "--", rel).Run() == nil
+func tracked(ctx context.Context, repo gitcmd.Repo, rel string) bool {
+	return repo.Command(ctx, "ls-files", "--error-unmatch", "--", rel).Run() == nil
 }

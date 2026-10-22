@@ -258,11 +258,13 @@ func TestRenderTOMLRoundTrips(t *testing.T) {
 	orig.Tools.BackgroundJobs.StalledWarningSeconds = new(30)
 	orig.Tools.Shell.Prefer = "bash"
 	orig.Tools.Shell.Path = "/usr/local/bin/bash"
+	orig.Tools.Shell.Env = map[string]string{"CI": "1", "GIT_SSH_COMMAND": "ssh -i ~/.ssh/deploy"}
 	orig.Permissions = PermissionsConfig{
-		Mode:             "deny",
-		Deny:             []string{"Bash(rm -rf*)"},
-		Allow:            []string{"Bash(go test:*)", "read_file"},
-		AllowDynamicBash: true,
+		Mode:                "deny",
+		Deny:                []string{"Bash(rm -rf*)"},
+		Allow:               []string{"Bash(go test:*)", "read_file"},
+		AllowDynamicBash:    true,
+		AskOnExternalOrigin: true,
 	}
 	orig.Network = NetworkConfig{
 		ProxyMode: "custom",
@@ -451,6 +453,9 @@ func TestRenderTOMLRoundTrips(t *testing.T) {
 	}
 	if got.Tools.Shell.Path != "/usr/local/bin/bash" {
 		t.Errorf("tools.shell.path = %q, want /usr/local/bin/bash", got.Tools.Shell.Path)
+	}
+	if got.Tools.Shell.Env["CI"] != "1" || got.Tools.Shell.Env["GIT_SSH_COMMAND"] != "ssh -i ~/.ssh/deploy" {
+		t.Errorf("tools.shell.env = %v, want CI=1 and GIT_SSH_COMMAND", got.Tools.Shell.Env)
 	}
 	if g, _ := got.Provider("mimo-pro"); g == nil || g.BaseURL != "http://localhost:8000/v1" || g.ChatURL != "http://localhost:8000/v1/chat/completions" || g.RequestURL != "http://localhost:8000/custom/chat/completions/?token=1" || g.ModelsURL != "http://localhost:8000/v1/models" || g.ReasoningProtocol != "openai" {
 		t.Errorf("mimo-pro endpoint fields not preserved: %+v", g)
@@ -715,14 +720,14 @@ func TestNotificationsDefaultsKeepEventSwitchesEnabled(t *testing.T) {
 	if cfg.Notifications.Enabled {
 		t.Fatal("notifications.enabled default = true, want false")
 	}
-	if !cfg.Notifications.TurnDone || !cfg.Notifications.ApprovalRequest || !cfg.Notifications.AskRequest {
+	if !cfg.Notifications.TurnDone || !cfg.Notifications.ApprovalRequest || !cfg.Notifications.AskRequest || !cfg.Notifications.FeedbackReply {
 		t.Fatalf("notification event switches default off: %+v", cfg.Notifications)
 	}
 
 	if _, err := toml.Decode("[notifications]\nenabled = true\n", cfg); err != nil {
 		t.Fatalf("decode notifications: %v", err)
 	}
-	if !cfg.Notifications.Enabled || !cfg.Notifications.TurnDone || !cfg.Notifications.ApprovalRequest || !cfg.Notifications.AskRequest {
+	if !cfg.Notifications.Enabled || !cfg.Notifications.TurnDone || !cfg.Notifications.ApprovalRequest || !cfg.Notifications.AskRequest || !cfg.Notifications.FeedbackReply {
 		t.Fatalf("enabled-only config should keep event switches on: %+v", cfg.Notifications)
 	}
 }
@@ -741,9 +746,10 @@ func TestScopedRenderSeparatesUserAndProjectConfig(t *testing.T) {
 	c.Desktop.UpdateChannel = "preview"
 	c.Agent.RecoveryModel = "deepseek-pro"
 	c.Agent.RecoveryTemperature = 0.2
+	c.AutoSubmit = true
 
 	user := RenderTOMLForScope(c, RenderScopeUser)
-	for _, want := range []string{"config_version = 6", "[desktop]", `currency = "CNY"`, "[billing]", `display_currency = "CNY"`, `theme = "dark"`, `terminal_theme = "auto"`, `close_behavior = "background"`, `status_bar_style = "text"`, `default_tool_approval_mode = "auto"`, `check_updates = false`, `recovery_model = "deepseek-pro"`, "[notifications]", "[tools.shell]"} {
+	for _, want := range []string{"config_version = 12", "[desktop]", `currency = "CNY"`, "[billing]", `display_currency = "CNY"`, `theme = "dark"`, `terminal_theme = "auto"`, `close_behavior = "background"`, `status_bar_style = "text"`, `default_tool_approval_mode = "auto"`, `check_updates = false`, `recovery_model = "deepseek-pro"`, "auto_submit = true", "[notifications]", "[tools.shell]"} {
 		if !strings.Contains(user, want) {
 			t.Fatalf("user render missing %q:\n%s", want, user)
 		}
@@ -753,7 +759,7 @@ func TestScopedRenderSeparatesUserAndProjectConfig(t *testing.T) {
 	}
 
 	project := RenderTOMLForScope(c, RenderScopeProject)
-	for _, forbidden := range []string{"[desktop]", "[notifications]", "close_behavior =", "default_tool_approval_mode =", "default_auto_recovery_checkpoint =", "check_updates =", "update_channel =", "max_steps", "planner_max_steps"} {
+	for _, forbidden := range []string{"[desktop]", "[notifications]", "close_behavior =", "default_tool_approval_mode =", "default_auto_recovery_checkpoint =", "check_updates =", "update_channel =", "max_steps", "planner_max_steps", "auto_submit"} {
 		if strings.Contains(project, forbidden) {
 			t.Fatalf("project render should not contain %q:\n%s", forbidden, project)
 		}
@@ -836,6 +842,15 @@ func TestProjectDeltaRendersRecoveryReviewerOverride(t *testing.T) {
 	}
 }
 
+// auto_submit is a user preference, so the project delta must not carry it.
+func TestProjectDeltaOmitsUserOnlyAutoSubmit(t *testing.T) {
+	c := Default()
+	c.AutoSubmit = true
+	if delta := RenderTOMLProjectDelta(c); strings.Contains(delta, "auto_submit") {
+		t.Fatalf("project delta must not carry the user-only auto_submit:\n%s", delta)
+	}
+}
+
 func TestProjectDeltaRendersToolsShellOverrides(t *testing.T) {
 	c := Default()
 	c.Tools.Shell.Prefer = "bash"
@@ -857,6 +872,47 @@ func TestProjectDeltaRendersToolsShellOverrides(t *testing.T) {
 	}
 	if got.Tools.Shell.Prefer != "bash" || got.Tools.Shell.Path != "/usr/local/bin/bash" {
 		t.Fatalf("tools.shell = %+v, want bash with path", got.Tools.Shell)
+	}
+}
+
+func TestShellEnvRendersForUserButNotProject(t *testing.T) {
+	c := Default()
+	c.Tools.Shell.Env = map[string]string{"CI": "1"}
+
+	user := RenderTOMLForScope(c, RenderScopeUser)
+	if !strings.Contains(user, "[tools.shell.env]") || !strings.Contains(user, `CI = "1"`) {
+		t.Fatalf("user render should carry shell env:\n%s", user)
+	}
+	project := RenderTOMLForScope(c, RenderScopeProject)
+	if strings.Contains(project, "[tools.shell.env]") {
+		t.Fatalf("project render must not carry the user-global shell env:\n%s", project)
+	}
+}
+
+// A user-global env must not make every project save emit an empty [tools.shell]
+// header, which is what comparing the whole struct would do.
+func TestProjectDeltaIgnoresShellEnv(t *testing.T) {
+	c := Default()
+	c.Tools.Shell.Env = map[string]string{"CI": "1"}
+
+	if delta := RenderTOMLProjectDelta(c); strings.Contains(delta, "[tools.shell]") {
+		t.Fatalf("a user-global shell env leaked into the project delta:\n%s", delta)
+	}
+}
+
+// A key that is not a bare TOML key must be quoted, or the saved config stops
+// parsing: "a.b" would open a dotted key and "ProgramFiles(x86)" is not a key.
+func TestShellEnvRendersQuotedKeys(t *testing.T) {
+	c := Default()
+	c.Tools.Shell.Env = map[string]string{"a.b": "1", "ProgramFiles(x86)": `C:\PF`}
+
+	out := RenderTOMLForScope(c, RenderScopeUser)
+	var decoded Config
+	if _, err := toml.Decode(out, &decoded); err != nil {
+		t.Fatalf("rendered shell env does not parse: %v\n%s", err, out)
+	}
+	if decoded.Tools.Shell.Env["a.b"] != "1" || decoded.Tools.Shell.Env["ProgramFiles(x86)"] != `C:\PF` {
+		t.Fatalf("shell env round-trip = %v, want the dotted and parenthesised keys", decoded.Tools.Shell.Env)
 	}
 }
 
@@ -1539,17 +1595,125 @@ func TestEveryDesktopKeyThatCanBeSetSurvivesASave(t *testing.T) {
 func TestBrowserSettingsSurviveASave(t *testing.T) {
 	for _, scope := range []RenderScope{RenderScopeUser, RenderScopeProject} {
 		c := Default()
-		c.Browser = BrowserConfig{Enabled: false, Executable: "/opt/chromium/chrome", Headless: true}
+		shared := false
+		c.Browser = BrowserConfig{SharedEnabled: &shared, Executable: "/opt/chromium/chrome", Headless: true}
 		rendered := RenderTOMLForScope(c, scope)
 		reloaded := Default()
 		if _, err := decodeTOMLBytes([]byte(rendered), reloaded); err != nil {
 			t.Fatalf("scope %v: the config it just wrote does not parse: %v", scope, err)
 		}
-		if reloaded.Browser != c.Browser {
+		if !sameBrowserConfig(reloaded.Browser, c.Browser) {
 			t.Fatalf("scope %v: round trip = %+v, want %+v\n%s", scope, reloaded.Browser, c.Browser, rendered)
 		}
 	}
-	if d := Default(); !d.Browser.Enabled || d.Browser.Headless || d.Browser.Executable != "" {
+	if d := Default(); d.Browser.SharedEnabled != nil || d.Browser.Headless || d.Browser.Executable != "" {
 		t.Fatalf("default browser config = %+v", d.Browser)
 	}
+}
+
+func TestShowReceiptDefaultsOffAndRendersAnOnOverride(t *testing.T) {
+	c := Default()
+	if c.UI.ShowReceipt {
+		t.Fatal("ui.show_receipt must default to hidden")
+	}
+	c.UI.ShowReceipt = true
+	delta := RenderTOMLProjectDelta(c)
+	if !strings.Contains(delta, "show_receipt = true") {
+		t.Fatalf("project delta missing show_receipt:\n%s", delta)
+	}
+	got := Default()
+	if _, err := toml.Decode(delta, got); err != nil {
+		t.Fatalf("decode: %v\n%s", err, delta)
+	}
+	if !got.UI.ShowReceipt {
+		t.Fatal("ui.show_receipt did not round-trip")
+	}
+}
+
+// The user-scope writer is the path every normal save goes through, so a
+// resolver set by hand has to be in its [network] block. Written after
+// no_proxy and before [network.proxy], because a key placed after that
+// header reads as network.proxy.dns.
+func TestUserRenderKeepsDNSResolvers(t *testing.T) {
+	c := Default()
+	c.Network.DNSServers = []string{"1.1.1.1", "[fd00::1]:5353"}
+	c.Network.DoH = "https://dns.example/dns-query"
+
+	out := RenderTOMLForScope(c, RenderScopeUser)
+	if !strings.Contains(out, `dns        = ["1.1.1.1", "[fd00::1]:5353"]`) {
+		t.Fatalf("user render lost dns:\n%s", out)
+	}
+	if !strings.Contains(out, `doh        = "https://dns.example/dns-query"`) {
+		t.Fatalf("user render lost doh:\n%s", out)
+	}
+	proxy := strings.Index(out, "[network.proxy]")
+	if at := networkLineIndex(out, "dns"); at < 0 || at > proxy {
+		t.Fatalf("dns must sit in [network], before [network.proxy]:\n%s", out)
+	}
+	if at := networkLineIndex(out, "doh"); at < 0 || at > proxy {
+		t.Fatalf("doh must sit in [network], before [network.proxy]:\n%s", out)
+	}
+
+	got := Default()
+	if _, err := toml.Decode(out, got); err != nil {
+		t.Fatalf("decode: %v\n%s", err, out)
+	}
+	if !reflect.DeepEqual(got.Network.DNSServers, c.Network.DNSServers) {
+		t.Fatalf("dns round-trip = %v, want %v", got.Network.DNSServers, c.Network.DNSServers)
+	}
+	if got.Network.DoH != c.Network.DoH {
+		t.Fatalf("doh round-trip = %q, want %q", got.Network.DoH, c.Network.DoH)
+	}
+}
+
+// A project file must never carry the person's resolvers: a cloned repository
+// could otherwise redirect every lookup the process makes.
+func TestProjectRenderDropsDNSResolvers(t *testing.T) {
+	c := Default()
+	c.Network.DNSServers = []string{"1.1.1.1"}
+	c.Network.DoH = "https://dns.example/dns-query"
+
+	out := RenderTOMLForScope(c, RenderScopeProject)
+	if strings.Contains(out, "dns        =") || strings.Contains(out, "doh        =") {
+		t.Fatalf("project render carried the user's resolvers:\n%s", out)
+	}
+}
+
+// The delta writer puts the keys in [network] too, not under the proxy table.
+// A project file must never carry the person's resolvers, in either writer: a
+// cloned repository could otherwise redirect every lookup the process makes.
+func TestProjectDeltaDropsResolvers(t *testing.T) {
+	c := Default()
+	c.Network.DNSServers = []string{"1.1.1.1"}
+	c.Network.DoH = "https://dns.example/dns-query"
+
+	delta := RenderTOMLProjectDelta(c)
+	if strings.Contains(delta, "dns        =") || strings.Contains(delta, "doh        =") {
+		t.Fatalf("project delta carried the user's resolvers:\n%s", delta)
+	}
+}
+
+// The shared renderer has one [peers] table, and a change near it must not drop
+// it: the next save would silently switch messages between sessions off.
+func TestPeersSurviveRender(t *testing.T) {
+	c := Default()
+	c.Peers.Enabled = true
+	if !strings.Contains(RenderTOMLForScope(c, RenderScopeUser), "[peers]") {
+		t.Fatal("[peers] missing from the rendered config")
+	}
+}
+
+// networkLineIndex is where an uncommented `key` line starts, so a commented
+// example cannot stand in for a real setting.
+func networkLineIndex(out, key string) int {
+	for line := range strings.SplitSeq(out, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, key+" ") || strings.HasPrefix(trimmed, key+"=") {
+			return strings.Index(out, line)
+		}
+	}
+	return -1
 }

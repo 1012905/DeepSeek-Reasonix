@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MAX, search, stepped, type Hit } from "../state/find";
 import type { Item } from "../state/session";
+import { useShowsReceipt } from "../state/foldpref";
+import type { ReceiptPref } from "../state/receiptpref";
 
 const NO_HITS: Hit[] = [];
 
@@ -11,7 +13,8 @@ export interface Finding {
   focus: number;
   total: number;
   capped: boolean;
-  at: { id: string; n: number } | null;
+  // n moves on every step, so landing on the same occurrence twice is asked for.
+  at: { id: string; nth: number; n: number } | null;
   ask: (query: string) => void;
   step: (by: 1 | -1) => void;
   close: () => void;
@@ -19,10 +22,15 @@ export interface Finding {
 
 /** The find bar's whole state. pulse is the window asking; only the pane that
  *  has focus answers it, so one chord does not open a bar in every session. */
-export function useFind(items: Item[], pulse: number, active: boolean, onOpen: () => void): Finding {
+export function useFind(items: Item[], pulse: number, active: boolean, onOpen: () => void, pref?: ReceiptPref, togglePulse = 0): Finding {
   const [held, setHeld] = useState<{ q: string; i: number; focus: number } | null>(null);
-  const hits = useMemo(() => (held ? search(items, held.q) : NO_HITS), [items, held]);
-  const at = held && hits.length > 0 ? hits[Math.min(held.i, hits.length - 1)] : null;
+  const receipts = useShowsReceipt(pref);
+  const hits = useMemo(() => (held ? search(items, held.q, receipts) : NO_HITS), [items, held, receipts]);
+  const i = held ? Math.min(held.i, hits.length - 1) : -1;
+  const at = i >= 0 ? hits[i] : null;
+  // Hits come in reading order, so a row's occurrences sit together.
+  let nth = 0;
+  while (at && i - nth > 0 && hits[i - nth - 1].id === at.id) nth++;
 
   const [nonce, setNonce] = useState(0);
   useEffect(() => {
@@ -38,6 +46,20 @@ export function useFind(items: Item[], pulse: number, active: boolean, onOpen: (
     setHeld((was) => (was ? { ...was, focus: was.focus + 1 } : { q: "", i: 0, focus: 1 }));
   }, [pulse, active, onOpen]);
 
+  // The title bar button is a switch: the same press that opens the bar closes it.
+  const seenToggle = useRef(0);
+  useEffect(() => {
+    if (togglePulse === seenToggle.current) return;
+    seenToggle.current = togglePulse;
+    if (!togglePulse || !active) return;
+    if (held) {
+      setHeld(null);
+      return;
+    }
+    onOpen();
+    setHeld({ q: "", i: 0, focus: 1 });
+  }, [togglePulse, active, held, onOpen]);
+
   const total = hits.length;
   const ask = useCallback((q: string) => setHeld((was) => ({ q, i: 0, focus: was?.focus ?? 0 })), []);
   const step = useCallback((by: 1 | -1) => setHeld((was) => (was ? { ...was, i: stepped(was.i, total, by) } : was)), [total]);
@@ -50,7 +72,7 @@ export function useFind(items: Item[], pulse: number, active: boolean, onOpen: (
     focus: held?.focus ?? 0,
     total,
     capped: total >= MAX,
-    at: at ? { id: at.id, n: nonce } : null,
+    at: at ? { id: at.id, nth, n: nonce } : null,
     ask,
     step,
     close,

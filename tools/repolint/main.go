@@ -51,10 +51,11 @@ const (
 var allRules = []string{
 	ruleEssay, ruleBanner, ruleMarker, ruleDeadCode,
 	ruleNarrative, ruleFileSize, ruleLayering, ruleLayerOrder,
-	ruleFuncSize, ruleComplexity, ruleStructState, ruleRefusalPath, ruleErrorText,
+	ruleFuncSize, ruleComplexity, ruleStructState, ruleRefusalPath, ruleErrorText, ruleWindowState,
 	ruleClaudeDialect, ruleWireParity, ruleOrphan,
 	ruleFrontendParity, ruleFlatView, ruleBuildArtifact,
 	ruleCodeOwners, ruleDocOwner, ruleDocProse, ruleDocLanguage, ruleReleaseNote,
+	ruleCSSImportant, ruleCSSSize, ruleStrayFile,
 }
 
 func main() {
@@ -187,6 +188,8 @@ func run(root string) ([]Finding, error) {
 		findings = append(findings, checkRefusalPath(src)...)
 		findings = append(findings, checkErrorText(src)...)
 		findings = append(findings, checkFlatView(src)...)
+		findings = append(findings, checkWindowState(src)...)
+		findings = append(findings, checkProcessInput(src)...)
 		orphans.observe(src)
 		wires.observe(src)
 		entries, vars := dialectRefs(src)
@@ -199,6 +202,8 @@ func run(root string) ([]Finding, error) {
 	findings = append(findings, checkLayerOrder(imports)...)
 	findings = append(findings, checkBuildArtifacts(root)...)
 	findings = append(findings, checkCodeOwners(root)...)
+	findings = append(findings, checkCSS(root)...)
+	findings = append(findings, checkStrayFiles(root)...)
 	findings = append(findings, checkDocs(root)...)
 	findings = append(findings, wires.findings(root)...)
 	findings = append(findings, checkTransientTagParity(root)...)

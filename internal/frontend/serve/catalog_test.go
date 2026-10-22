@@ -18,7 +18,7 @@ import (
 
 func fetchSlash(t *testing.T, ctrl *control.Controller) []slashEntry {
 	t.Helper()
-	srv := httptest.NewServer(New(ctrl, NewBroadcaster(), config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, NewBroadcaster(), config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/slash")
@@ -77,7 +77,7 @@ func TestSlashCommandShadowsSameNamedSkill(t *testing.T) {
 func TestMcpWithoutHostReturnsEmptyList(t *testing.T) {
 	ctrl := control.New(control.Options{})
 	defer ctrl.Close()
-	srv := httptest.NewServer(New(ctrl, NewBroadcaster(), config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, NewBroadcaster(), config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/mcp")
@@ -110,7 +110,7 @@ func TestSkillsListsWhatSlashCannotShow(t *testing.T) {
 		},
 	})
 	defer ctrl.Close()
-	srv := httptest.NewServer(New(ctrl, NewBroadcaster(), config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, NewBroadcaster(), config.ServeConfig{})))
 	defer srv.Close()
 
 	var got struct {
@@ -155,7 +155,7 @@ func TestSkillEnabledPersists(t *testing.T) {
 		Skills: []skill.Skill{{Name: "audit", Scope: skill.ScopeBuiltin}},
 	})
 	defer ctrl.Close()
-	srv := httptest.NewServer(New(ctrl, NewBroadcaster(), config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, NewBroadcaster(), config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/skills/enabled", "application/json",
@@ -186,7 +186,7 @@ func TestSkillSwitchIsScopedToItsProject(t *testing.T) {
 	theirs := control.New(control.Options{Skills: skills, WorkspaceRoot: there})
 	defer theirs.Close()
 
-	srv := httptest.NewServer(New(mine, NewBroadcaster(), config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(mine, NewBroadcaster(), config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/skills/enabled", "application/json",
@@ -209,7 +209,7 @@ func TestSkillSwitchIsScopedToItsProject(t *testing.T) {
 func TestMcpAdminRejectsUnknownServer(t *testing.T) {
 	ctrl := control.New(control.Options{})
 	defer ctrl.Close()
-	srv := httptest.NewServer(New(ctrl, NewBroadcaster(), config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, NewBroadcaster(), config.ServeConfig{})))
 	defer srv.Close()
 
 	for _, tc := range []struct {
@@ -221,6 +221,9 @@ func TestMcpAdminRejectsUnknownServer(t *testing.T) {
 		{"/mcp/enabled", `{"name":"nope","enabled":true}`, http.StatusNotFound},
 		{"/mcp/enabled", `{"enabled":true}`, http.StatusBadRequest},
 		{"/mcp/reconnect", `{"name":"nope"}`, http.StatusBadGateway},
+		{"/mcp/trust", `{"name":"nope","digest":"abc"}`, http.StatusConflict},
+		{"/mcp/trust", `{"name":"nope"}`, http.StatusBadRequest},
+		{"/mcp/trust", `{}`, http.StatusBadRequest},
 	} {
 		resp, err := http.Post(srv.URL+tc.path, "application/json", strings.NewReader(tc.body))
 		if err != nil {
@@ -239,7 +242,7 @@ func TestMcpAdminRejectsUnknownServer(t *testing.T) {
 func TestMcpParsePreviewsWithoutInstalling(t *testing.T) {
 	ctrl := control.New(control.Options{})
 	defer ctrl.Close()
-	srv := httptest.NewServer(New(ctrl, NewBroadcaster(), config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, NewBroadcaster(), config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/mcp/parse", "application/json",
@@ -285,7 +288,7 @@ func TestMcpParsePreviewsWithoutInstalling(t *testing.T) {
 func TestMcpInstallRejectsDuplicateName(t *testing.T) {
 	ctrl := control.New(control.Options{})
 	defer ctrl.Close()
-	srv := httptest.NewServer(New(ctrl, NewBroadcaster(), config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, NewBroadcaster(), config.ServeConfig{})))
 	defer srv.Close()
 
 	// A command that cannot connect still exercises the pre-flight checks, and
@@ -328,6 +331,32 @@ func TestSlashOmitsHiddenCommands(t *testing.T) {
 	}
 }
 
+// A user-invocable:false skill is not typeable, so the menu must not offer it;
+// argument-hint reaches the menu as the completion hint.
+func TestSlashHonoursUserInvocableAndArgumentHint(t *testing.T) {
+	ctrl := control.New(control.Options{
+		Skills: []skill.Skill{
+			{Name: "deploy", Scope: skill.ScopeProject, InvocationFlags: skill.InvocationFlags{ArgumentHint: "[env]"}},
+			{Name: "ctx", Scope: skill.ScopeProject, InvocationFlags: skill.InvocationFlags{DisableUserInvocation: true}},
+		},
+	})
+	defer ctrl.Close()
+
+	var deploy *slashEntry
+	got := fetchSlash(t, ctrl)
+	for i, e := range got {
+		if e.Name == "ctx" {
+			t.Fatal("a user-invocable:false skill reached the slash listing")
+		}
+		if e.Name == "deploy" {
+			deploy = &got[i]
+		}
+	}
+	if deploy == nil || deploy.ArgHint != "[env]" {
+		t.Fatalf("deploy entry = %+v, want argHint [env]", deploy)
+	}
+}
+
 // The picker's whole point: manage a folder the session is not sitting in.
 // The runtime must not move, and the other project's switch must land under
 // its own identity rather than the running one's.
@@ -343,7 +372,7 @@ func TestCapabilitySwitchReachesAnotherProject(t *testing.T) {
 		WorkspaceRoot: here,
 	})
 	defer ctrl.Close()
-	srv := httptest.NewServer(New(ctrl, NewBroadcaster(), config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, NewBroadcaster(), config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/skills/enabled", "application/json",
@@ -379,7 +408,7 @@ func TestCapabilitySwitchRefusesAnUnknownProject(t *testing.T) {
 		WorkspaceRoot: testenv.TempDir(t),
 	})
 	defer ctrl.Close()
-	srv := httptest.NewServer(New(ctrl, NewBroadcaster(), config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, NewBroadcaster(), config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/skills/enabled", "application/json",
@@ -400,27 +429,6 @@ func mustJSON(t *testing.T, value string) string {
 		t.Fatal(err)
 	}
 	return string(body)
-}
-
-// A configured server with no process running is three different things, and
-// the panel used to have two words for them. The reported symptom was every
-// working server reading as "not connected" beside a Reconnect button: a
-// cache-hit server is process-idle by design, with its whole toolset callable.
-func TestAConfiguredServerSaysWhetherItIsCallableRatherThanRunning(t *testing.T) {
-	enabled := control.MCPServerState{Enabled: true}
-	off := control.MCPServerState{Enabled: false}
-
-	if got := configuredState(enabled, 12); got != "standby" {
-		t.Fatalf("enabled with 12 tools in the catalog = %q, want standby", got)
-	}
-	if got := configuredState(enabled, 0); got != "idle" {
-		t.Fatalf("enabled with nothing registered = %q, want idle", got)
-	}
-	// Switched off outranks the catalog: tools can linger a moment after the
-	// switch, and the row has to report the decision, not the leftovers.
-	if got := configuredState(off, 12); got != "disabled" {
-		t.Fatalf("switched off = %q, want disabled", got)
-	}
 }
 
 // The settings pane lists a server so the user can decide whether to keep it.
@@ -483,5 +491,39 @@ func TestServerTextIsSanitizedAndBounded(t *testing.T) {
 	long := strings.Repeat("x", mcpServerTextLimit*2)
 	if bounded := displayText(long, mcpServerTextLimit); len([]rune(bounded)) > mcpServerTextLimit+1 {
 		t.Fatalf("displayText kept %d runes, want it bounded at %d", len([]rune(bounded)), mcpServerTextLimit)
+	}
+}
+
+// A load choice lands in the user config, where the rebuilt runtime's boot
+// reads it; an unknown mode is refused with the modes that would have been
+// accepted. This controller has no model to rebuild on, so the save is followed
+// by the rebuild refusal rather than a 200.
+func TestMcpLoadWritesTheUserConfig(t *testing.T) {
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	ctrl := control.New(control.Options{})
+	defer ctrl.Close()
+	srv := httptest.NewServer(operatorHandler(New(ctrl, NewBroadcaster(), config.ServeConfig{})))
+	defer srv.Close()
+
+	for _, tc := range []struct {
+		body string
+		want int
+	}{
+		{`{"name":"ops","load":"sometimes"}`, http.StatusBadRequest},
+		{`{"load":"always"}`, http.StatusBadRequest},
+		{`{"name":"ops","load":"always"}`, http.StatusConflict},
+	} {
+		resp, err := http.Post(srv.URL+"/mcp/load", "application/json", strings.NewReader(tc.body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != tc.want {
+			t.Fatalf("POST /mcp/load %s = %d, want %d", tc.body, resp.StatusCode, tc.want)
+		}
+	}
+	cfg := config.LoadForEdit(config.UserConfigPath())
+	if cfg == nil || !cfg.MCPAlwaysLoad(config.PluginEntry{Name: "ops"}) {
+		t.Fatalf("the user config does not carry the choice: %+v", cfg)
 	}
 }

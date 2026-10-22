@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -58,8 +59,7 @@ func InstallResultForError(name string, err error) MCPInstallResult {
 		return MCPInstallResult{Name: name, State: "action_required", Action: "authorize", Message: err.Error()}
 	}
 	msg := err.Error()
-	lower := strings.ToLower(msg)
-	if strings.Contains(lower, "auth") || strings.Contains(lower, "oauth") || strings.Contains(lower, "unauthorized") || strings.Contains(lower, "forbidden") {
+	if errors.Is(err, ErrAuthenticationRequired) {
 		return MCPInstallResult{Name: name, State: "action_required", Action: "authenticate", Message: msg}
 	}
 	return MCPInstallResult{Name: name, State: "issue", Action: "retry", Message: msg}
@@ -92,7 +92,7 @@ func (h *Host) InstallAndConnectWithLifecycle(lifeCtx, callCtx context.Context, 
 	// Persist schema so the next session registers tools without reconnect UX.
 	_ = SaveCachedSchema(spec.Name, CachedSchema{
 		CacheKey:     SchemaCacheKey(spec),
-		Capabilities: map[string]bool{"tools": len(tools) > 0},
+		Capabilities: h.cachedCapabilities(spec.Name, len(tools) > 0),
 		Instructions: h.serverInstructions(spec.Name),
 		Tools:        cacheableToolsOf(tools),
 	})

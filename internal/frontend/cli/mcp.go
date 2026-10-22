@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	"reasonix/internal/base/secrets"
+	"reasonix/internal/base/textutil"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/ext/mcpregistry"
 	"reasonix/internal/ext/mcpsetup"
@@ -35,6 +37,10 @@ func mcpCommand(args []string) int {
 	case "list", "ls":
 		return mcpList()
 	case "add":
+		if len(args) > 1 && (args[1] == "-h" || args[1] == "--help") {
+			mcpUsage()
+			return 0
+		}
 		return mcpAddCLI(args[1:])
 	case "get":
 		return mcpGetCLI(args[1:])
@@ -47,6 +53,8 @@ func mcpCommand(args []string) int {
 	case "retry", "connect":
 		// connect remains a compatibility alias for enable/retry.
 		return mcpRetryCLI(args[1:])
+	case "trust":
+		return mcpTrustCLI(args[1:])
 	case "auth", "authorize":
 		return mcpAuthCLI(args[1:])
 	case "update":
@@ -256,6 +264,9 @@ func mcpEnableCLI(args []string, enabled bool) int {
 	}
 	if enabled {
 		fmt.Printf("enabled MCP server %q %s — tools restore from cache; process starts on first call\n", name, where)
+		if config.RepositoryDeclared(entry) {
+			fmt.Printf("  approved launch: %s\n  any change to it, or to a workspace file it names, needs `reasonix mcp enable %s` again\n", mcpsetup.LaunchLine(entry), mcpsetup.DisplayName(name))
+		}
 	} else {
 		fmt.Printf("disabled MCP server %q %s — tools removed from the catalog; authorization retained\n", name, where)
 	}
@@ -321,6 +332,7 @@ func mcpList() int {
 		return 1
 	}
 	listed := 0
+	store, root := config.DefaultActivationStore(), mcpCLIWorkspaceRoot()
 	for _, p := range cfg.Plugins {
 		typ := p.Type
 		if typ == "" {
@@ -330,11 +342,17 @@ func mcpList() int {
 		if !p.ShouldAutoStart() {
 			auto = " [auto_start=false]"
 		}
+		switch {
+		case store.ServerChanged(p, root):
+			auto += fmt.Sprintf(" [changed_since_enabled: approve with `reasonix mcp enable %s`]", mcpsetup.DisplayName(p.Name))
+		case config.RepositoryDeclared(p) && store.AwaitingDecision(p, root):
+			auto += fmt.Sprintf(" [awaiting_user_decision: approve with `reasonix mcp enable %s`]", mcpsetup.DisplayName(p.Name))
+		}
 		if typ == "stdio" {
-			line := strings.TrimSpace(p.Command + " " + strings.Join(p.Args, " "))
-			fmt.Printf("%-16s (stdio)%s  %s\n", p.Name, auto, line)
+			line := strings.TrimSpace(secrets.RedactConfigValue("", p.Command) + " " + strings.Join(secrets.RedactArgs(p.Args), " "))
+			fmt.Printf("%-16s (stdio)%s  %s\n", mcpsetup.DisplayName(p.Name), auto, textutil.SanitizeLaunch(line))
 		} else {
-			fmt.Printf("%-16s (%s)%s  %s\n", p.Name, typ, auto, p.URL)
+			fmt.Printf("%-16s (%s)%s  %s\n", mcpsetup.DisplayName(p.Name), textutil.SanitizeLaunch(typ), auto, textutil.SanitizeLaunch(redactMCPURL(p.URL)))
 		}
 		listed++
 	}
@@ -374,9 +392,9 @@ func printMCPEntry(p config.PluginEntry) {
 	fmt.Printf("name: %s\n", p.Name)
 	fmt.Printf("type: %s\n", typ)
 	if typ == "stdio" {
-		fmt.Printf("command: %s\n", p.Command)
+		fmt.Printf("command: %s\n", secrets.RedactConfigValue("", p.Command))
 		if len(p.Args) > 0 {
-			fmt.Printf("args: %s\n", strings.Join(p.Args, "\n      "))
+			fmt.Printf("args: %s\n", strings.Join(secrets.RedactArgs(p.Args), "\n      "))
 		}
 		if len(p.Env) > 0 {
 			fmt.Println("env:")
@@ -497,7 +515,8 @@ Usage:
   reasonix mcp enable <name>
   reasonix mcp disable <name>
   reasonix mcp retry <name>
-  reasonix mcp auth <name>                          remote OAuth (opens browser)
+  reasonix mcp trust <name> [--digest <hex>]    accept tool definitions held back as changed
+  reasonix mcp auth <name> [--upgrade]              remote OAuth (opens browser); --upgrade grants the access a server asked for
   reasonix mcp update <name>
   reasonix mcp browse [query] [--limit N] [--json]
   reasonix mcp import

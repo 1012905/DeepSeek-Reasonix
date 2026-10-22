@@ -16,7 +16,7 @@ import (
 // a caller uses when the rename itself is the claim: a copy would let two
 // claimants both win.
 func claimRenameForTest(src, dst string) error {
-	return replaceFile(src, dst, false)
+	return replaceFile(src, dst, false, nil)
 }
 
 func TestReplaceFileNoRetryWhenTmpMissing(t *testing.T) {
@@ -465,5 +465,78 @@ func TestClaimRenameDoesNotRetryWhenSourceIsGone(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Errorf("lost claim took %v — it retried a race it had already lost", elapsed)
+	}
+}
+
+var errBoundBytesChanged = errors.New("bound bytes changed")
+
+func TestValidatedWriteRechecksBeforeEveryRenameAttempt(t *testing.T) {
+	oldBase, oldMax, oldRename := replaceRetryBase, maxReplaceRetries, renameFile
+	replaceRetryBase, maxReplaceRetries = 0, 5
+	renameCalls := 0
+	renameFile = func(oldpath, newpath string) error {
+		renameCalls++
+		return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: errors.New("transient sharing violation")}
+	}
+	t.Cleanup(func() { replaceRetryBase, maxReplaceRetries, renameFile = oldBase, oldMax, oldRename })
+
+	dest := filepath.Join(testenv.TempDir(t), "state.json")
+	if err := os.WriteFile(dest, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	checks := 0
+	err := AtomicWriteFileStrictValidated(dest, []byte("new"), 0o644, func() error {
+		checks++
+		if checks > 1 {
+			return errBoundBytesChanged
+		}
+		return nil
+	})
+	if !errors.Is(err, errBoundBytesChanged) {
+		t.Fatalf("err = %v, want the validation failure raised inside the retry window", err)
+	}
+	if renameCalls != 1 || checks != 2 {
+		t.Fatalf("rename attempts = %d, checks = %d, want 1 and 2: a failed check must stop the retries", renameCalls, checks)
+	}
+	if b, _ := os.ReadFile(dest); string(b) != "old" {
+		t.Fatalf("dest = %q, want the old content intact", b)
+	}
+	if entries, _ := os.ReadDir(filepath.Dir(dest)); len(entries) != 1 {
+		t.Fatalf("directory holds %d entries, want only the state file (temp removed)", len(entries))
+	}
+}
+
+func TestAtomicCreateWithoutHardLinkSupport(t *testing.T) {
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("no native no-replace rename")
+	}
+	previous := createLink
+	calls := 0
+	createLink = func(string, string) error { calls++; return errors.ErrUnsupported }
+	t.Cleanup(func() { createLink = previous })
+	path := filepath.Join(testenv.TempDir(t), "new.txt")
+	if err := AtomicCreateFile(path, []byte("complete"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(path); err != nil || string(got) != "complete" || calls != 0 {
+		t.Fatalf("file=%q error=%v link calls=%d", got, err, calls)
+	}
+}
+
+func TestAtomicCreateDoesNotReplaceConcurrentFile(t *testing.T) {
+	previous := createRenameNoReplace
+	createRenameNoReplace = func(oldPath, newPath string) error {
+		if err := os.WriteFile(newPath, []byte("concurrent"), 0o600); err != nil {
+			return err
+		}
+		return os.ErrExist
+	}
+	t.Cleanup(func() { createRenameNoReplace = previous })
+	path := filepath.Join(testenv.TempDir(t), "new.txt")
+	if err := AtomicCreateFile(path, []byte("replacement"), 0o600); err == nil {
+		t.Fatal("concurrent target was replaced")
+	}
+	if got, err := os.ReadFile(path); err != nil || string(got) != "concurrent" {
+		t.Fatalf("concurrent file changed: %q error=%v", got, err)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"reasonix/internal/contract/config"
+	"reasonix/internal/ext/mcpsetup"
 	"reasonix/internal/ext/plugin"
 )
 
@@ -64,6 +65,10 @@ func (c *Controller) InstallMCPServer(e config.PluginEntry, scope MCPScope) (plu
 		if err := c.persistMCPServer(e); err != nil {
 			return plugin.MCPInstallResult{}, err
 		}
+		if err := c.confineMCPToThisProject(e, scope); err != nil {
+			c.DisconnectMCPServer(e.Name)
+			return plugin.MCPInstallResult{}, errors.Join(err, c.rollbackMCPServer(e.Name))
+		}
 		return result, nil
 	}
 	if err := c.persistMCPServer(e); err != nil {
@@ -105,6 +110,12 @@ func (c *Controller) persistMCPServer(e config.PluginEntry) error {
 	if err != nil {
 		return fmt.Errorf("保存配置: %w", err)
 	}
+	if e.Source == config.MCPSourceProjectConfig {
+		// The decision covers the declaration as the file now holds it.
+		if written, loadErr := c.configuredMCPServer(e.Name); loadErr == nil {
+			e = written
+		}
+	}
 	store := config.DefaultActivationStore()
 	if !e.ShouldAutoStart() {
 		if clearErr := store.ClearServer(e, c.workspaceRoot, config.ActivationGlobal); clearErr != nil {
@@ -137,10 +148,20 @@ type MCPServerState struct {
 	Description string
 	Tools       []plugin.ToolInfo
 	Stale       bool // the declaration changed since that cache was written
-	// Pending is a repository-declared server nobody has answered for. It is
-	// off, and a surface that shows only Enabled cannot tell that from one the
-	// user switched off — which reads as the project's MCP having vanished.
+	// Pending marks a repository-declared server awaiting launch approval;
+	// Changed, one the user enabled for a declaration it no longer holds.
 	Pending bool
+	Changed bool
+	// AlwaysLoad is what config asks for now; InSchema is whether this
+	// session's provider schema carries the server's tools, fixed at its start.
+	AlwaysLoad bool
+	InSchema   bool
+	// Held lists the tools this session's connection withheld because their
+	// definition is not the one the user approved for the server.
+	Held []plugin.HeldTool
+	// FollowsToolChanges is the user's standing choice to take this server's
+	// definition changes without being asked.
+	FollowsToolChanges bool
 }
 
 // ConfiguredMCPServers lists every configured server with its resolved
@@ -159,6 +180,7 @@ func (c *Controller) ConfiguredMCPServers() []MCPServerState {
 			local[row.Name] = true
 		}
 	}
+	inSchema := c.mcpServersInSchema()
 	out := make([]MCPServerState, 0, len(cfg.Plugins))
 	for _, p := range cfg.Plugins {
 		enabled, err := store.IsEnabled(p, c.workspaceRoot)
@@ -167,9 +189,16 @@ func (c *Controller) ConfiguredMCPServers() []MCPServerState {
 		}
 		state := MCPServerState{
 			Entry: p, Enabled: enabled, LocalOverride: local[p.Name],
-			Pending: store.AwaitingDecision(p, c.workspaceRoot),
+			Pending:    store.AwaitingDecision(p, c.workspaceRoot),
+			Changed:    store.ServerChanged(p, c.workspaceRoot),
+			AlwaysLoad: cfg.MCPAlwaysLoad(p), InSchema: inSchema[p.Name],
 		}
-		state.Description, state.Tools, state.Stale = mcpCachedFacts(c.mcpSpec(p))
+		spec := c.mcpSpec(p)
+		state.Description, state.Tools, state.Stale = mcpCachedFacts(spec)
+		state.FollowsToolChanges = plugin.ToolPinsFollow(spec)
+		if host := c.mcp.hostRef(); host != nil {
+			state.Held, _ = host.HeldTools(p.Name)
+		}
 		out = append(out, state)
 	}
 	return out
@@ -182,18 +211,51 @@ func (c *Controller) ConfiguredMCPServers() []MCPServerState {
 // its tools already callable.
 func (c *Controller) MCPCatalogTools() map[string]int { return c.mcp.catalogTools() }
 
-// approveOnExplicitConnect records the answer a person just gave. A pending
-// server is one nobody had answered for, and asking to connect it is the
-// answer; without writing it down the action connects once and the server is
-// off again next session, which reads as the button not having worked.
-func (c *Controller) approveOnExplicitConnect(entry config.PluginEntry) {
+// ErrMCPApprovalOwed is a connect asked for a project server whose declaration
+// changed since the user enabled it. Connecting by name is not an answer to
+// that: the new command has to be shown and approved through enable.
+var ErrMCPApprovalOwed = errors.New("project MCP server needs approval again")
+
+// MCPApprovalOwedError carries what the refused connect would have run.
+type MCPApprovalOwedError struct {
+	Name, Launch string
+	Reason       MCPApprovalReason
+}
+
+func (e *MCPApprovalOwedError) Error() string {
+	name := mcpsetup.DisplayName(e.Name)
+	return fmt.Sprintf("MCP server %q: %s; run `reasonix mcp enable %s` (or switch it on in Settings) to approve: %s",
+		name, e.Reason.Text(), name, e.Launch)
+}
+
+func (e *MCPApprovalOwedError) Is(target error) bool { return target == ErrMCPApprovalOwed }
+
+// approveOnExplicitConnect answers for a server a connect names. A
+// repository-declared server that is not enabled is refused with what it would
+// run: a connect by name shows no command, enable does. A waiting server from
+// the user's own files is approved by the connect, recorded for next session.
+func (c *Controller) approveOnExplicitConnect(entry config.PluginEntry) error {
 	store := config.DefaultActivationStore()
+	if config.RepositoryDeclared(entry) {
+		if enabled, err := store.IsEnabled(entry, c.workspaceRoot); err == nil && enabled {
+			return nil
+		}
+		reason := MCPApprovalAwaiting
+		switch {
+		case store.ServerChanged(entry, c.workspaceRoot):
+			reason = MCPApprovalChanged
+		case !store.AwaitingDecision(entry, c.workspaceRoot):
+			reason = MCPApprovalDisabled
+		}
+		return &MCPApprovalOwedError{Name: entry.Name, Launch: mcpsetup.LaunchLine(entry), Reason: reason}
+	}
 	if !store.AwaitingDecision(entry, c.workspaceRoot) {
-		return
+		return nil
 	}
 	if err := store.SetServerEnabled(entry, c.workspaceRoot, config.ActivationProject, true); err != nil {
 		slog.Warn("mcp: connect could not record the approval", "server", entry.Name, "err", err)
 	}
+	return nil
 }
 
 // ReconnectMCPServer retries one configured server and re-registers its tools.
@@ -204,7 +266,9 @@ func (c *Controller) ReconnectMCPServer(name string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	c.approveOnExplicitConnect(entry)
+	if err := c.approveOnExplicitConnect(entry); err != nil {
+		return 0, err
+	}
 	if h := c.mcp.hostRef(); h != nil {
 		h.ClearFailure(entry.Name)
 	}
@@ -306,7 +370,7 @@ func (c *Controller) ClearMCPServerOverride(name string, scope config.Activation
 // about its identity, so the schema cache — which is keyed on exactly these
 // fields — can be reached from a project the session is not pointed at.
 func mcpIdentitySpec(e config.PluginEntry, root string) plugin.Spec {
-	exp := e.ExpandedPlugin()
+	exp := e.ExpandedPluginForRoot(root)
 	spec := plugin.ApplyKnownOverrides(plugin.Spec{
 		Name:          exp.Name,
 		Type:          exp.Type,
@@ -315,6 +379,7 @@ func mcpIdentitySpec(e config.PluginEntry, root string) plugin.Spec {
 		Env:           exp.Env,
 		URL:           exp.URL,
 		Headers:       exp.Headers,
+		DisabledTools: append([]string(nil), exp.DisabledTools...),
 		WorkspaceRoot: root,
 		ConfigSource:  strings.TrimSpace(string(exp.Source)),
 	}, root)
@@ -335,6 +400,9 @@ func mcpCachedFacts(spec plugin.Spec) (description string, tools []plugin.ToolIn
 	}
 	tools = make([]plugin.ToolInfo, 0, len(cs.Tools))
 	for _, t := range cs.Tools {
+		if !spec.ToolEnabled(t.Name) {
+			continue
+		}
 		tools = append(tools, plugin.ToolInfo{
 			Name:            t.Name,
 			Description:     t.Description,
@@ -343,4 +411,20 @@ func mcpCachedFacts(spec plugin.Spec) (description string, tools []plugin.ToolIn
 		})
 	}
 	return cs.Instructions, tools, !keyOK
+}
+
+// mcpServersInSchema names the servers with at least one tool in this
+// session's provider schema.
+func (c *Controller) mcpServersInSchema() map[string]bool {
+	out := map[string]bool{}
+	reg := c.mcp.registry()
+	if reg == nil {
+		return out
+	}
+	for _, b := range reg.MCPBindings() {
+		if reg.ProviderVisible(b.CallableName) {
+			out[b.Server] = true
+		}
+	}
+	return out
 }

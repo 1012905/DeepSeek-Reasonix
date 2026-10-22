@@ -18,9 +18,12 @@
   <a href="https://esengine.github.io/DeepSeek-Reasonix/">Website</a>
   &nbsp;·&nbsp;
   <strong><a href="https://discord.gg/XF78rEME2D">Discord</a></strong>
+  &nbsp;·&nbsp;
+  <strong><a href="https://qm.qq.com/q/i59b0z2R8s">QQ</a></strong>
 </p>
 
 <p align="center">
+  <a href="https://github.com/esengine/DeepSeek-Reasonix/releases?q=studio-v&expanded=true"><img src="https://img.shields.io/github/v/release/esengine/DeepSeek-Reasonix.svg?filter=studio-v*&include_prereleases&style=flat-square&color=8250df&labelColor=161b22&label=studio%202.x" alt="Reasonix Studio 2.x"/></a>
   <a href="https://www.npmjs.com/package/reasonix"><img src="https://img.shields.io/npm/v/reasonix.svg?style=flat-square&color=cb3837&labelColor=161b22&logo=npm&logoColor=white" alt="npm version"/></a>
   <a href="https://github.com/esengine/DeepSeek-Reasonix/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/esengine/DeepSeek-Reasonix/ci.yml?style=flat-square&label=ci&labelColor=161b22&logo=githubactions&logoColor=white" alt="CI"/></a>
   <a href="./LICENSE"><img src="https://img.shields.io/npm/l/reasonix.svg?style=flat-square&color=8b949e&labelColor=161b22" alt="license"/></a>
@@ -30,6 +33,7 @@
   <a href="https://github.com/esengine/DeepSeek-Reasonix/graphs/contributors"><img src="https://img.shields.io/github/contributors/esengine/DeepSeek-Reasonix.svg?style=flat-square&color=bc8cff&labelColor=161b22&logo=github&logoColor=white" alt="contributors"/></a>
   <a href="https://github.com/esengine/DeepSeek-Reasonix/discussions"><img src="https://img.shields.io/github/discussions/esengine/DeepSeek-Reasonix.svg?style=flat-square&color=58a6ff&labelColor=161b22&logo=github&logoColor=white" alt="Discussions"/></a>
   <a href="https://discord.gg/XF78rEME2D"><img src="https://img.shields.io/badge/discord-join-5865F2.svg?style=flat-square&labelColor=161b22&logo=discord&logoColor=white" alt="Discord"/></a>
+  <a href="https://qm.qq.com/q/i59b0z2R8s"><img src="https://img.shields.io/badge/QQ%20group-1093562660-12B7F5.svg?style=flat-square&labelColor=161b22&logo=tencentqq&logoColor=white" alt="QQ group 1093562660"/></a>
 </p>
 
 <p align="center">
@@ -39,22 +43,92 @@
 
 <br/>
 
-<p align="center"><strong>Open source · MIT · a single Go binary</strong></p>
-<h3 align="center">A coding agent you can leave running.</h3>
-<p align="center">One local engine, four ways in — terminal, desktop app, browser, or your editor over ACP. Plan mode, permissions, a workspace sandbox and per-turn checkpoints keep a long autonomous run something you can still read and undo.</p>
-
-<div align="center">
-  <video src="https://github.com/user-attachments/assets/ab2f3878-e224-4931-8254-060e7695cfb9" controls preload="metadata" width="560"></video>
-</div>
-
-<br/>
+<p align="center"><strong>Open source · MIT · runs on your computer, model of your choice</strong></p>
+<h3 align="center">An open-source coding agent for your terminal, desktop, browser and editor.</h3>
+<p align="center">It reads your project, edits files and runs commands and tests. Have it ask before each step, or work on its own within limits you set. Files its edit tools changed can be rewound. New here? Start with the Studio desktop app.</p>
+<p align="center">Maintained by <strong>Huahui Yu</strong>.</p>
 
 > [!IMPORTANT]
 > **Community · 加入社区** — bilingual Discord for setup help (`#help` / `#求助`), workflow showcases, and feature ideas. → **<https://discord.gg/XF78rEME2D>**
+>
+> QQ group **DeepSeek-Reasonix官方群** (`1093562660`) → **<https://qm.qq.com/q/i59b0z2R8s>** ([QR code](./docs/assets/qq-group.svg))
+
+> Douyin: **做游戏的小鱼** (Douyin ID `22703872788`) · [QR code](./docs/assets/douyin.png)
 
 <br/>
 
+## ❤️Sponsor
+
+<table><tr><td width="180" align="center" valign="middle"><a href="https://www.rightapi.ai/register?aff=e083bf73" target="_blank" rel="sponsored noopener noreferrer"><img src="./.github/sponsor/rightcode.png" alt="Right Code" width="64"></a></td><td valign="middle">Thanks to Right Code for sponsoring this project! Right Code reliably provides routing services for models such as Claude Code, Codex, and Gemini, with both pay-as-you-go and monthly subscription billing options available. Invoices are available upon top-up, and enterprise and team users can receive dedicated one-on-one support. Register via <a href="https://www.rightapi.ai/register?aff=e083bf73" target="_blank" rel="sponsored noopener noreferrer">this link</a>.</td></tr><tr><td width="180" align="center" valign="middle"><a href="https://www.packyapi.ai/register?aff=rIbQ" target="_blank" rel="sponsored noopener noreferrer"><picture><source media="(prefers-color-scheme: dark)" srcset="./.github/sponsor/packycode-dark.svg"><img src="./.github/sponsor/packycode-light.svg" alt="PackyCode" width="80"></picture></a></td><td valign="middle">Thanks to PackyCode for sponsoring this project! Access leading AI models through PackyCode with one API endpoint and one API key, with automatic failover and dedicated high-speed routes for Codex and Claude Code. Register via <a href="https://www.packyapi.ai/register?aff=rIbQ" target="_blank" rel="sponsored noopener noreferrer">this link</a>.</td></tr></table>
+
+## What it is
+
+Reasonix is an open-source AI coding assistant. The program runs on your computer; the AI model is a service you configure, which receives what it reads. You describe a task in plain language; it reads code, edits files and runs commands and tests inside the project folder you choose, and shows you each step.
+
+You pick the model: a DeepSeek preset is built in, any OpenAI-compatible service is one config entry, and you pay the model provider directly.
+
+## What you get
+
+- **Read, edit, run.** It reads code, edits files and runs tests and commands, all inside your project folder.
+- **Permission levels.** Have it ask every time, or let everyday actions run on their own; your forbid rules always hold. To see the approach first, use plan mode: it starts work only once you approve.
+- **Rewind.** A file is saved before it changes, so you can rewind by conversation turn without touching your git history. Only files its edit tools changed are covered, not what a shell command did.
+
+## 30-second start
+
+Download, add a model key, open a project. New here? Start with the Studio desktop app.
+
+1. Download and install the desktop app, Reasonix Studio, from the [releases page](https://github.com/esengine/DeepSeek-Reasonix/releases?q=studio-v&expanded=true).
+2. Open it and enter your model provider and key when asked.
+3. Open your project folder and write what you want, for example "add retry on failure to the http client".
+4. At the level you chose, it stops and asks before anything that needs your say-so. Allow it to continue, or refuse.
+
+Prefer a terminal? Download the `reasonix` command-line tool, run `reasonix setup` to pick a model, then run `reasonix`. See [Install](#install) and [Quick start](#quick-start).
+
+## Four ways to use it
+
+- **Desktop app (Studio).** A graphical app; the best place to start.
+- **Terminal.** A full-screen text interface; `reasonix run "task"` also works in scripts.
+- **Browser.** `reasonix web` opens a web interface on your own machine.
+- **Editor.** Install the extension in VS Code; other editors that support ACP (Agent Client Protocol, a common way for an editor to connect to an AI assistant) can connect to `reasonix acp`.
+
+All four are the same program underneath. What follows is for advanced users and contributors.
+
+## Use it from DeepSeek Harness
+
+DeepSeek Harness (`dsh`) can hand a task to Reasonix as a subagent over ACP. This repository publishes a plugin index for it:
+
+1. Run `reasonix setup` on the machine that runs `dsh`. In the DSH Web UI turn on Custom plugin markets (Plugins, More) and add this index in the Discover tab: `https://raw.githubusercontent.com/esengine/DeepSeek-Reasonix/studio/integrations/dsh-plugin/market-index.json`
+2. Install "Reasonix subagent" from it.
+3. Open the plugin's page and turn its switch on. While it is off the model has no `reasonix` tool and may run `reasonix -p` in its own shell, which looks like a delegation and is not one.
+
+Setup details, the permission policy and limits are in [Using Reasonix from DeepSeek Harness](./docs/DSH.md).
+
+## Versions
+
+Reasonix ships on two lines. See the [version roadmap announcement](https://github.com/esengine/DeepSeek-Reasonix/discussions/10748) for the reasoning behind the split.
+
+| Line | Branch | Status | Get it |
+| --- | --- | --- | --- |
+| **Reasonix 2.x** | `studio` (this branch) | Active development | [Studio releases](https://github.com/esengine/DeepSeek-Reasonix/releases?q=studio-v&expanded=true) |
+| **Reasonix 1.x** | [`main-v2`](https://github.com/esengine/DeepSeek-Reasonix/tree/main-v2) | Maintenance / stable | `npm i -g reasonix` · [desktop download](https://reasonix.io/?download=desktop#start) |
+
+- **Want something stable?** Stay on 1.x. It keeps receiving bug fixes,
+  provider/API compatibility, updater and security fixes; its core architecture
+  is no longer being extended.
+- **Want the new architecture?** Use 2.x Reasonix Studio. It is still moving
+  quickly; reports are welcome.
+
+Valuable fixes, tests and behaviour from 1.x are reviewed one by one and ported
+or reimplemented on 2.x where they fit the new architecture.
+
+- [Moving from 1.x to 2.x](./docs/MIGRATING.md): what the two lines share, and
+  how to run both on one machine without losing sessions.
+- [2.x roadmap](./docs/ROADMAP.md): what 2.x still has to deliver, how it ships,
+  and the decisions still open.
+
 ## Features
+
+Technical highlights for advanced users.
 
 - **Config-driven.** Providers, the agent, enabled tools, and plugins are all
   declared in `reasonix.toml`. No hardcoded models.
@@ -73,53 +147,60 @@
 
 ## Install
 
-Choose the path that matches how you want to use Reasonix. The CLI/TUI,
-desktop app, and VS Code extension all use the same local Reasonix engine.
+This branch is **Reasonix 2.x**. Its desktop app is Reasonix Studio; the CLI,
+Studio, and editor integrations all run the same local Reasonix engine.
 
-### Path A: CLI / TUI
+### Reasonix Studio (2.x)
 
-Install the native binary through npm on any supported platform, or use
-Homebrew on macOS:
+Download the package for your platform from the latest
+[Studio release](https://github.com/esengine/DeepSeek-Reasonix/releases?q=studio-v&expanded=true)
+(tagged `studio-v2.*`; candidates such as `-rc.N` are marked as
+pre-releases):
+
+| Platform | Package | Architecture |
+| --- | --- | --- |
+| macOS | `.dmg` or `.zip` | Apple Silicon (`arm64`) / Intel (`amd64`) |
+| Windows | Installer `-installer.exe` or portable `.zip` | x64 |
+| Linux | `.deb`, `.rpm`, or `.AppImage` (download only) | x64 (`amd64`) / ARM64 (`arm64`, aarch64) |
+
+Every package ships with a `.minisig` signature, and the release carries
+`SHA256SUMS`. Once installed, Studio updates itself in place.
+
+The same release also carries the 2.x `reasonix` CLI as archives for
+`darwin|linux|windows × amd64|arm64`.
+
+### Reasonix 1.x (stable)
+
+The 1.x CLI installs through npm on any supported platform, or Homebrew on
+macOS:
 
 ```sh
 npm i -g reasonix                  # any OS; pulls the prebuilt native binary
 brew install esengine/reasonix/reasonix   # macOS
 ```
 
-Prebuilt archives (`darwin|linux|windows × amd64|arm64`) and `SHA256SUMS` are on
-every [GitHub release](https://github.com/esengine/DeepSeek-Reasonix/releases).
+The 1.x desktop app is on the
+[official download page](https://reasonix.io/?download=desktop#start). Windows
+installers are code-signed with a Certum code-signing certificate.
 
-### Path B: Desktop app
+### VS Code extension
 
-Use the [official download page](https://reasonix.io/?download=desktop#start)
-for the latest desktop build.
-
-| Platform | Package | Architecture |
-| --- | --- | --- |
-| macOS | Universal `.dmg` or `.zip` | Apple Silicon / Intel |
-| Windows | Installer `.exe` or portable `.zip` | x64 / ARM64 |
-| Linux | `.deb` or `.tar.gz` | x64 |
-
-Windows installers are code-signed through [SignPath.io](https://signpath.io/)
-with a free certificate provided by the [SignPath Foundation](https://signpath.org/).
-
-### Path C: VS Code extension
-
-Complete Path A first. The extension does not bundle the CLI; it starts your
-local `reasonix acp` backend and adds native chat, editor context, tool-call
-approvals, model selection, and workspace sessions.
+The extension does not bundle the CLI; it starts your local `reasonix acp`
+backend and adds native chat, editor context, tool-call approvals, model
+selection, and workspace sessions. Install the 1.x CLI first.
 
 - **VS Code:** [install from Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=SivanLiu.reasonix-agent)
 - **VSCodium / Eclipse Theia:** [install from Open VSX Registry](https://open-vsx.org/extension/SivanLiu/reasonix-agent)
 - **Extension ID:** `SivanLiu.reasonix-agent` · [source and usage guide](https://github.com/SivanCola/reasonix-vscode)
 
-### Path D: Build from source
+### Build from source
 
-Clone the repository first:
+Clone the repository; `studio` builds 2.x and `main-v2` builds 1.x:
 
 ```sh
 git clone https://github.com/esengine/DeepSeek-Reasonix.git
 cd DeepSeek-Reasonix
+git switch studio
 ```
 
 #### CLI
@@ -146,9 +227,12 @@ webview dependencies and Linux build tags.
 
 ## Quick start
 
-### CLI / TUI
+### Reasonix Studio
 
-These commands are for the CLI/TUI installed through Path A:
+Install and launch Studio, then connect a provider and model in the app. No CLI
+setup is needed.
+
+### CLI / TUI
 
 ```sh
 reasonix setup                      # configure a provider and model
@@ -159,13 +243,6 @@ reasonix run "implement the TODOs in main.go"
 In an interactive session, run `/init` when you want Reasonix to create project
 instructions.
 
-### Desktop app
-
-Download the installer for your platform from the
-[official download page](https://reasonix.io/?download=desktop#start), install
-and launch Reasonix, then configure a provider and model in the app. The CLI
-commands above are not required for the desktop app.
-
 For advanced CLI usage and configuration, see the **[CLI reference](./docs/CLI.md)**,
 **[Guide](./docs/GUIDE.md)**, and
 **[configuration paths](./docs/CONFIG_PATHS.md)**.
@@ -173,16 +250,19 @@ For advanced CLI usage and configuration, see the **[CLI reference](./docs/CLI.m
 ## Documentation
 
 - **Getting started:** [Guide](./docs/GUIDE.md) · [CLI reference](./docs/CLI.md) ·
-  [Configuration paths](./docs/CONFIG_PATHS.md) · [ACP editor integration](./docs/ACP.md)
+  [Configuration paths](./docs/CONFIG_PATHS.md) · [ACP editor integration](./docs/ACP.md) ·
+  [Use from DeepSeek Harness](./docs/DSH.md)
 - **Features & troubleshooting:** [Subagent profiles](./docs/SUBAGENT_PROFILES.md) ·
   [Context Engine v2](./docs/SESSION_MEMORY_RETRIEVAL.md) ·
   [Capability diagnostics](./docs/CAPABILITY_DIAGNOSTICS.md) ·
   [Recovery and updates](./docs/RECOVERY.md) ·
   [Checkpoints & rewind](./docs/CHECKPOINTS.md)
+- **Agent presets:** [Session Agent compositions](./docs/AGENT_COMPOSITIONS.md)
 - **Engineering & migration:** [Spec](./docs/SPEC.md) ·
   [Task contracts & pause policy](./docs/TASK_CONTRACT.md) ·
-  [Tool contract](./docs/TOOL_CONTRACT.md) · [Migrating from 0.x](./docs/MIGRATING.md)
-- **Extension development:** [Extensions](./docs/EXTENSIONS.md) ·
+  [Tool contract](./docs/TOOL_CONTRACT.md) · [Moving from 1.x to 2.x](./docs/MIGRATING.md) ·
+  [2.x roadmap](./docs/ROADMAP.md)
+- **Extension development:** [Skills](./docs/SKILLS.md) · [Extensions](./docs/EXTENSIONS.md) ·
   [Plugin packages and Manifest v1](./docs/PLUGIN_PACKAGES.md) ·
   [Extension Protocol](./docs/EXTENSION_PROTOCOL.md) ·
   [Go SDK and starter](./sdk/go/README.md)
@@ -208,11 +288,11 @@ A small list of folks whose work has shaped Reasonix the most — the current to
 <!-- reasonix-top-contributors:start -->
 | Contributor | Contributor | Contributor | Contributor |
 | --- | --- | --- | --- |
-| [**SivanCola**](https://github.com/SivanCola) | [**esengine**](https://github.com/esengine) | [**ttmouse**](https://github.com/ttmouse) | [**lifu963**](https://github.com/lifu963) |
-| **reasonix** | [**HUQIANTAO**](https://github.com/HUQIANTAO) | [**GTC2080**](https://github.com/GTC2080) | [**light-front-theory**](https://github.com/light-front-theory) |
-| **merge-order-check** | [**Li-Charles-One**](https://github.com/Li-Charles-One) | [**eghrhegpe**](https://github.com/eghrhegpe) | **wufengfan** |
-| [**CVEngineer66**](https://github.com/CVEngineer66) | [**dependabot\[bot\]**](https://github.com/apps/dependabot) | [**lanshi17**](https://github.com/lanshi17) | [**SuMuxi66**](https://github.com/SuMuxi66) |
-| [**CnsMaple**](https://github.com/CnsMaple) | [**cyq1017**](https://github.com/cyq1017) | [**JesonChou**](https://github.com/JesonChou) | [**XTLine**](https://github.com/XTLine) |
+| [**SivanCola**](https://github.com/SivanCola) | [**KHG420**](https://github.com/KHG420) | [**ttmouse**](https://github.com/ttmouse) | [**lifu963**](https://github.com/lifu963) |
+| [**XTLine**](https://github.com/XTLine) | [**HUQIANTAO**](https://github.com/HUQIANTAO) | [**chuiwenwei**](https://github.com/chuiwenwei) | [**Harbor404**](https://github.com/Harbor404) |
+| [**GTC2080**](https://github.com/GTC2080) | [**mchenziyi**](https://github.com/mchenziyi) | [**Li-Charles-One**](https://github.com/Li-Charles-One) | [**light-front-theory**](https://github.com/light-front-theory) |
+| [**xxoingr**](https://github.com/xxoingr) | [**eghrhegpe**](https://github.com/eghrhegpe) | [**noreply**](https://github.com/noreply) | [**par73e**](https://github.com/par73e) |
+| [**Bernardxu123**](https://github.com/Bernardxu123) | [**Guan0923**](https://github.com/Guan0923) | [**HaoyueQin**](https://github.com/HaoyueQin) | [**BuGlessRB**](https://github.com/BuGlessRB) |
 <!-- reasonix-top-contributors:end -->
 
 Special thanks to [**Bernardxu123**](https://github.com/Bernardxu123) for designing the project logo and intro video.
@@ -242,8 +322,9 @@ coffee, not a contract — donations don't buy feature priority or change how
 issues get triaged.
 
 - **International** — PayPal: [paypal.me/yuhuahui](https://paypal.me/yuhuahui)
-- **国内** — 微信支付（扫码）
+- **国内** — 微信支付 / 支付宝（扫码）
 
 <p align="center">
   <img src=".github/sponsor/wechat-pay.jpg" alt="WeChat Pay QR code" width="180"/>
+  <img src=".github/sponsor/alipay.jpg" alt="Alipay QR code" width="180"/>
 </p>

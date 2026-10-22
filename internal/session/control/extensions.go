@@ -49,7 +49,15 @@ func (c *Controller) interceptInputReceive(ctx context.Context, input string) (t
 		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: "Turn blocked by an extension.", Detail: result.BlockReason})
 		return input, true, nil
 	}
-	return payload.Text, false, nil
+	text = payload.Text
+	if len(payload.Context) > 0 {
+		framed, note := frameExtensionContext(d, payload)
+		text += "\n\n" + framed
+		if note != "" {
+			c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: note})
+		}
+	}
+	return text, false, nil
 }
 
 // extensionSessionPayloadEvent broadcasts one session.* point with an
@@ -217,6 +225,10 @@ func (s *frontendEventSink) RecordCompletionReport(a event.CompletionReportAudit
 	event.RecordCompletionReport(s.inner, a)
 }
 
+func (s *frontendEventSink) RecordEvidenceBundle(a event.EvidenceBundleAudit) {
+	event.RecordEvidenceBundle(s.inner, a)
+}
+
 func (s *frontendEventSink) RecordOutcomeProgress(sample hostaudit.OutcomeSample) {
 	event.RecordOutcomeProgress(s.inner, sample)
 }
@@ -262,6 +274,9 @@ func (c *Controller) ReplaceExtensions(d *dispatch.Dispatcher) {
 }
 
 func (c *Controller) installExtensionsLocked(d *dispatch.Dispatcher) {
+	if c.observeSealed() {
+		return
+	}
 	c.extensions = d
 	// Keep the inbox observer as the outermost sink so Steer/unapplied events
 	// always update durable state, while still installing/updating the

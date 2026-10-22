@@ -12,6 +12,7 @@ const FOLDS = [
   { upTo: 1200, fold: "rail" }, // the workspace column goes
   { upTo: 840, fold: "side" }, // metrics moves under the flow
   { upTo: 640, fold: "scene" }, // the opening scene tightens
+  { upTo: 300, fold: "bar" }, // the bar's controls gather into one: unfolded they leave the title under its 4em floor
 ] as const;
 
 // Height folds the same way width does, and for the same reason: every surface
@@ -29,13 +30,16 @@ export function foldsAt(width: number, height = Infinity): string {
 }
 
 const subs = new Set<(folds: string) => void>();
+const roomSubs = new Set<(width: number) => void>();
 
 /** refresh re-reads the room and republishes it. Two things change it — the
  *  window resizing and the zoom setting — and each calls this rather than
  *  keeping its own copy of the thresholds. */
 export function refresh() {
   publishShape();
-  const now = foldsAt(document.body.clientWidth, document.body.clientHeight);
+  const width = document.body.clientWidth;
+  roomSubs.forEach((fn) => fn(width));
+  const now = foldsAt(width, document.body.clientHeight);
   // Only on a real change: writing the attribute is a style invalidation, and an
   // unconditional write inside the observer is how a resize loop starts.
   if (document.documentElement.dataset.fold === now) return;
@@ -61,6 +65,12 @@ function publishShape() {
 export function onFolds(fn: (folds: string) => void): () => void {
   subs.add(fn);
   return () => subs.delete(fn);
+}
+
+/** onRoomWidth shares the width already measured by track's body observer. */
+export function onRoomWidth(fn: (width: number) => void): () => void {
+  roomSubs.add(fn);
+  return () => roomSubs.delete(fn);
 }
 
 /** folded answers for right now — for state that has to be right on first paint,

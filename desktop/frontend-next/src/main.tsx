@@ -1,30 +1,135 @@
-import { StrictMode } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { boot as bootLang } from "./i18n";
+import { boot as bootLang, t } from "./i18n";
 import { reason } from "./i18n/kernel";
 import { track as trackWidth } from "./ui/viewport";
 import "./styles/tokens.css";
 import "./styles/app.css";
+import "./styles/composition-picker.css";
+import "./styles/dock.css";
 import "./styles/studio.css";
+import "./styles/dialogcenter.css";
+import "./styles/stophint.css";
+import "./styles/phonecomposer.css";
+import "./styles/tips.css";
+import "./styles/skillpin.css";
+import "./styles/waitnote.css";
+import "./styles/bring.css";
+import "./styles/peerthreads.css";
+import "./styles/line.css";
+import "./styles/notice.css";
+import "./styles/peers.css";
+import "./styles/contentmatches.css";
+import "./styles/jsontext.css";
+import "./styles/narrow.css";
+import "./styles/workfold.css";
+import "./styles/workbench-launcher.css";
+import "./styles/feedback.css";
+import "./styles/community.css";
+import "./styles/themes.css";
+import "./styles/sponsor.css";
+import "./styles/chart.css";
+import "./styles/versions.css";
+import "./styles/changedpill.css";
+import "./styles/askskip.css";
+import "./styles/pastekeep.css";
+import "./styles/ctxitems.css";
+import "./styles/sidepanel.css";
+import "./styles/scrolljump.css";
+import "./styles/sessionnotes.css";
+import "./styles/providerpresets.css";
+import "./styles/sidebardrop.css";
+import "./styles/sessionquick.css";
+import "./styles/sessionpin.css";
+import "./styles/treerows.css";
+import "./styles/workbench-changes.css";
+import "./styles/gitgraph.css";
+import "./styles/modelmenu.css";
+import "./styles/composer-menu.css";
+import "./styles/runsignals.css";
+import "./styles/toasts.css";
+import "./styles/overview.css";
 import { App } from "./ui/App";
 import { SseHub } from "./port/hub";
+import { HttpError } from "./port/http_error";
 import type { HubPort } from "./port/hub";
 import { install as installFileDrop } from "./ui/filedrop";
 import { host } from "./port/host";
 import { play } from "./boot/intro";
 import { settled } from "./boot/gate";
+import { failureView, type FailureView } from "./port/cloud_failure";
+import { RemoteLinkError } from "./port/cloud_link";
+import { RemoteNotice } from "./ui/RemoteNotice";
+import { useStalePage } from "./ui/stale_page";
+import { onRemoteConnectionEnded, remoteConnectionEnded, openRemoteHome, remoteHub, signInAgain, type RemoteEnd } from "./port/cloud_remote";
+
+const failureAction = (view: FailureView) => (view.action === "home" ? openRemoteHome : () => location.reload());
+const failureLabel = (view: FailureView) => (view.action === "home" ? t("打开 reasonix.io") : t("重新连接"));
+
+function RemoteAwareApp({ hub, remote }: { hub: HubPort; remote: string | null }) {
+  const [ended, setEnded] = useState<RemoteEnd | null>(() => (remote ? remoteConnectionEnded() : null));
+  useEffect(() => {
+    if (!remote) return;
+    return onRemoteConnectionEnded(setEnded);
+  }, [remote]);
+  const stale = useStalePage(!!remote);
+  const reauth = ended?.kind === "reauth";
+  const specific = !reauth && ended?.failure ? failureView(ended.failure) : null;
+  return (
+    <>
+      <App hub={hub} />
+      {stale && !ended && (
+        <RemoteNotice
+          title={t("这个页面不是最新版")}
+          body={t("它是之前打开的旧版本，继续用可能出现莫名的报错。刷新一下就能换成最新版。")}
+          action={t("刷新页面")}
+          info
+          onAction={() => location.reload()}
+        />
+      )}
+      {ended && remote && (
+        <RemoteNotice
+          title={reauth ? t("需要重新登录") : specific?.title ?? t("远程连接已断开")}
+          body={reauth
+            ? t("为了安全，远程控制在登录满 24 小时或退出登录后需要重新登录。")
+            : specific?.body ?? t("这台电脑已停止网页控制。重新连接需要再次验证设备状态。")}
+          action={reauth ? t("重新登录") : specific ? failureLabel(specific) : t("重新连接")}
+          waitS={specific?.waitS}
+          retryWhenOnline={specific?.retryWhenOnline}
+          onAction={reauth ? () => void signInAgain(remote) : specific ? failureAction(specific) : () => location.reload()}
+        />
+      )}
+    </>
+  );
+}
 
 // The dev proxy only exists when REASONIX_SERVE was set at vite start; probing
 // /runtimes decides which port to boot on, so neither mode needs a build flag.
 // Without the proxy vite answers it with the SPA shell at 200, so the content
 // type — not res.ok — is what says a kernel is really there.
 async function pick(): Promise<HubPort> {
+  const remoteDevice = new URLSearchParams(location.search).get("device")?.trim();
+  if (remoteDevice) return remoteHub(remoteDevice);
+  // The hosted web build has no kernel behind its origin; without a device it
+  // can only send the visitor to pick one.
+  const remoteHome = import.meta.env.VITE_REMOTE_HOME;
+  if (remoteHome) {
+    location.replace(remoteHome);
+    return new Promise<never>(() => {});
+  }
   try {
     // The hub's own list rather than a pane's /status: it answers with every
     // pane closed, which is when a reload has to find the kernel again.
     const res = await fetch("/runtimes", { credentials: "same-origin" });
     if (res.ok && (res.headers.get("content-type") ?? "").includes("json")) return new SseHub();
-  } catch {
+    // A kernel that answered and refused: a phone that is not paired, or no
+    // longer is. Its code says which, and "cannot reach" would say neither.
+    if (res.status === 401) {
+      const body = (await res.json().catch(() => null)) as { code?: string; error?: string } | null;
+      if (body?.code) throw new HttpError(res.status, body.error ?? "", body);
+    }
+  } catch (e) {
+    if (e instanceof HttpError) throw e;
     // no serve reachable
   }
   // A shipped build is served by the kernel it talks to. Falling back to the
@@ -99,7 +204,7 @@ pick().then(
     installFileDrop();
     root.render(
       <StrictMode>
-        <App hub={hub} />
+        <RemoteAwareApp hub={hub} remote={new URLSearchParams(location.search).get("device")?.trim() || null} />
       </StrictMode>,
     );
     intro.progress(2);
@@ -107,13 +212,21 @@ pick().then(
     arrive(settled);
   },
   (e: unknown) => {
-    root.render(
+    const failure = e instanceof RemoteLinkError && e.failure ? failureView(e.failure) : null;
+    root.render(failure ? (
+      <div className="app" data-run="idle">
+        <RemoteNotice
+          title={failure.title} body={failure.body} action={failureLabel(failure)} waitS={failure.waitS}
+          retryWhenOnline={failure.retryWhenOnline} onAction={failureAction(failure)}
+        />
+      </div>
+    ) : (
       <div className="app" data-run="idle">
         <div className="errbar" role="alert">
           <span>{reason(e)}</span>
         </div>
-      </div>,
-    );
+      </div>
+    ));
     // The failure is the one thing that must not stay behind the boot screen.
     arrive(Promise.resolve());
   },

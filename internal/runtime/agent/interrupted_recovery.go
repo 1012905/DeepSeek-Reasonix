@@ -12,6 +12,8 @@ import (
 
 const interruptedRecoveryTag = "interrupted-turn-recovery"
 
+const recoveryPrecedenceClause = "The user's new message takes precedence. If it is unrelated to the interrupted task, do not resume that task."
+
 const (
 	maxRecoveryTools = 24
 	maxRecoveryFiles = 8
@@ -50,6 +52,9 @@ func interruptedRecoveryBlock(r *provider.InterruptedTurnRecovery) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "<%s>\n", interruptedRecoveryTag)
 	b.WriteString("The previous turn was interrupted. Treat these as host-verified recovery facts, not as a new task.\n")
+	if detail := r.StreamFailure.Description(); detail != "" {
+		fmt.Fprintf(&b, "stream_failure: %s\n%s\n", r.StreamFailure, detail)
+	}
 	if len(r.CompletedTools) == 0 {
 		b.WriteString("completed_tools: none\n")
 	} else {
@@ -103,7 +108,7 @@ func interruptedRecoveryBlock(r *provider.InterruptedTurnRecovery) string {
 			b.WriteString(" (assistant text)\n")
 		}
 	}
-	b.WriteString("Before continuing, inspect the current workspace and prior completed tool results. Do not blindly repeat completed writes. Re-issue any interrupted tool call from scratch with complete arguments if it is still needed.\n")
+	b.WriteString("Before continuing, inspect the current workspace and prior completed tool results. Do not blindly repeat completed writes. Re-issue any interrupted tool call from scratch with complete arguments if it is still needed. " + recoveryPrecedenceClause + "\n")
 	fmt.Fprintf(&b, "</%s>", interruptedRecoveryTag)
 	return b.String()
 }

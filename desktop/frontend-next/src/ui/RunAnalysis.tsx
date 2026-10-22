@@ -1,10 +1,12 @@
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { t } from "../i18n";
 import { decimals, seconds } from "../i18n/format";
 import type { TrajRow } from "../state/trajectory";
 import type { TrajectoryAvailability } from "../port/wire";
 import { categoryOf } from "./icons";
 import { serialiseTrajectory, spanText, trajectoryFileName } from "./trajectory-export";
+
+const SIGNAL_GAP = 22;
 
 type Bucket = "model" | "tool" | "recovery" | "system";
 
@@ -20,11 +22,33 @@ const labelOf = (row: TrajRow) => {
   return spanText(row.payload) || row.kind;
 };
 
+const scrollParent = (el: HTMLElement): HTMLElement | null => {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    if (/auto|scroll/.test(getComputedStyle(p).overflowY) && p.scrollHeight > p.clientHeight) return p;
+  }
+  return null;
+};
+
 const percentile = (values: number[], p: number) => {
   if (!values.length) return 0;
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * p) - 1)];
 };
+
+function Inspect({ row, index }: { row: TrajRow; index: number }) {
+  return (
+    <section className="run-inspect" data-c={bucketOf(row)} data-inspect>
+      <header><b>{index >= 0 ? `R${index + 1} · ` : ""}{labelOf(row)}</b><span>+{decimals(row.at, 2)}s</span></header>
+      <div className="run-inspect-facts">
+        <span><small>{t("类型")}</small><b>{row.kind}</b></span>
+        <span><small>{t("耗时")}</small><b>{seconds((row.dur ?? 0) * 1000, 2)}</b></span>
+        {row.tool && <span><small>{t("工具")}</small><b>{row.tool}</b></span>}
+      </div>
+      <p>{spanText(row.payload)}</p>
+      {row.subs.map((s, i) => <p key={i}>{spanText(s)}</p>)}
+    </section>
+  );
+}
 
 /** A readable first stop for a run. Raw trajectory remains available for
  *  diagnosis, but this page answers the questions people ask before reading a
@@ -49,11 +73,56 @@ export function RunAnalysis({ rows, availability, onSave }: {
   const rounds = activities.filter((r) => r.kind === "model_round" && r.dur);
   const tools = activities.filter((r) => r.tool);
   const recoveries = rows.filter(isRecovery);
-  const signals = rows.filter((r) => !r.dur && !r.tool && r.kind !== "event").slice(0, 8);
+  const signals = rows.filter((r) => !r.dur && !r.tool && r.kind !== "event");
   const first = activities.length ? Math.min(...activities.map((r) => r.at)) : 0;
-  const [selected, setSelected] = useState<number | null>(null);
+  const [pick, setPick] = useState<{ seq: number; from: "row" | "signal" } | null>(null);
+  const [member, setMember] = useState<number | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [signalWidth, setSignalWidth] = useState(0);
+  const timeline = useRef<HTMLDivElement>(null);
+  const signalLine = useRef<HTMLDivElement>(null);
+  // Marks closer than one hit target are one marker with a count: stacking them
+  // in lanes turned a run's burst of simultaneous signals into a tall column.
+  const clusters: Array<{ rows: TrajRow[]; left: number }> = [];
+  let anchor = -Infinity;
+  for (const row of [...signals].sort((a, b) => a.at - b.at)) {
+    const left = row.at / Math.max(span, 1);
+    const x = left * signalWidth;
+    const last = clusters[clusters.length - 1];
+    if (last && x - anchor < SIGNAL_GAP) last.rows.push(row);
+    else {
+      clusters.push({ rows: [row], left });
+      anchor = x;
+    }
+  }
+  useLayoutEffect(() => {
+    const line = signalLine.current;
+    if (!line) return;
+    const measure = () => setSignalWidth(line.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(line);
+    return () => observer.disconnect();
+  }, [signals.length > 0]);
   const [saved, setSaved] = useState<string | null>(null);
-  const picked = rows.find((r) => r.seq === selected) ?? null;
+  const picked = rows.find((r) => r.seq === pick?.seq) ?? null;
+  const selected = pick?.from === "row" ? pick.seq : null;
+  const root = useRef<HTMLDivElement>(null);
+  const clickedTop = useRef<{ el: HTMLElement; top: number } | null>(null);
+  const toggle = (seq: number, from: "row" | "signal", el: HTMLElement) => {
+    clickedTop.current = { el, top: el.getBoundingClientRect().top };
+    setMember(null);
+    setPick((cur) => (cur?.seq === seq && cur.from === from ? null : { seq, from }));
+  };
+  useLayoutEffect(() => {
+    const was = clickedTop.current;
+    clickedTop.current = null;
+    const box = root.current;
+    if (!was || !box) return;
+    const scroller = scrollParent(box);
+    if (was.el.isConnected && scroller) scroller.scrollTop += was.el.getBoundingClientRect().top - was.top;
+    box.querySelector("[data-inspect]")?.scrollIntoView?.({ block: "nearest" });
+  }, [pick]);
 
   if (rows.length === 0) {
     return (
@@ -69,7 +138,7 @@ export function RunAnalysis({ rows, availability, onSave }: {
   ];
 
   return (
-    <div className="run-analysis">
+    <div className="run-analysis" ref={root}>
       <header className="run-analysis-head">
         <span>
           <b>{t("运行分析")}</b>
@@ -113,16 +182,50 @@ export function RunAnalysis({ rows, availability, onSave }: {
         </div>
       </section>
 
+      <div className="run-timeline-controls">
+        <label>{t("时间轴缩放")}<input type="range" min="1" max="16" step="1" value={zoom}
+          aria-label={t("时间轴缩放")} aria-valuetext={`${zoom}×`} onChange={(e) => setZoom(Number(e.target.value))} /></label>
+        <output>{zoom}×</output>
+        <button className="run-export" onClick={() => { setZoom(1); if (timeline.current) timeline.current.scrollLeft = 0; }}>{t("重置缩放")}</button>
+      </div>
+      <div className="run-timeline-scroll" ref={timeline} role="region" aria-label={t("时间轴")} tabIndex={0}>
+        <div className="run-timeline-canvas" style={{ width: `${zoom * 100}%` }}>
       {signals.length > 0 && (
         <section className="run-signals">
           <div className="run-section-head"><b>{t("信号轨")}</b><span>{t("与下方共用时间轴")}</span></div>
-          <div className="run-signal-line">
-            {signals.map((row) => (
-              <button data-action="analysis.signal" data-target={String(row.seq)} key={row.seq} style={{ left: `${(row.at / Math.max(span, 1)) * 100}%` }} onClick={() => setSelected(row.seq)} title={spanText(row.payload)}>
-                <i data-c={bucketOf(row)} />
-              </button>
-            ))}
-          </div>
+          <p className="run-section-note">{t("没有时长、也不是工具调用的运行记录，位置就是时间，无法拖动；缩放后可横向滚动，挨得太近的信号合并成一个带数量的标记。点一个看它的记录。")}</p>
+          <div className="run-signal-track"><div className="run-signal-line" ref={signalLine}>
+            {clusters.map(({ rows: group, left }) => {
+              const row = group[0];
+              const open = pick?.from === "signal" && pick.seq === row.seq;
+              return (
+                <button data-action="analysis.signal" data-target={String(row.seq)} key={row.seq} style={{ left: `${left * 100}%` }} onClick={(e) => toggle(row.seq, "signal", e.currentTarget)}
+                  title={group.length > 1 ? t("{n} 个信号", { n: group.length }) : spanText(row.payload)}
+                  aria-label={group.length > 1 ? `${t("{n} 个信号", { n: group.length })} · +${decimals(row.at, 2)}s` : `${labelOf(row)} · +${decimals(row.at, 2)}s`} aria-expanded={open}>
+                  {group.length > 1 ? <b data-c={bucketOf(row)}>{group.length}</b> : <i data-c={bucketOf(row)} />}
+                </button>
+              );
+            })}
+          </div></div>
+          {picked && pick?.from === "signal" && (() => {
+            const group = clusters.find((c) => c.rows[0].seq === picked.seq)?.rows ?? [picked];
+            if (group.length === 1) return <Inspect row={picked} index={activities.findIndex((r) => r.seq === picked.seq)} />;
+            const chosen = group.find((r) => r.seq === member) ?? null;
+            return (
+              <div className="run-signal-group">
+                <ul>
+                  {group.map((r) => (
+                    <li key={r.seq}>
+                      <button data-action="analysis.signal" data-target={String(r.seq)} onClick={() => setMember((cur) => (cur === r.seq ? null : r.seq))} aria-expanded={chosen?.seq === r.seq}>
+                        <i data-c={bucketOf(r)} /><span>{labelOf(r)}</span><small>+{decimals(r.at, 2)}s</small>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                {chosen && <Inspect row={chosen} index={activities.findIndex((r) => r.seq === chosen.seq)} />}
+              </div>
+            );
+          })()}
         </section>
       )}
 
@@ -131,35 +234,25 @@ export function RunAnalysis({ rows, availability, onSave }: {
         <ol>
           {activities.map((row, index) => {
             const start = (row.at / Math.max(span, 1)) * 100;
-            const width = Math.max(1.2, ((row.dur ?? 0) / Math.max(span, 1)) * 100);
+            const width = ((row.dur ?? 0) / Math.max(span, 1)) * 100;
             const bucket = bucketOf(row);
             const cat = row.tool ? categoryOf(row.tool) : bucket;
             return (
               <li key={row.seq} data-on={selected === row.seq ? "" : undefined}>
-                <button data-action="analysis.row" data-target={String(row.seq)} onClick={() => setSelected(row.seq)} aria-pressed={selected === row.seq}>
+                <button data-action="analysis.row" data-target={String(row.seq)} onClick={(e) => toggle(row.seq, "row", e.currentTarget)} aria-expanded={selected === row.seq}>
                   <span className="run-round-id">R{index + 1}</span>
                   <span className="run-round-track"><i data-c={cat} style={{ left: `${start}%`, width: `${width}%` }} /></span>
                   <span className="run-round-copy"><b>{labelOf(row)}</b><small>{seconds((row.dur ?? 0) * 1000, 1)}</small></span>
                   <span className="run-round-kind" data-c={bucket}>{row.kind.replaceAll("_", " ")}</span>
                 </button>
+                {selected === row.seq && <Inspect row={row} index={index} />}
               </li>
             );
           })}
         </ol>
       </section>
-
-      {picked && (
-        <section className="run-inspect" data-c={bucketOf(picked)}>
-          <header><b>R{activities.findIndex((r) => r.seq === picked.seq) + 1} · {labelOf(picked)}</b><span>+{decimals(picked.at, 2)}s</span></header>
-          <div className="run-inspect-facts">
-            <span><small>{t("类型")}</small><b>{picked.kind}</b></span>
-            <span><small>{t("耗时")}</small><b>{seconds((picked.dur ?? 0) * 1000, 2)}</b></span>
-            {picked.tool && <span><small>{t("工具")}</small><b>{picked.tool}</b></span>}
-          </div>
-          <p>{spanText(picked.payload)}</p>
-          {picked.subs.map((s, i) => <p key={i}>{spanText(s)}</p>)}
-        </section>
-      )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -46,8 +46,54 @@ const (
 // respelling or a wrapper is not a rewrite and the file's raw text is never the
 // identity.
 type CheckContract struct {
-	baseline []string
-	current  []string
+	baseline      []string
+	current       []string
+	capturedTests int
+	delivery      bool
+	observeRoot   string
+	// unseenWriter: something outside the receipts may write the workspace.
+	unseenWriter bool
+	// unversioned: no version-control root encloses the workspace, so no
+	// recognized check can say anything about a document written there.
+	unversioned bool
+}
+
+// WithUnversionedWorkspace records that no version-control root encloses the
+// workspace. A delivery turn is then no longer held to a generic check for
+// prose whose every write the receipts can name: the recognized checks all read
+// a repository or a toolchain, and none of them can run over a bare folder.
+func (c CheckContract) WithUnversionedWorkspace(unversioned bool) CheckContract {
+	c.unversioned = unversioned
+	return c
+}
+
+// WithUnseenWriter records that a writer the receipts never name — a tool hook
+// — may change the workspace around any call, so no receipt bounds what a
+// turn changed and nothing may be waived as prose.
+func (c CheckContract) WithUnseenWriter(unseen bool) CheckContract {
+	c.unseenWriter = unseen
+	return c
+}
+
+// UnseenWriter reports what WithUnseenWriter recorded.
+func (c CheckContract) UnseenWriter() bool { return c.unseenWriter }
+
+// waivesProse reports whether prose may be exempt from the generic check here:
+// no check of the project's or task's own, no delivery role unless nothing
+// recognized could run in an unversioned workspace, and every writer one the
+// receipts can name.
+func (c CheckContract) waivesProse() bool {
+	return (!c.delivery || c.unversioned) && !c.DeclaresChecks() && !c.unseenWriter
+}
+
+func (c CheckContract) WithObserveRoot(root string) CheckContract {
+	c.observeRoot = root
+	return c
+}
+
+func (c CheckContract) WithDelivery(delivery bool) CheckContract {
+	c.delivery = delivery
+	return c
 }
 
 // CaptureCheckContract canonicalises both declarations into criterion
@@ -55,6 +101,12 @@ type CheckContract struct {
 // each time it is asked would be no provenance at all.
 func CaptureCheckContract(baseline, current []string) CheckContract {
 	return CheckContract{baseline: criterionIdentities(baseline), current: criterionIdentities(current)}
+}
+
+// WithCapturedTests preserves criteria even when their current bytes are unchanged.
+func (c CheckContract) WithCapturedTests(count int) CheckContract {
+	c.capturedTests = count
+	return c
 }
 
 // Baseline returns the captured identities, for a host that has to persist them
@@ -94,6 +146,11 @@ func (o Obligation) Subject() string {
 	return subject
 }
 
+// UnprovenMutationSettle is what ends an unproven mutation. Observation proves
+// effects and nothing the model runs afterwards re-observes the change, so
+// making it again does not settle it either.
+const UnprovenMutationSettle = "nothing the model can run settles it: call conclude_blocked saying what could not be established, or leave it to the user"
+
 // ObligationDelta is the net change one action made to the ledger's debts, not
 // a history of what happened inside it: a debt that fell and rose again under
 // one identity is reported as neither. An action can settle one and create
@@ -121,15 +178,126 @@ func (l *Ledger) Obligations(contract CheckContract) []Obligation {
 			ID:        fmt.Sprintf("unproven_mutation@%d", at),
 			Kind:      ObligationUnprovenMutation,
 			Cause:     l.commandAt(at),
-			Discharge: "establish what the change touched by making it through a tool that reports its paths",
+			Discharge: UnprovenMutationSettle,
 		})
 	}
 	at, changed := l.LatestSuccessfulMutationIndex()
 	if !changed {
 		return out
 	}
-	out = append(out, staleVerificationOf(l, at)...)
+	if !l.ProseOnlyWithoutChecks(contract) && !l.VerifiedBeneathProse(contract, at, l.LatestSuccessfulMutationIndexThrough) {
+		out = append(out, staleVerificationOf(l, at)...)
+	}
 	return append(out, l.checkObligations(contract, at)...)
+}
+
+// ProseOnlyWithoutChecks waives the generic check when every change this task
+// made is a prose file and the project names no check of its own. Scope must be
+// established for every mutation; a watched subset cannot exempt effects the
+// host never observed.
+func (l *Ledger) ProseOnlyWithoutChecks(contract CheckContract) bool {
+	if !contract.waivesProse() {
+		return false
+	}
+	beyond, scoped, changed := l.mutationsBeyondProse(contract.observeRoot)
+	return changed && scoped && len(beyond) == 0
+}
+
+// DeclaresChecks reports that the project or the task's start named checks of
+// its own, which define verification there.
+func (c CheckContract) DeclaresChecks() bool {
+	return len(c.baseline) != 0 || len(c.current) != 0 || c.capturedTests != 0
+}
+
+// MutationPathsBeyondProse names the changed paths that keep the generic check
+// owed, in first-written order, and whether every mutation had its extent
+// established.
+func (l *Ledger) MutationPathsBeyondProse(contract CheckContract) (paths []string, scoped bool) {
+	beyond, scoped, _ := l.mutationsBeyondProse(contract.observeRoot)
+	return beyond, scoped
+}
+
+func (l *Ledger) mutationsBeyondProse(root string) (beyond []string, scoped, changed bool) {
+	if l == nil {
+		return nil, false, false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	scoped = true
+	for _, r := range l.receipts {
+		if !r.Mutation {
+			continue
+		}
+		paths, ok := receiptBeyondProse(root, r)
+		scoped = scoped && ok
+		changed = changed || r.Success
+		for _, path := range paths {
+			if !slices.Contains(beyond, path) {
+				beyond = append(beyond, path)
+			}
+		}
+	}
+	return beyond, scoped, changed
+}
+
+// receiptBeyondProse names the paths one mutation changed that are not prose,
+// and whether its extent was established at all.
+func receiptBeyondProse(root string, r Receipt) (beyond []string, scoped bool) {
+	// A failure does not prove nothing was written: tool.after can fail a
+	// finished write and a move can stop half-done, so a failed named-path
+	// call keeps its targets; any other failed mutation is unscoped.
+	if !r.Success && !r.Write {
+		return nil, false
+	}
+	// Named-path writers establish scope by contract; other tools need a
+	// complete observation rather than a watched subset.
+	if r.Success && (r.MutationEvidence != MutationProven || len(r.Paths) == 0 || (!r.Write && !r.PathsComplete)) {
+		return nil, false
+	}
+	for _, path := range r.MutationPaths {
+		if !proseMutationPath(root, path) {
+			beyond = append(beyond, path)
+		}
+	}
+	return beyond, true
+}
+
+// VerifiedBeneathProse reports that anchor lies in a run of prose laid over
+// changes a check already stands passing for, so the prose owes no second run.
+// prior is the caller's own anchor over the receipts up to the latest change
+// beyond prose; the check has to stand for it as well as for that change.
+func (l *Ledger) VerifiedBeneathProse(contract CheckContract, anchor int, prior func(through int) (int, bool)) bool {
+	if !contract.waivesProse() {
+		return false
+	}
+	beyond, ok := l.latestMutationBeyondProse(contract.observeRoot)
+	if !ok || anchor <= beyond || !l.verifiedAfter(beyond) {
+		return false
+	}
+	at, ok := prior(beyond)
+	return !ok || l.verifiedAfter(at)
+}
+
+func (l *Ledger) latestMutationBeyondProse(root string) (int, bool) {
+	if l == nil {
+		return 0, false
+	}
+	latest := -1
+	for i, r := range l.snapshotReceipts() {
+		if !r.Mutation {
+			continue
+		}
+		if paths, scoped := receiptBeyondProse(root, r); !scoped || len(paths) > 0 {
+			latest = i
+		}
+	}
+	return latest, latest >= 0
+}
+
+// verifiedAfter is a check passing after the boundary with none standing failed:
+// one check passing cannot answer for another that did not.
+func (l *Ledger) verifiedAfter(at int) bool {
+	return l.HasSuccessfulVerificationCommandAfter(at) && !l.HasFailedVerificationAfter(at)
 }
 
 // checkObligations owes every criterion either declaration named, baseline
@@ -168,7 +336,7 @@ func (l *Ledger) checkObligations(contract CheckContract, at int) []Obligation {
 }
 
 func staleVerificationOf(l *Ledger, at int) []Obligation {
-	if l.HasSuccessfulVerificationCommandAfter(at) && !l.HasFailedVerificationAfter(at) {
+	if l.verifiedAfter(at) {
 		return nil
 	}
 	return []Obligation{{

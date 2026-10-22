@@ -9,24 +9,55 @@ import type { BrowserTab } from "../port/port";
 // the shell which page to draw over it. What is held here is what it tells the
 // shell, since nothing in the DOM would show a wrong answer.
 
+const PICTURE = "data:image/jpeg;base64,AAAA";
+
 const bridge = {
   shell: "electron",
   platform: "darwin",
   titleBar: false,
   showBrowserView: vi.fn(async () => {}),
   hideBrowserView: vi.fn(async () => {}),
+  freezeBrowserView: vi.fn(async () => PICTURE),
   controlBrowserView: vi.fn(async () => {}),
-  navigateBrowserView: vi.fn(async () => true),
+  navigateBrowserView: vi.fn(async (_target: string, _address: string): Promise<string> => ""),
+  onBrowserLoadState: vi.fn((listener: LoadState) => {
+    loadState = listener;
+    return () => {};
+  }),
+  openExternal: vi.fn(),
 };
+
+type LoadState = (state: { targetId: string; failure: { url: string; code: number; reason: string } | null }) => void;
+let loadState: LoadState = () => {};
 
 const tabs: BrowserTab[] = [
   { id: "t1", target: "view-a", url: "http://127.0.0.1:5173/", title: "App", active: true },
   { id: "t2", target: "view-b", url: "https://example.com/", title: "Docs", active: false },
 ];
 
-let over: Element | null = null;
+const RECT = { x: 40, y: 60, width: 800, height: 500 };
 
-async function panel(props: { tabs: BrowserTab[]; shown: boolean }) {
+// What hit testing finds above the slot at every point; the slot and the
+// document under it are added by the stub, as a browser would.
+let above: Element[] = [];
+
+function layer(style: string, text = ""): HTMLElement {
+  const el = document.createElement("div");
+  el.setAttribute("style", `position:fixed;inset:0;${style}`);
+  el.textContent = text;
+  document.body.appendChild(el);
+  return el;
+}
+
+async function settle(ms = 60) {
+  await act(async () => {
+    await Promise.resolve();
+    vi.advanceTimersByTime(ms);
+    await Promise.resolve();
+  });
+}
+
+async function panel(props: { tabs: BrowserTab[]; shown: boolean; onOpenDocument?: (path: string) => Promise<void> }) {
   vi.resetModules();
   (window as unknown as { reasonixHost: typeof bridge }).reasonixHost = bridge;
   const { BrowserPanel } = await import("./BrowserPanel");
@@ -34,55 +65,96 @@ async function panel(props: { tabs: BrowserTab[]; shown: boolean }) {
 }
 
 beforeEach(() => {
-  for (const fn of [bridge.showBrowserView, bridge.hideBrowserView, bridge.controlBrowserView, bridge.navigateBrowserView]) fn.mockClear();
-  over = null;
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+  for (const fn of [bridge.showBrowserView, bridge.hideBrowserView, bridge.freezeBrowserView, bridge.controlBrowserView, bridge.navigateBrowserView]) fn.mockClear();
+  bridge.navigateBrowserView.mockImplementation(async () => "");
+  bridge.freezeBrowserView.mockImplementation(async () => PICTURE);
+  above = [];
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"], shouldAdvanceTime: true });
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
     const slot = this.classList.contains("bview");
-    return { left: slot ? 40 : 0, top: slot ? 60 : 0, width: slot ? 800 : 0, height: slot ? 500 : 0 } as DOMRect;
+    const [left, top, width, height] = slot ? [RECT.x, RECT.y, RECT.width, RECT.height] : [0, 0, 1024, 768];
+    return { left, top, width, height, right: left + width, bottom: top + height, x: left, y: top } as DOMRect;
   });
-  document.elementFromPoint = () => over ?? document.querySelector(".bview");
+  // jsdom computes no pseudo-element style; none is what these layers have.
+  const computed = window.getComputedStyle.bind(window);
+  vi.spyOn(window, "getComputedStyle").mockImplementation((el, pseudo) =>
+    pseudo ? ({ content: "none" } as CSSStyleDeclaration) : computed(el),
+  );
+  document.elementsFromPoint = () => {
+    const slot = document.querySelector(".bview");
+    return [...above, ...(slot ? [slot, document.body, document.documentElement] : [document.body, document.documentElement])];
+  };
 });
 
 afterEach(() => {
   vi.useRealTimers();
   cleanup();
+  document.body.innerHTML = "";
+  document.documentElement.removeAttribute("data-vt");
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe("which page the shell draws, and where", () => {
+  it("opens the page on screen in the default browser, and offers it only for a web address", async () => {
+    bridge.openExternal.mockClear();
+    await panel({ tabs, shown: true });
+    await userEvent.click(screen.getByRole("button", { name: "用默认浏览器打开此页" }));
+    expect(bridge.openExternal).toHaveBeenCalledWith("http://127.0.0.1:5173/");
+    await userEvent.click(screen.getByRole("tab", { name: "Docs" }));
+    await userEvent.click(screen.getByRole("button", { name: "用默认浏览器打开此页" }));
+    expect(bridge.openExternal).toHaveBeenLastCalledWith("https://example.com/");
+  });
+
+  it("does not offer to open a page that is not a web address", async () => {
+    bridge.openExternal.mockClear();
+    await panel({ tabs: [{ id: "t3", target: "view-c", url: "about:blank", title: "", active: true }], shown: true });
+    expect((screen.getByRole("button", { name: "用默认浏览器打开此页" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(bridge.openExternal).not.toHaveBeenCalled();
+  });
+
+  it("offers a local file to its default program, saying what that means beside the button", async () => {
+    bridge.openExternal.mockClear();
+    const open = vi.fn(async (_path: string) => {});
+    const file: BrowserTab = { id: "t4", target: "view-d", url: "file:///Users/me/work/site/index%20a.html", title: "", active: true };
+    await panel({ tabs: [file], shown: true, onOpenDocument: open });
+    expect(screen.getByText("用系统默认程序打开这个文件，网页里的脚本会照常运行")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "用系统默认程序打开这个文件" }));
+    expect(open).toHaveBeenCalledWith("/Users/me/work/site/index a.html");
+    expect(bridge.openExternal).not.toHaveBeenCalled();
+  });
+
+  it("hands a Windows file address over as a drive path", async () => {
+    const open = vi.fn(async (_path: string) => {});
+    await panel({ tabs: [{ id: "t5", target: "view-e", url: "file:///E:/site/a.html", title: "", active: true }], shown: true, onOpenDocument: open });
+    await userEvent.click(screen.getByRole("button", { name: "用系统默认程序打开这个文件" }));
+    expect(open).toHaveBeenCalledWith("E:/site/a.html");
+  });
+
+  it("shows the kernel's refusal when the file cannot be opened", async () => {
+    let refusal: unknown;
+    const open = vi.fn(async (_path: string) => { throw refusal; });
+    await panel({ tabs: [{ id: "t6", target: "view-f", url: "file:///work/a.js", title: "", active: true }], shown: true, onOpenDocument: open });
+    const { HttpError } = await import("../port/http_error");
+    refusal = new HttpError(400, "refused", { code: "document.not_allowed_type", error: "refused" });
+    await userEvent.click(screen.getByRole("button", { name: "用系统默认程序打开这个文件" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("不能从这里打开这种类型的文件");
+  });
+
+  it("keeps a file address disabled when the host cannot open documents, and offers nothing for a network share", async () => {
+    await panel({ tabs: [{ id: "t7", target: "view-g", url: "file:///work/a.html", title: "", active: true }], shown: true });
+    expect((screen.getByRole("button", { name: "用默认浏览器打开此页" }) as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+    const open = vi.fn(async (_path: string) => {});
+    await panel({ tabs: [{ id: "t8", target: "view-h", url: "file://server/share/a.html", title: "", active: true }], shown: true, onOpenDocument: open });
+    expect((screen.getByRole("button", { name: "用默认浏览器打开此页" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("draws the active page over the reserved rectangle, and the one picked after", async () => {
     await panel({ tabs, shown: true });
-    expect(bridge.showBrowserView).toHaveBeenLastCalledWith("view-a", { x: 40, y: 60, width: 800, height: 500 });
+    expect(bridge.showBrowserView).toHaveBeenLastCalledWith("view-a", RECT);
     await userEvent.click(screen.getByRole("tab", { name: "Docs" }));
-    expect(bridge.showBrowserView).toHaveBeenLastCalledWith("view-b", { x: 40, y: 60, width: 800, height: 500 });
-  });
-
-  it("puts the page away while something is drawn over its rectangle", async () => {
-    await panel({ tabs, shown: true });
-    bridge.hideBrowserView.mockClear();
-    over = document.body;
-    await act(async () => {
-      document.body.appendChild(document.createElement("div"));
-      await Promise.resolve();
-      vi.advanceTimersByTime(20);
-    });
-    expect(bridge.hideBrowserView).toHaveBeenCalled();
-  });
-
-  it("draws the page once a view transition that covered its rectangle has finished", async () => {
-    document.documentElement.setAttribute("data-vt", "pane");
-    over = document.documentElement;
-    await panel({ tabs, shown: true });
-    expect(bridge.showBrowserView).not.toHaveBeenCalled();
-    over = null;
-    await act(async () => {
-      document.documentElement.removeAttribute("data-vt");
-      await Promise.resolve();
-      vi.advanceTimersByTime(20);
-    });
-    expect(bridge.showBrowserView).toHaveBeenLastCalledWith("view-a", { x: 40, y: 60, width: 800, height: 500 });
+    expect(bridge.showBrowserView).toHaveBeenLastCalledWith("view-b", RECT);
   });
 
   it("draws nothing for a pane that is not on screen", async () => {
@@ -107,18 +179,195 @@ describe("which page the shell draws, and where", () => {
     await userEvent.type(field, "localhost:3000{Enter}");
     expect(bridge.navigateBrowserView).toHaveBeenCalledWith("view-a", "localhost:3000");
   });
+
+  it("never tells the person the page is paused", async () => {
+    await panel({ tabs, shown: true });
+    expect(document.querySelector(".bview")?.textContent).toBe("");
+  });
 });
 
-describe("covered", () => {
-  it("answers from what the page shows at the sampled points", async () => {
-    const { covered } = await import("./BrowserPanel");
+describe("an address that names a file", () => {
+  async function type(text: string) {
+    await panel({ tabs, shown: true });
+    const field = screen.getByRole("textbox", { name: "网址" });
+    await userEvent.clear(field);
+    await userEvent.type(field, text.replace(/[{[]/g, "$&$&") + "{Enter}");
+  }
+
+  it("hands a Windows path to the shell untouched, whatever the separators", async () => {
+    await type("D:\\DevCode\\页面 1.html");
+    expect(bridge.navigateBrowserView).toHaveBeenCalledWith("view-a", "D:\\DevCode\\页面 1.html");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("says a network share is not opened, rather than calling it a bad web address", async () => {
+    bridge.navigateBrowserView.mockImplementation(async () => "network_file");
+    await type("\\\\nas\\share\\x.html");
+    expect(screen.getByRole("alert").textContent).toContain("网络共享路径");
+  });
+
+  it("keeps the http and https hint for a scheme the shell never opens", async () => {
+    bridge.navigateBrowserView.mockImplementation(async () => "scheme");
+    await type("javascript://x");
+    expect(screen.getByRole("alert").textContent).toContain("http 或 https");
+  });
+
+  it("clears the refusal once the person edits the address", async () => {
+    bridge.navigateBrowserView.mockImplementation(async () => "network_file");
+    await type("\\\\nas\\x");
+    await userEvent.type(screen.getByRole("textbox", { name: "网址" }), "a");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("retries a file that did not load, and offers no external opener for it", async () => {
+    await panel({ tabs, shown: true });
+    await act(async () => loadState({ targetId: "view-a", failure: { url: "file:///D:/a/b.html", code: -6, reason: "ERR_FILE_NOT_FOUND" } }));
+    expect(screen.getByRole("alert").textContent).toContain("找不到这个文件");
+    expect(screen.queryByRole("button", { name: "在外部浏览器打开" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(bridge.navigateBrowserView).toHaveBeenLastCalledWith("view-a", "file:///D:/a/b.html");
+  });
+
+  it("still offers the external opener for a web page that did not load", async () => {
+    await panel({ tabs, shown: true });
+    await act(async () => loadState({ targetId: "view-a", failure: { url: "https://example.com/", code: -105, reason: "ERR_NAME_NOT_RESOLVED" } }));
+    expect(screen.getByRole("button", { name: "在外部浏览器打开" })).toBeTruthy();
+  });
+});
+
+describe("a layer the page draws over the view", () => {
+  it("freezes the page to its last picture while a visible layer covers it", async () => {
+    await panel({ tabs, shown: true });
+    bridge.showBrowserView.mockClear();
+    above = [layer("background:rgb(0 0 0 / .4)")];
+    await settle();
+    expect(bridge.freezeBrowserView).toHaveBeenCalledTimes(1);
+    expect(bridge.showBrowserView).not.toHaveBeenCalled();
+    expect(document.querySelector(".bview img")?.getAttribute("src")).toBe(PICTURE);
+  });
+
+  it("asks for one picture however often the covered page is checked", async () => {
+    await panel({ tabs, shown: true });
+    above = [layer("background:#000")];
+    await settle();
+    for (let i = 0; i < 5; i++) {
+      document.body.appendChild(document.createElement("i"));
+      await settle(500);
+    }
+    expect(bridge.freezeBrowserView).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["at opacity 0", "background:#000;opacity:0"],
+    ["inside a parent at opacity 0", null],
+    ["hidden", "background:#000;visibility:hidden"],
+    ["painting nothing, only catching clicks", ""],
+  ])("does not count a layer %s", async (_name, style) => {
+    await panel({ tabs, shown: true });
+    if (style === null) {
+      const parent = layer("opacity:0");
+      const child = document.createElement("div");
+      child.setAttribute("style", "background:#000");
+      parent.appendChild(child);
+      above = [child, parent];
+    } else {
+      above = [layer(style)];
+    }
+    await settle();
+    expect(bridge.freezeBrowserView).not.toHaveBeenCalled();
+    expect(bridge.showBrowserView).toHaveBeenLastCalledWith("view-a", RECT);
+  });
+
+  it("does not count the slot's own content or the columns around it", async () => {
+    await panel({ tabs, shown: true });
+    const inner = document.createElement("span");
+    document.querySelector(".bview")!.appendChild(inner);
+    const column = document.querySelector(".bpanel")!;
+    above = [inner];
+    await settle();
+    document.elementsFromPoint = () => [column, document.querySelector(".bview")!, document.body];
+    await settle();
+    expect(bridge.freezeBrowserView).not.toHaveBeenCalled();
+  });
+
+  it("draws the live page again when the layer leaves by a transition, with no DOM change", async () => {
+    await panel({ tabs, shown: true });
+    const veil = layer("background:#000");
+    above = [veil];
+    await settle();
+    bridge.showBrowserView.mockClear();
+    veil.style.opacity = "0";
+    await settle(0);
+    bridge.showBrowserView.mockClear();
+    above = [];
+    await act(async () => {
+      document.dispatchEvent(new Event("transitionend"));
+      vi.advanceTimersByTime(60);
+    });
+    expect(bridge.showBrowserView).toHaveBeenLastCalledWith("view-a", RECT);
+    expect(document.querySelector(".bview img")).toBeNull();
+  });
+
+  it("draws the live page again when nothing at all says the layer left", async () => {
+    await panel({ tabs, shown: true });
+    above = [layer("background:#000")];
+    await settle();
+    bridge.showBrowserView.mockClear();
+    above = [];
+    await settle(500);
+    expect(bridge.showBrowserView).toHaveBeenLastCalledWith("view-a", RECT);
+  });
+
+  it("drops a picture that arrives after the page is live again", async () => {
+    let answer: (picture: string) => void = () => {};
+    bridge.freezeBrowserView.mockImplementation(() => new Promise<string>((resolve) => (answer = resolve)));
+    await panel({ tabs, shown: true });
+    above = [layer("background:#000")];
+    await settle();
+    above = [];
+    await settle(500);
+    await act(async () => answer(PICTURE));
+    expect(document.querySelector(".bview img")).toBeNull();
+  });
+
+  it("freezes the page while a view transition runs, and draws it once it ends", async () => {
+    document.documentElement.setAttribute("data-vt", "pane");
+    await panel({ tabs, shown: true });
+    expect(bridge.showBrowserView).not.toHaveBeenCalled();
+    expect(bridge.freezeBrowserView).toHaveBeenCalled();
+    await act(async () => {
+      document.documentElement.removeAttribute("data-vt");
+      await Promise.resolve();
+      vi.advanceTimersByTime(60);
+    });
+    expect(bridge.showBrowserView).toHaveBeenLastCalledWith("view-a", RECT);
+  });
+});
+
+describe("occluded", () => {
+  it("answers from what paints over the probes, not from the topmost element", async () => {
+    const { occluded } = await import("./occlusion");
     const slot = document.createElement("div");
     const inner = document.createElement("span");
     slot.appendChild(inner);
-    const rect = { x: 0, y: 0, width: 100, height: 100 };
-    expect(covered(slot, rect, () => slot)).toBe(false);
-    expect(covered(slot, rect, () => inner)).toBe(false);
-    expect(covered(slot, rect, (x, y) => (x > 90 && y > 90 ? document.body : slot))).toBe(true);
-    expect(covered(slot, rect, () => null)).toBe(true);
+    document.body.appendChild(slot);
+    const box = { x: 0, y: 0, width: 400, height: 400 };
+    const ghost = layer("background:#000;opacity:0");
+    const catcher = layer("");
+    const card = layer("background:#fff");
+    expect(occluded(slot, box, () => [inner, slot, document.body])).toBe(false);
+    expect(occluded(slot, box, () => [ghost, catcher, slot, document.body])).toBe(false);
+    expect(occluded(slot, box, () => [document.body, slot])).toBe(false);
+    expect(occluded(slot, box, (x, y) => (x > 300 && y > 300 ? [card, slot] : [slot]))).toBe(true);
+  });
+
+  it("lets a layer reach a few pixels into the edge, as a gutter's grip does", async () => {
+    const { occluded } = await import("./occlusion");
+    const slot = document.createElement("div");
+    document.body.appendChild(slot);
+    const grip = layer("background:#888");
+    const box = { x: 100, y: 0, width: 400, height: 400 };
+    expect(occluded(slot, box, (x) => (x < 105 ? [grip, slot] : [slot]))).toBe(false);
+    expect(occluded(slot, box, (x) => (x < 140 ? [grip, slot] : [slot]))).toBe(true);
   });
 });

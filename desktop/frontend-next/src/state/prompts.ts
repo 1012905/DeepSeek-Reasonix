@@ -5,7 +5,9 @@
 // arrives more than once, and it must not become two answerable cards — and
 // survival, because a rebuild re-reads the record and a prompt is not in it.
 import type { Item, SessionState } from "./session_types";
-import type { DecisionReceipt } from "../port/wire";
+import type { Ask, AskQuestion, DecisionReceipt } from "../port/wire";
+import { IDLE, RUNNING } from "./chip";
+import { nextId } from "./ids";
 
 // The id the kernel correlates an answer by, which is what makes two frames one
 // prompt. Local item ids cannot: a replay mints a new one every time.
@@ -26,14 +28,25 @@ export const promptOpen = (it: Item) => promptKey(it) !== undefined && !promptSe
 // and the local id is kept so an answer already in flight still lands on it.
 export function prompted(s: SessionState, doing: string, next: Item): SessionState {
   const key = promptKey(next);
-  const at = s.items.findIndex((it) => it.t === next.t && promptKey(it) === key);
+  const call = surfaceCall(next);
+  const at = s.items.findIndex((it) => it.t === next.t && (promptKey(it) === key || call && it.t === "ask" && it.surfaceExpired && it.ask.id === call));
   if (at < 0) return { ...s, doing, items: [...s.items, next] };
   // A frame replayed from the log for a question already answered is history,
   // not a new wait: reopening it would ask again for a decision already made.
-  if (promptSealed(s.items[at])) return s;
+  if (promptSealed(s.items[at]) && !(s.items[at].t === "ask" && s.items[at].surfaceExpired)) return s;
   const items = s.items.slice();
   items[at] = { ...next, id: s.items[at].id };
   return { ...s, doing, items };
+}
+
+function surfaceCall(item: Item) {
+  return item.t === "ask" && item.ask.questions[0]?.surface ? item.ask.questions[0].callId : undefined;
+}
+
+// A surface the record holds as expired is replaced by the live card the pane still carries.
+export function withoutRetiredSurfaces(history: Item[], retained: Item[]) {
+  const calls = new Set(retained.map(surfaceCall).filter(Boolean));
+  return history.filter(i => !(i.t === "ask" && i.surfaceExpired && calls.has(i.ask.id)));
 }
 
 // A prompt answered somewhere else — another window, a revise — is a transition,
@@ -46,10 +59,10 @@ export function sealByReceipt(s: SessionState, r: DecisionReceipt): SessionState
   if (at < 0) return s; // already sealed here, or never on this screen
   const items = s.items.slice();
   const it = items[at];
-  if (it.t === "ask") items[at] = { ...it, answered: [], answeredElsewhere: true };
-  else if (it.t === "approval") items[at] = { ...it, verdict: verdictOf(r.outcome) };
+  if (it.t === "ask") items[at] = { ...it, answered: [], answeredElsewhere: true, timedOut: r.outcome === "timed_out", by: r.via ?? "window", said: r.subject };
+  else if (it.t === "approval") items[at] = { ...it, verdict: verdictOf(r.outcome), by: r.via ?? "window" };
   else return s;
-  return { ...s, items };
+  return { ...s, doing: it.t === "ask" ? (s.running ? RUNNING : IDLE) : s.doing, items };
 }
 
 // verdictOf picks the sealed line from the outcome the kernel recorded. The
@@ -75,4 +88,62 @@ function verdictOf(outcome: string): string {
     default:
       return "unknown";
   }
+}
+
+interface AskArgs {
+  questions?: {
+    header?: string;
+    question?: string;
+    reason?: string;
+    multiSelect?: boolean;
+    options?: { label?: string; description?: string }[];
+  }[];
+}
+
+// A reload does not replay ask_request, so the question is read back off the
+// ask call's own arguments, shaped as agent.AskTool shapes them for the wire.
+export function askFromCall(id: string, args: string | undefined): Ask | null {
+  let p: AskArgs;
+  try {
+    p = JSON.parse(args ?? "");
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(p?.questions) || p.questions.length === 0) return null;
+  const questions: AskQuestion[] = [];
+  for (const [i, q] of p.questions.entries()) {
+    if (!Array.isArray(q?.options)) return null;
+    questions.push({
+      id: `q${i + 1}`,
+      header: q.header?.trim() ?? "",
+      prompt: q.question?.trim() ?? "",
+      reason: q.reason?.trim() === "missing_value" ? "missing_value" : "user_decision",
+      multi: q.multiSelect === true,
+      options: q.options.map((o) => ({ label: o.label?.trim() ?? "", description: o.description?.trim() || undefined })),
+    });
+  }
+  return { id, questions };
+}
+
+// askAnnounced folds an ask_request. One already open only moves its deadline:
+// the same question announced again says how long is left, or that it is no
+// longer skipped.
+export function askAnnounced(s: SessionState, ask: Ask): SessionState {
+  const skipAt = ask.skipInMs ? Date.now() + ask.skipInMs : undefined;
+  const shown = s.items.findIndex((i) => i.t === "ask" && i.ask.id === ask.id && !i.surfaceExpired);
+  if (shown < 0) return prompted(s, "等待你回答", { t: "ask", id: nextId(), ask, skipAt });
+  const was = s.items[shown] as Extract<Item, { t: "ask" }>;
+  if (was.skipAt === skipAt || was.answered !== undefined) return s;
+  const items = s.items.slice();
+  items[shown] = { ...was, skipAt };
+  return { ...s, items };
+}
+
+// askEngaged stops the countdown of a question the person has taken over.
+export function askEngaged(s: SessionState, id: string): SessionState {
+  const at = s.items.findIndex((i) => i.t === "ask" && i.ask.id === id && i.skipAt !== undefined);
+  if (at < 0) return s;
+  const items = s.items.slice();
+  items[at] = { ...(items[at] as Extract<Item, { t: "ask" }>), skipAt: undefined };
+  return { ...s, items };
 }

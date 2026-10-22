@@ -13,11 +13,14 @@ import (
 // runtime queued for itself, which the model must not read as the user
 // speaking.
 type steerEntry struct {
-	itemID string
-	load   func() (string, error)
+	display string
+	itemID  string
+	load    func() (string, error)
 	// text is a fallback when load is nil (legacy Steer(string) path).
 	text string
 	host bool
+	// via is the paired device the guidance was sent from; nil is the window.
+	via *provider.Via
 }
 
 // steerInbox is the guidance admitted while a Run is executing. The queue and
@@ -169,6 +172,7 @@ func (a *Agent) recordUnappliedSteer(text string, host bool, itemID ...string) {
 		Level:  event.LevelWarn,
 		Code:   event.NoticeCodeUnappliedSteer,
 		Text:   UnappliedSteerNotice(text),
+		Detail: text,
 		ItemID: id,
 	})
 }
@@ -190,7 +194,17 @@ func (a *Agent) SteerHostNotice(text string) bool {
 // SteerItem queues durable-inbox guidance identified by itemID. load is called
 // only when the entry is consumed so the agent does not retain every body.
 func (a *Agent) SteerItem(itemID string, load func() (string, error)) bool {
-	return a.queueSteer(steerEntry{itemID: itemID, load: load})
+	return a.SteerItemFrom(itemID, load, nil)
+}
+
+// SteerItemFrom is SteerItem for guidance sent from a paired device, which the
+// delivered message and its announcement name.
+func (a *Agent) SteerItemFrom(itemID string, load func() (string, error), via *provider.Via) bool {
+	return a.queueSteer(steerEntry{itemID: itemID, load: load, via: via})
+}
+
+func (a *Agent) SteerDisplayedItemFrom(itemID string, load func() (string, error), display string, via *provider.Via) bool {
+	return a.queueSteer(steerEntry{itemID: itemID, load: load, display: display, via: via})
 }
 
 func (a *Agent) queueSteer(e steerEntry) bool {
@@ -202,19 +216,19 @@ func (a *Agent) SteerConsumed() bool {
 	return a.steer.drained()
 }
 
-func (a *Agent) consumeSteer() (text, itemID string, host, ok bool) {
-	e, ok := a.steer.take()
+func (a *Agent) consumeSteer() (text string, e steerEntry, ok bool) {
+	e, ok = a.steer.take()
 	if !ok {
-		return "", "", false, false
+		return "", steerEntry{}, false
 	}
 	if e.load != nil {
 		t, err := e.load()
 		if err != nil {
-			return "", e.itemID, e.host, false
+			return "", e, false
 		}
-		return t, e.itemID, e.host, true
+		return t, e, true
 	}
-	return e.text, e.itemID, e.host, true
+	return e.text, e, true
 }
 
 // closeSteerIntakeIfIdle atomically closes the normal-completion race between
@@ -259,4 +273,13 @@ func (a *Agent) RecordUnappliedSteer(text string, itemID ...string) {
 
 func (a *Agent) steerQueueLen() int {
 	return a.steer.pending()
+}
+
+func (a *Agent) landSteer(text string, entry steerEntry) {
+	a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(sessionstore.MidTurnSteerMessage(text, entry.host)), RawContent: entry.display, Via: entry.via})
+	display := entry.display
+	if display == "" {
+		display = text
+	}
+	a.svc.sink.Emit(event.Event{Kind: event.Steer, Text: display, ItemID: entry.itemID, Via: entry.via, HostAuthored: entry.host})
 }

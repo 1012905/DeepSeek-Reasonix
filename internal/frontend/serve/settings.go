@@ -2,14 +2,18 @@ package serve
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"reasonix/internal/contract/agentpreset"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/planmode"
+	"reasonix/internal/contract/pricing"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/contract/surface"
 	"reasonix/internal/session/control"
 )
 
@@ -29,6 +33,10 @@ func (s *Server) preset(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *Server) registerModelRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("POST /model", s.model)
+}
+
 func (s *Server) model(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Ref string `json:"ref"`
@@ -37,44 +45,63 @@ func (s *Server) model(w http.ResponseWriter, r *http.Request) {
 		missingField(w, "ref")
 		return
 	}
-	ref := strings.TrimSpace(body.Ref)
-	if err := s.switchModel(r.Context(), ref); err != nil {
+	if err := s.switchModelRequested(r.Context(), strings.TrimSpace(body.Ref)); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
-	}
-	// A pane resolving through the hub's resolver takes its default from there;
-	// this machine's default_model is one it never reads.
-	if s.resolver == nil {
-		// The switch only rebuilt the running controller. Without this the next
-		// launch boots from default_model and lands back on whatever was there
-		// before, which reads as the choice not having been saved at all — the CLI
-		// and the old desktop have both persisted it since they had a picker.
-		persistDefaultModel(ref, s.ctl().ProviderCatalog())
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// persistDefaultModel records the choice in the user config. A refusal is worth
-// a log and nothing more: the live switch already succeeded, and failing the
-// request would say the model did not change when it did.
-func persistDefaultModel(ref string, catalog []provider.Descriptor) {
-	path := config.UserConfigPath()
-	if path == "" {
+// setDefaultModel records the model new sessions start on in this machine's user
+// config and leaves the session as it is. A pane resolving through a broker
+// takes its default from the home machine, so a write here would land in a file
+// that pane never reads.
+func (s *Server) setDefaultModel(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Ref string `json:"ref"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Ref) == "" {
+		missingField(w, "ref")
 		return
 	}
-	// Serialize against other in-process editors so concurrent writers do not
-	// drop each other's fields.
+	if s.resolver != nil {
+		refuse(w, http.StatusConflict, "settings.default_model_brokered", "this pane's default model belongs to the machine its models come from", nil)
+		return
+	}
+	ref := strings.TrimSpace(body.Ref)
+	catalog := s.ctl().ProviderCatalog()
+	edit := config.LoadForEdit(config.UserConfigPath())
+	if !edit.ModelRefSelectable(ref, catalog) {
+		refuse(w, http.StatusBadRequest, "settings.unknown_model", "no configured model matches that reference", map[string]any{"model": ref})
+		return
+	}
+	if err := edit.RequireAnswers(ref, config.AnswersChat); err != nil {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	if err := persistDefaultModel(ref, catalog); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// persistDefaultModel records the choice in the user config.
+func persistDefaultModel(ref string, catalog []provider.Descriptor) error {
+	path := config.UserConfigPath()
+	if path == "" {
+		return errNoUserConfig
+	}
 	unlock := config.LockUserConfigEdits()
 	defer unlock()
 	edit := config.LoadForEdit(path)
 	if err := edit.SetDefaultModel(ref, catalog); err != nil {
-		slog.Warn("serve: persist default model", "ref", ref, "err", err)
-		return
+		return err
 	}
-	if err := edit.SaveTo(path); err != nil {
-		slog.Warn("serve: save default model", "ref", ref, "path", path, "err", err)
-	}
+	return edit.SaveTo(path)
 }
+
+var errNoUserConfig = errors.New("no user configuration path")
 
 // autoApproveTools toggles YOLO/full-access tool auto-approval.
 func (s *Server) autoApproveTools(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +128,7 @@ func (s *Server) toolApprovalMode(w http.ResponseWriter, r *http.Request) {
 	}
 	mode, ok := control.ParseToolApprovalMode(body.Mode)
 	if !ok {
-		badValue(w, "mode", "ask", "auto", "dontAsk", "yolo")
+		badValue(w, "mode", "readOnly", "ask", "auto", "dontAsk", "yolo")
 		return
 	}
 	s.applyApprovalMode(mode)
@@ -120,7 +147,11 @@ func (s *Server) bypass(w http.ResponseWriter, r *http.Request) {
 func (s *Server) applyApprovalMode(mode string) {
 	s.ctl().SetToolApprovalMode(mode)
 	s.stance.set(mode)
-	persistDesktopApprovalMode(mode)
+	// A terminal states its posture on its own command line; recording its
+	// switch would make a terminal's YOLO the window's next default.
+	if s.statsSurface() != surface.CLI {
+		persistDesktopApprovalMode(mode)
+	}
 }
 
 // persistDesktopApprovalMode records the posture chosen on the composer. Same
@@ -164,12 +195,17 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	used, window := s.ctl().ContextSnapshot()
 	hit, miss := s.ctl().SessionCache()
 	sess := map[string]any{
-		"label":            s.ctl().Label(),
-		"running":          s.ctl().Running(),
+		"agentCompositionLocked": compositionLocked(s.ctl()),
+		"label":                  s.ctl().Label(),
+		// running is what a window shows; busy is what refuses a new turn, which
+		// also holds through the delivery of the previous turn's TurnDone.
+		"running":          s.ctl().TurnInFlight(),
+		"busy":             s.ctl().Running(),
 		"plan":             s.ctl().PlanMode(),
 		"autoApproveTools": s.ctl().AutoApproveTools(),
 		"bypass":           s.ctl().AutoApproveTools(),
 		"toolApprovalMode": s.ctl().ToolApprovalMode(),
+		"approvalDefault":  s.ctl().Posture(),
 		"preset":           s.ctl().AgentPreset(),
 		"goal":             s.ctl().Goal(),
 		"goalStatus":       s.ctl().GoalStatus(),
@@ -181,6 +217,13 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		"cacheHit":         hit,
 		"cacheMiss":        miss,
 	}
+	if binding := compositionControllerView(s.ctl()); binding != nil {
+		sess["agentComposition"] = binding
+	}
+	if view := s.goalRuntime(); view != nil {
+		sess["goalRuntime"] = view
+	}
+
 	// Additive: planPhase absent means outside the workflow, so a client that
 	// reads it can say "executing an approved plan" while one that reads only
 	// `plan` keeps the behaviour it always had.
@@ -193,23 +236,35 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	if u := s.ctl().LastUsage(); u != nil {
 		sess["lastUsage"] = u
 	}
-	if cfg, err := config.Load(); err == nil {
-		if entry, ok := cfg.ResolveModel(currentModelRef(s.ctl())); ok {
-			sess["effort"] = entry.Effort
-			sess["modelRef"] = entry.Name + "/" + entry.Model
-			// Whether this model reads images at all. A composer that cannot ask
-			// lets the user paste a screenshot into a text-only model and watch
-			// nothing happen.
-			sess["vision"] = config.EffectiveVision(entry)
-			// And whether that false is an answer or a silence: a relay forwards
-			// models nothing here has a label for, and telling its user the model
-			// cannot read images states a limitation that was never established.
-			sess["visionDeclared"] = config.VisionDeclared(entry)
+	if face, ok := s.ctl().ModelFace(); ok {
+		sess["effort"] = face.Effort
+		sess["modelRef"] = face.Ref
+		if label := providerLabel(face.Ref); label != "" {
+			sess["providerDisplayName"] = label
 		}
+		// Whether this model reads images at all. A composer that cannot ask
+		// lets the user paste a screenshot into a text-only model and watch
+		// nothing happen.
+		sess["vision"] = face.Vision
+		// And whether that false is an answer or a silence: a relay forwards
+		// models nothing here has a label for, and telling its user the model
+		// cannot read images states a limitation that was never established.
+		sess["visionDeclared"] = face.VisionDeclared
+	}
+	// Only a model that declares modes lists any, which is what keeps the
+	// switch off every other model's effort menu.
+	if modes := s.ctl().ModelModes(); len(modes) > 0 {
+		sess["modes"] = modes
 	}
 	sess["sessionCostQuote"] = s.bc.SessionCostQuote()
+	sess["sessionUsage"] = s.bc.SessionUsage()
 	if j := s.ctl().Jobs(); len(j) > 0 {
 		sess["jobs"] = j
+	}
+	// Additive: present only where the vendor's own schedule bills the model's
+	// rate, so a custom price or a relay shows no window it does not charge.
+	if tariff, ok := s.ctl().Tariff(); ok {
+		sess["tariff"] = tariffBody(tariff)
 	}
 	writeJSON(w, sess)
 }
@@ -217,13 +272,19 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 type modelEntry struct {
 	Ref      string `json:"ref"`
 	Provider string `json:"provider"`
-	Model    string `json:"model"`
-	Kind     string `json:"kind,omitempty"`
+	// DisplayName labels Provider on screen; Ref and Provider stay the identity.
+	DisplayName string `json:"displayName,omitempty"`
+	Model       string `json:"model"`
+	ModelAlias  string `json:"modelAlias,omitempty"`
+	Kind        string `json:"kind,omitempty"`
 	// What this model produces, projected from the protocol table so a chooser
 	// filters on a declaration rather than on a kind's spelling.
 	Answers string `json:"answers,omitempty"`
 	Active  bool   `json:"active,omitempty"`
 	Default bool   `json:"default,omitempty"`
+	// NotAdded marks a connection outside the desktop's access list: it is
+	// configured, but not one the person added, so a role cannot pick it.
+	NotAdded bool `json:"notAdded,omitempty"`
 	// Vendor is the endpoint host. Entries sharing it are one service reached
 	// under different protocols, which is what lets a picker fold the routes.
 	Vendor string `json:"vendor,omitempty"`
@@ -236,15 +297,24 @@ type modelEntry struct {
 	// The capability face; see describeModel. Omitted fields mean "nothing
 	// declares this", never "no".
 	Vision        bool        `json:"vision,omitempty"`
+	WebSearch     bool        `json:"webSearch,omitempty"`
 	Efforts       []string    `json:"efforts,omitempty"`
 	Effort        string      `json:"effort,omitempty"`
 	ContextWindow int         `json:"contextWindow,omitempty"`
 	Price         *modelPrice `json:"price,omitempty"`
+	// ForcesThinking tells frontends that even the lowest effort still reasons.
+	ForcesThinking bool `json:"forcesThinking,omitempty"`
 }
 
 type modelRoute struct {
 	key  string
 	solo bool
+}
+
+// modelRouteKey names where a model is reached: endpoint plus credential slot.
+// Two accounts at one endpoint are two routes.
+func modelRouteKey(p *config.ProviderEntry, model string) string {
+	return strings.ToLower(strings.TrimRight(p.BaseURL, "/")) + "\x00" + strings.TrimSpace(p.APIKeyEnv) + "\x00" + model
 }
 
 // collapseModelRoutes drops entries naming the same model at the same endpoint.
@@ -290,4 +360,34 @@ func betterModelRoute(a modelEntry, ar modelRoute, b modelEntry, br modelRoute) 
 type decisionViewer interface {
 	PlanPhase() planmode.Phase
 	Decisions() []control.Decision
+}
+
+// providerLabel reads the label live from the user's file: a rename rebuilds
+// nothing, so the build's snapshot of the entry cannot carry it.
+func providerLabel(ref string) string {
+	name, _, _ := strings.Cut(ref, "/")
+	if p, ok := config.LoadForEdit(config.UserConfigPath()).Provider(name); ok {
+		return strings.TrimSpace(p.DisplayName)
+	}
+	return ""
+}
+
+// goalRuntime is a goal's usage while there is a goal to account for; a session
+// without one reports none, so a window draws nothing for it.
+func (s *Server) goalRuntime() *control.GoalRuntimeView {
+	if s.ctl().Goal() == "" {
+		return nil
+	}
+	view := s.ctl().GoalRuntime()
+	return &view
+}
+
+// tariffBody is the vendor's billing window as a client draws it. ChangesAt is
+// absent when the schedule has no flip ahead, so a client says nothing about one.
+func tariffBody(t pricing.Tariff) map[string]any {
+	body := map[string]any{"peak": t.Peak}
+	if t.Changes {
+		body["changesAt"] = t.ChangesAt.UTC().Format(time.RFC3339)
+	}
+	return body
 }

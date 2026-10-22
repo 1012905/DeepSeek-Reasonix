@@ -56,6 +56,19 @@ func execInstall(t *testing.T, tl tool.Tool, args map[string]any) response {
 	return resp
 }
 
+func execInstallRefused(t *testing.T, tl tool.Tool, args map[string]any) error {
+	t.Helper()
+	raw, err := json.Marshal(args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tl.Execute(context.Background(), raw); err != nil {
+		return err
+	}
+	t.Fatal("install was not refused")
+	return nil
+}
+
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -117,6 +130,30 @@ func (s *stubConnector) connector() MCPConnector {
 }
 
 // apply: skill paths
+
+func TestSkillRootWithoutScopeKeepsProjectConfigAbsent(t *testing.T) {
+	project := testenv.TempDir(t)
+	home := testenv.TempDir(t)
+	t.Setenv("REASONIX_HOME", filepath.Join(home, ".reasonix"))
+	root := filepath.Join(testenv.TempDir(t), "shared-skills")
+	writeFile(t, filepath.Join(root, "alpha.md"), "---\nname: alpha\ndescription: Alpha helper\n---\nDo alpha work.")
+
+	resp := execInstall(t, NewTool(Options{ProjectRoot: project, HomeDir: home}), map[string]any{
+		"source": root,
+		"kind":   "skill",
+		"apply":  true,
+	})
+	if !resp.OK || len(resp.Actions) != 1 || resp.Actions[0].Scope != "global" {
+		t.Fatalf("response = %+v, want a global skill root", resp)
+	}
+	if _, err := os.Stat(filepath.Join(project, "reasonix.toml")); !os.IsNotExist(err) {
+		t.Fatalf("workspace config created without a project scope: %v", err)
+	}
+	cfg := config.LoadForEdit(config.UserConfigPath())
+	if len(cfg.Skills.Paths) != 1 || cfg.Skills.Paths[0] != root {
+		t.Fatalf("user skills.paths = %v, want %q", cfg.Skills.Paths, root)
+	}
+}
 
 func TestApplyLocalSkillRootRegistersPath(t *testing.T) {
 	project := testenv.TempDir(t)
@@ -324,7 +361,7 @@ func TestPlanClaudePluginWithNoMappedCapabilitiesIsBlocked(t *testing.T) {
 func TestApplyLocalSkillFileCopiesToProject(t *testing.T) {
 	project := testenv.TempDir(t)
 	home := testenv.TempDir(t)
-	src := filepath.Join(testenv.TempDir(t), "beta.md")
+	src := filepath.Join(project, "author", "beta.md")
 	writeFile(t, src, "---\nname: beta\ndescription: Beta helper\n---\nDo beta work.")
 
 	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
@@ -377,7 +414,7 @@ func TestApplyLocalSkillFileDoesNotShadowFlatCompatInstall(t *testing.T) {
 func TestApplyLocalSKILLFileCopiesSiblingResources(t *testing.T) {
 	project := testenv.TempDir(t)
 	home := testenv.TempDir(t)
-	srcDir := filepath.Join(testenv.TempDir(t), "frontend-design")
+	srcDir := filepath.Join(project, "author", "frontend-design")
 	writeFile(t, filepath.Join(srcDir, "SKILL.md"), "---\nname: frontend-design\ndescription: Frontend helper\n---\nSee references/style.md")
 	writeFile(t, filepath.Join(srcDir, "references", "style.md"), "# Style\n\nUse crisp layouts.")
 	writeFile(t, filepath.Join(srcDir, "scripts", "lint.sh"), "#!/bin/sh\nexit 0\n")
@@ -571,8 +608,8 @@ func TestParseSkillContentRejectsMalformedFrontmatter(t *testing.T) {
 	if err == nil {
 		t.Fatal("malformed frontmatter should fail")
 	}
-	if !strings.Contains(err.Error(), "invalid YAML") || !strings.Contains(strings.ToLower(err.Error()), "line") {
-		t.Fatalf("error = %v, want invalid YAML with location", err)
+	if !errors.Is(err, ErrInvalidManifest) {
+		t.Fatalf("error = %v, want invalid manifest identity", err)
 	}
 }
 
@@ -805,6 +842,115 @@ func TestPlanMCPJSONRejectsInvalid(t *testing.T) {
 				t.Fatalf("expected error for %s", tc.name)
 			}
 		})
+	}
+}
+
+// Every eager entry is a high-risk row the preview never hides, so a .mcp.json
+// declaring more servers than the limit is refused while planning, local or
+// fetched, with the invalid-manifest identity and the counts; one at the limit
+// still parses.
+func eagerMCPJSON(n int) string {
+	servers := make([]string, n)
+	for i := range servers {
+		servers[i] = fmt.Sprintf(`"s%d":{"command":"c","tier":"eager"}`, i)
+	}
+	return `{"mcpServers":{` + strings.Join(servers, ",") + `}}`
+}
+
+func TestPlanMCPJSONRefusesMoreServersThanTheLimit(t *testing.T) {
+	if entries, _, err := parseMCPJSON([]byte(eagerMCPJSON(maxMCPJSONServers))); err != nil || len(entries) != maxMCPJSONServers {
+		t.Fatalf("at the limit: %d entries, err %v", len(entries), err)
+	}
+	over := eagerMCPJSON(maxMCPJSONServers + 1)
+	mcpPath := filepath.Join(testenv.TempDir(t), ".mcp.json")
+	writeFile(t, mcpPath, over)
+	var served atomic.Value
+	served.Store(over)
+	srv := skillServer(t, &served)
+	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t), HomeDir: testenv.TempDir(t), HTTPClient: srv.Client()})
+	want := fmt.Sprintf(".mcp.json declares %d servers; limit is %d", maxMCPJSONServers+1, maxMCPJSONServers)
+	for _, source := range []string{mcpPath, srv.URL + "/.mcp.json"} {
+		_, err := execRaw(t, tl, map[string]any{"source": source, "kind": "mcp"})
+		if !errors.Is(err, ErrInvalidManifest) || !strings.Contains(err.Error(), want) {
+			t.Fatalf("planning %s over the limit: err = %v; want the invalid-manifest identity saying %q", source, err, want)
+		}
+	}
+}
+
+// With kind=auto a refused .mcp.json still answers with its cause. A source that
+// is the file itself is refused rather than re-planned as a skill; a folder that
+// carries one warns with the cause, or is refused with it when nothing else plans.
+func TestPlanAutoKeepsTheCauseOfARefusedMCPJSON(t *testing.T) {
+	over := eagerMCPJSON(maxMCPJSONServers + 1)
+	want := fmt.Sprintf(".mcp.json declares %d servers; limit is %d", maxMCPJSONServers+1, maxMCPJSONServers)
+	var served atomic.Value
+	served.Store(over)
+	srv := skillServer(t, &served)
+	file := filepath.Join(testenv.TempDir(t), ".mcp.json")
+	writeFile(t, file, over)
+	bare := testenv.TempDir(t)
+	writeFile(t, filepath.Join(bare, ".mcp.json"), over)
+	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t), HomeDir: testenv.TempDir(t), HTTPClient: srv.Client()})
+	for _, source := range []string{srv.URL + "/.mcp.json", file, bare} {
+		resp, err := execRaw(t, tl, map[string]any{"source": source, "kind": "auto", "strict": false})
+		if !errors.Is(err, ErrInvalidManifest) || !strings.Contains(err.Error(), want) {
+			t.Fatalf("auto plan of %s: err = %v, plan = %+v; want the refusal saying %q", source, err, resp.Actions, want)
+		}
+	}
+	mixed := testenv.TempDir(t)
+	writeFile(t, filepath.Join(mixed, ".mcp.json"), over)
+	writeFile(t, filepath.Join(mixed, "SKILL.md"), "---\nname: helper\ndescription: A helper\n---\nBody")
+	resp, err := execRaw(t, tl, map[string]any{"source": mixed, "kind": "auto"})
+	if err != nil || len(resp.Actions) != 1 || resp.Actions[0].Kind != "skill" {
+		t.Fatalf("auto plan of a folder with a skill and a refused .mcp.json: err = %v, plan = %+v", err, resp.Actions)
+	}
+	if !slices.ContainsFunc(resp.Warnings, func(w string) bool { return strings.Contains(w, want) }) {
+		t.Fatalf("warnings = %q, want the .mcp.json refusal saying %q", resp.Warnings, want)
+	}
+}
+
+// A folder's .mcp.json that cannot be read is a refusal with an identity rather
+// than a bare filesystem error; one that declares nothing says nothing under
+// kind=auto, and a folder without one is ErrManifestMissing under kind=mcp.
+func TestPlanLocalMCPJSONReadFailuresCarryAnIdentity(t *testing.T) {
+	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t), HomeDir: testenv.TempDir(t)})
+	const helper = "---\nname: helper\ndescription: A helper\n---\nBody"
+	unreadable := testenv.TempDir(t)
+	if err := os.Mkdir(filepath.Join(unreadable, ".mcp.json"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := execRaw(t, tl, map[string]any{"source": unreadable, "kind": "auto"}); !errors.Is(err, ErrSourceUnreadable) {
+		t.Fatalf("auto plan of a folder whose .mcp.json is a directory: err = %v, want ErrSourceUnreadable", err)
+	}
+	writeFile(t, filepath.Join(unreadable, "SKILL.md"), helper)
+	prefix := hostLiteral(filepath.Join(unreadable, ".mcp.json")) + ": "
+	resp, err := execRaw(t, tl, map[string]any{"source": unreadable, "kind": "auto"})
+	if err != nil || len(resp.Actions) != 1 || !slices.ContainsFunc(resp.Warnings, func(w string) bool {
+		return strings.HasPrefix(w, prefix) && strings.Contains(w, ErrSourceUnreadable.Error())
+	}) {
+		t.Fatalf("auto plan with a skill and an unreadable .mcp.json: err = %v, warnings = %q", err, resp.Warnings)
+	}
+	declaresNothing := testenv.TempDir(t)
+	writeFile(t, filepath.Join(declaresNothing, ".mcp.json"), `{}`)
+	writeFile(t, filepath.Join(declaresNothing, "SKILL.md"), helper)
+	empty := hostLiteral(filepath.Join(declaresNothing, ".mcp.json"))
+	if resp, err := execRaw(t, tl, map[string]any{"source": declaresNothing, "kind": "auto"}); err != nil || len(resp.Actions) != 1 || slices.ContainsFunc(resp.Warnings, func(w string) bool { return strings.HasPrefix(w, empty) }) {
+		t.Fatalf("auto plan with a skill and an empty .mcp.json: err = %v, actions = %d, warnings = %q", err, len(resp.Actions), resp.Warnings)
+	}
+	if _, err := execRaw(t, tl, map[string]any{"source": testenv.TempDir(t), "kind": "mcp"}); !errors.Is(err, ErrManifestMissing) {
+		t.Fatalf("mcp plan of a folder without .mcp.json: err = %v, want ErrManifestMissing", err)
+	}
+}
+
+// A fetched document that is not a .mcp.json is the wrong kind for kind=mcp,
+// not an invalid manifest: its parse error is not the cause to report.
+func TestPlanSkillURLWithKindMCPIsTheWrongKind(t *testing.T) {
+	var served atomic.Value
+	served.Store("---\nname: demo\ndescription: A demo skill\n---\nBody")
+	srv := skillServer(t, &served)
+	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t), HomeDir: testenv.TempDir(t), HTTPClient: srv.Client()})
+	if _, err := execRaw(t, tl, map[string]any{"source": srv.URL + "/SKILL.md", "kind": "mcp"}); !errors.Is(err, ErrUnsupportedKind) {
+		t.Fatalf("SKILL.md with kind=mcp: err = %v, want ErrUnsupportedKind", err)
 	}
 }
 
@@ -1187,6 +1333,7 @@ func TestParseGitHubRepoSourceAcceptsCanonicalRepositoryPaths(t *testing.T) {
 	}{
 		{"https://github.com/o/r", githubRepoSource{Owner: "o", Repo: "r"}},
 		{"https://github.com/o/r.git/", githubRepoSource{Owner: "o", Repo: "r"}},
+		{"https://github.com/o/.github", githubRepoSource{Owner: "o", Repo: ".github"}},
 		{"https://github.com/o/r/tree/main", githubRepoSource{Owner: "o", Repo: "r", Branch: "main"}},
 		{"https://github.com/o/r/tree/main/plugins/demo", githubRepoSource{Owner: "o", Repo: "r", Branch: "main", Path: "plugins/demo"}},
 	}
@@ -1202,6 +1349,11 @@ func TestParseGitHubRepoSourceAcceptsCanonicalRepositoryPaths(t *testing.T) {
 
 func TestParseGitHubRepoSourceRejectsPagesAndUnsafePaths(t *testing.T) {
 	for _, source := range []string{
+		"https://github.com/o/...git",
+		"https://github.com/o/..git",
+		"https://github.com/o/.git",
+		"https://github.com/./r",
+		"https://github.com/.o/r",
 		"https://github.com/o/r/issues/1",
 		"https://github.com/o/r/blob/main/reasonix-plugin.json",
 		"https://github.com/o/r/pull/1",
@@ -1309,6 +1461,10 @@ func TestPlanGitHubRepoDiscoversMultipleSkills(t *testing.T) {
 	if resp.Actions[0].Name != "gsap-core" || resp.Actions[1].Name != "gsap-timeline" {
 		t.Fatalf("actions = %+v", resp.Actions)
 	}
+	// One address expanding into several skills has to reach a person listed.
+	if !strings.HasPrefix(resp.PlanID, "high:") {
+		t.Fatalf("planId = %q, want a multi-skill expansion graded high", resp.PlanID)
+	}
 	for _, action := range resp.Actions {
 		wantSuffix := filepath.Join(action.Name, skill.SkillFile)
 		if action.Layout != "canonical_dir" || !strings.HasSuffix(action.CanonicalPath, wantSuffix) {
@@ -1323,7 +1479,7 @@ func TestFetchTextAppliesTimeoutAndUA(t *testing.T) {
 	// that a cancelled context propagates as ErrSourceUnreadable.
 	project := testenv.TempDir(t)
 	home := testenv.TempDir(t)
-	tl := NewTool(Options{ProjectRoot: project, HomeDir: home}).(*installSourceTool)
+	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err := tl.fetchText(ctx, "http://example.invalid")
@@ -1342,7 +1498,7 @@ func TestGlobalSkillInstallRootUsesReasonixHome(t *testing.T) {
 	userHomeDir = func() (string, error) { return home, nil }
 	t.Cleanup(func() { userHomeDir = oldUserHomeDir })
 
-	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t)}).(*installSourceTool)
+	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t)})
 	root, err := tl.skillInstallRoot("global")
 	if err != nil {
 		t.Fatalf("skillInstallRoot: %v", err)
@@ -1360,7 +1516,7 @@ func TestFetchTextAuthMapsToErrAuthRequired(t *testing.T) {
 	defer srv.Close()
 	project := testenv.TempDir(t)
 	home := testenv.TempDir(t)
-	tl := NewTool(Options{ProjectRoot: project, HomeDir: home, HTTPClient: srv.Client()}).(*installSourceTool)
+	tl := NewTool(Options{ProjectRoot: project, HomeDir: home, HTTPClient: srv.Client()})
 	_, err := tl.fetchText(context.Background(), srv.URL)
 	if !errors.Is(err, ErrAuthRequired) {
 		t.Errorf("expected ErrAuthRequired, got %v", err)
@@ -1371,7 +1527,7 @@ func TestFetchTextRefusesInternalAddress(t *testing.T) {
 	// SSRF guard: an install source pointed at cloud-metadata / internal IPs must
 	// be refused at dial time, not fetched. These are IP literals so no real
 	// network or DNS is involved — the guard blocks before connecting.
-	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t), HomeDir: testenv.TempDir(t)}).(*installSourceTool)
+	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t), HomeDir: testenv.TempDir(t)})
 	for _, target := range []string{
 		"http://169.254.169.254/latest/meta-data/", // cloud metadata
 		"http://10.0.0.1/",                         // RFC1918 internal
@@ -1885,7 +2041,7 @@ func TestGitHubPluginPlanMatchesApply(t *testing.T) {
 	project := testenv.TempDir(t)
 	home := testenv.TempDir(t)
 	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
-	tool := tl.(*installSourceTool)
+	tool := tl
 	tool.preparePlugin = func(ctx context.Context, source, mode string) (string, string, func(), error) {
 		return src, "cafe0001", func() {}, nil
 	}
@@ -1940,7 +2096,7 @@ func TestGitHubClaudeMarketplacePlansAndAppliesRelativePlugins(t *testing.T) {
 	project := testenv.TempDir(t)
 	home := testenv.TempDir(t)
 	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
-	tool := tl.(*installSourceTool)
+	tool := tl
 	cloneCalls := 0
 	cleanupCalls := 0
 	tool.preparePlugin = func(ctx context.Context, source, mode string) (string, string, func(), error) {
@@ -2003,7 +2159,7 @@ func TestGitHubClaudeMarketplaceNameSelectsOnePlugin(t *testing.T) {
 	}
 
 	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t), HomeDir: testenv.TempDir(t)})
-	tool := tl.(*installSourceTool)
+	tool := tl
 	tool.preparePlugin = func(ctx context.Context, source, mode string) (string, string, func(), error) {
 		return marketplaceRoot, "cafe0001", func() {}, nil
 	}
@@ -2025,7 +2181,7 @@ func TestGitHubClaudeMarketplaceRejectsEscapingRelativeSource(t *testing.T) {
 }`)
 
 	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t), HomeDir: testenv.TempDir(t)})
-	tool := tl.(*installSourceTool)
+	tool := tl
 	tool.preparePlugin = func(ctx context.Context, source, mode string) (string, string, func(), error) {
 		return marketplaceRoot, "cafe0001", func() {}, nil
 	}
@@ -2034,7 +2190,7 @@ func TestGitHubClaudeMarketplaceRejectsEscapingRelativeSource(t *testing.T) {
 		"kind":   "plugin",
 	})
 	_, err := tl.Execute(context.Background(), raw)
-	if err == nil || !strings.Contains(err.Error(), "escapes") {
+	if !errors.Is(err, ErrManifestMissing) {
 		t.Fatalf("error = %v, want marketplace path escape rejection", err)
 	}
 }
@@ -2056,7 +2212,7 @@ func TestGitHubClaudeMarketplaceCleansCloneWhenApprovalIsDenied(t *testing.T) {
 			return errors.New("not approved")
 		},
 	})
-	tool := tl.(*installSourceTool)
+	tool := tl
 	tool.preparePlugin = func(ctx context.Context, source, mode string) (string, string, func(), error) {
 		return marketplaceRoot, "cafe0001", func() { cleanupCalls++ }, nil
 	}
@@ -2086,7 +2242,7 @@ func TestGitHubClaudeMarketplaceCleansPreparedPinnedEntryWhenLaterEntryFails(t *
 
 	mainCleanup, pinnedCleanup := 0, 0
 	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t), HomeDir: testenv.TempDir(t)})
-	tool := tl.(*installSourceTool)
+	tool := tl
 	tool.preparePlugin = func(_ context.Context, source, _ string) (string, string, func(), error) {
 		if strings.Contains(source, "acme/external") {
 			return externalRoot, pinnedSHA, func() { pinnedCleanup++ }, nil
@@ -2127,7 +2283,7 @@ func TestGitHubClaudeMarketplaceAcceptsBarePathsAndSkipsUnsupported(t *testing.T
 	writeFile(t, filepath.Join(marketplaceRoot, "plugins", "beta", "skills", "beta-legal", "SKILL.md"), "---\nname: beta-legal\ndescription: Plugin context\n---\nPlugin context")
 
 	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t), HomeDir: testenv.TempDir(t)})
-	tool := tl.(*installSourceTool)
+	tool := tl
 	tool.preparePlugin = func(ctx context.Context, source, mode string) (string, string, func(), error) {
 		return marketplaceRoot, "cafe0001", func() {}, nil
 	}
@@ -2172,7 +2328,7 @@ func TestGitHubClaudeMarketplaceSelectedUnsupportedSourceFails(t *testing.T) {
 	writeFile(t, filepath.Join(marketplaceRoot, "alpha", ".claude-plugin", "plugin.json"), `{"name":"alpha-legal"}`)
 
 	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t), HomeDir: testenv.TempDir(t)})
-	tool := tl.(*installSourceTool)
+	tool := tl
 	tool.preparePlugin = func(ctx context.Context, source, mode string) (string, string, func(), error) {
 		return marketplaceRoot, "cafe0001", func() {}, nil
 	}
@@ -2182,7 +2338,7 @@ func TestGitHubClaudeMarketplaceSelectedUnsupportedSourceFails(t *testing.T) {
 		"name":   "external",
 	})
 	_, err := tl.Execute(context.Background(), raw)
-	if err == nil || !strings.Contains(err.Error(), "external source") {
+	if !errors.Is(err, ErrManifestMissing) {
 		t.Fatalf("error = %v, want external-source rejection for the selected plugin", err)
 	}
 }
@@ -2200,7 +2356,7 @@ func TestGitHubClaudeMarketplaceAcceptsPinnedGitHubURLObject(t *testing.T) {
 
 	cleanupCalls := 0
 	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t), HomeDir: testenv.TempDir(t)})
-	tool := tl.(*installSourceTool)
+	tool := tl
 	tool.preparePlugin = func(_ context.Context, source, _ string) (string, string, func(), error) {
 		if source == "https://github.com/acme/critter-marketplace" {
 			return marketplaceRoot, "parent", func() {}, nil
@@ -2240,7 +2396,7 @@ func TestGitHubClaudeMarketplacePlanIDStableAcrossPlanAndApply(t *testing.T) {
 
 	home := testenv.TempDir(t)
 	tl := NewTool(Options{ProjectRoot: testenv.TempDir(t), HomeDir: home})
-	tool := tl.(*installSourceTool)
+	tool := tl
 	tool.preparePlugin = func(ctx context.Context, source, mode string) (string, string, func(), error) {
 		return marketplaceRoot, "cafe0001", func() {}, nil
 	}
@@ -2286,7 +2442,7 @@ func TestGitHubPluginApplyRefusesUnpinnableDrift(t *testing.T) {
 	project := testenv.TempDir(t)
 	home := testenv.TempDir(t)
 	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
-	tool := tl.(*installSourceTool)
+	tool := tl
 	calls := 0
 	tool.preparePlugin = func(ctx context.Context, source, mode string) (string, string, func(), error) {
 		calls++
@@ -2307,7 +2463,7 @@ func TestGitHubPluginApplyRefusesUnpinnableDrift(t *testing.T) {
 	if len(resp.Actions) != 1 || resp.Actions[0].Status != "failed" {
 		t.Fatalf("actions = %+v, want the single install action failed", resp.Actions)
 	}
-	if !strings.Contains(resp.Actions[0].Error, "approved commit cafe0001") {
+	if !strings.Contains(resp.Actions[0].Error, ErrApprovalDenied.Error()) {
 		t.Fatalf("action error = %q, want the approved-commit drift refusal", resp.Actions[0].Error)
 	}
 	if _, ok, _ := pluginpkg.FindInstalled(filepath.Join(home, ".reasonix"), "pwf"); ok {
@@ -2330,7 +2486,7 @@ func TestCopyMaterializesInRootSymlinkedCommands(t *testing.T) {
 	project := testenv.TempDir(t)
 	home := testenv.TempDir(t)
 	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
-	tool := tl.(*installSourceTool)
+	tool := tl
 	tool.preparePlugin = func(ctx context.Context, source, mode string) (string, string, func(), error) {
 		return src, "cafe0001", func() {}, nil
 	}
@@ -2373,21 +2529,18 @@ func TestCopyRefusesUnmaterializableSymlinkCommands(t *testing.T) {
 	project := testenv.TempDir(t)
 	home := testenv.TempDir(t)
 	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
-	tool := tl.(*installSourceTool)
+	tool := tl
 	tool.preparePlugin = func(ctx context.Context, source, mode string) (string, string, func(), error) {
 		return src, "cafe0001", func() {}, nil
 	}
 
-	resp := execInstall(t, tl, map[string]any{
+	err := execInstallRefused(t, tl, map[string]any{
 		"source": "https://github.com/acme/escapes",
 		"kind":   "plugin",
 		"apply":  true,
 	})
-	if resp.OK || resp.Status != "failed" || len(resp.Actions) != 1 || resp.Actions[0].Status != "failed" {
-		t.Fatalf("response = %+v, want a failed apply for the unmaterializable symlink", resp)
-	}
-	if !strings.Contains(resp.Actions[0].Error, "approved plan counted") {
-		t.Fatalf("action error = %q, want the capability-verification refusal", resp.Actions[0].Error)
+	if !errors.Is(err, ErrInvalidManifest) || !strings.Contains(err.Error(), "approved plan counted") {
+		t.Fatalf("error = %v, want the capability-verification refusal at planning", err)
 	}
 	if _, err := os.Stat(filepath.Join(home, ".reasonix", "plugins", "escapes")); !os.IsNotExist(err) {
 		t.Fatal("failed install must not leave the copied tree behind")
@@ -2418,7 +2571,7 @@ func TestFailedReplaceKeepsExistingPluginInstall(t *testing.T) {
 	project := testenv.TempDir(t)
 	home := testenv.TempDir(t)
 	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
-	tool := tl.(*installSourceTool)
+	tool := tl
 	current, commit := v1, "cafe0001"
 	tool.preparePlugin = func(ctx context.Context, source, mode string) (string, string, func(), error) {
 		return current, commit, func() {}, nil
@@ -2434,14 +2587,14 @@ func TestFailedReplaceKeepsExistingPluginInstall(t *testing.T) {
 	}
 
 	current, commit = v2, "cafe0002"
-	update := execInstall(t, tl, map[string]any{
+	err := execInstallRefused(t, tl, map[string]any{
 		"source":  "https://github.com/acme/pwf",
 		"kind":    "plugin",
 		"apply":   true,
 		"replace": true,
 	})
-	if update.OK || update.Status != "failed" {
-		t.Fatalf("update = %+v, want a failed apply for the unmaterializable symlink", update)
+	if !errors.Is(err, ErrInvalidManifest) || !strings.Contains(err.Error(), "approved plan counted") {
+		t.Fatalf("update error = %v, want the capability-verification refusal at planning", err)
 	}
 
 	installedRoot := filepath.Join(home, ".reasonix", "plugins", "pwf")
@@ -2490,7 +2643,7 @@ func TestBackupPathCannotCollideWithSiblingPlugin(t *testing.T) {
 	project := testenv.TempDir(t)
 	home := testenv.TempDir(t)
 	tl := NewTool(Options{ProjectRoot: project, HomeDir: home})
-	tool := tl.(*installSourceTool)
+	tool := tl
 	sources := map[string]string{
 		"https://github.com/acme/foo":     fooV1,
 		"https://github.com/acme/sibling": sibling,
@@ -2524,11 +2677,59 @@ func TestBackupPathCannotCollideWithSiblingPlugin(t *testing.T) {
 	if _, ok, _ := pluginpkg.FindInstalled(filepath.Join(home, ".reasonix"), "foo.pre-replace"); !ok {
 		t.Fatal("sibling plugin must stay registered")
 	}
-	pkg, _, err := pluginpkg.ParseDir(filepath.Join(home, ".reasonix", "plugins", "foo"))
+	installed, found, err := pluginpkg.FindInstalled(filepath.Join(home, ".reasonix"), "foo")
+	if err != nil || !found {
+		t.Fatalf("updated foo registration = %+v, found=%t, error=%v", installed, found, err)
+	}
+	pkg, _, err := pluginpkg.ParseDir(pluginpkg.ResolveRoot(filepath.Join(home, ".reasonix"), installed.Root))
 	if err != nil {
 		t.Fatalf("ParseDir foo: %v", err)
 	}
 	if pkg.Manifest.Version != "2.0.0" {
 		t.Fatalf("foo version = %q, want the update applied", pkg.Manifest.Version)
+	}
+}
+
+func TestPlanMCPJSONAlwaysLoadCarriesToTheEntry(t *testing.T) {
+	entries, _, err := parseMCPJSON([]byte(`{
+  "mcpServers": {
+    "pinned": { "command": "node", "alwaysLoad": true },
+    "plain": { "command": "node" }
+  }
+}`))
+	if err != nil {
+		t.Fatalf("parseMCPJSON: %v", err)
+	}
+	loads := map[string]string{}
+	for _, e := range entries {
+		loads[e.Name] = e.DeclaredMCPLoad()
+	}
+	if loads["pinned"] != config.MCPLoadAlways || loads["plain"] != config.MCPLoadDeferred {
+		t.Fatalf("loads = %v", loads)
+	}
+}
+
+func TestPlanClaudeModsPackageCarriesTheModAndItsFullTrustWarning(t *testing.T) {
+	project := testenv.TempDir(t)
+	home := testenv.TempDir(t)
+	src := filepath.Join(testenv.TempDir(t), "mod-pack")
+	writeFile(t, filepath.Join(src, ".claude-plugin", "plugin.json"), `{"name":"mod-pack"}`)
+	writeFile(t, filepath.Join(src, "skills", "greet", "SKILL.md"), "---\nname: greet\ndescription: Greets\n---\nSay hi.")
+	writeFile(t, filepath.Join(src, "hooks", "hooks.json"), `{"modules":["./register.mjs"]}`)
+	writeFile(t, filepath.Join(src, "hooks", "register.mjs"), "export function register(on) { on('tool.call', async ($, e, next) => next(e)); $.unused; }")
+
+	planned := execInstall(t, NewTool(Options{ProjectRoot: project, HomeDir: home}), map[string]any{"source": src, "kind": "plugin"})
+	if len(planned.Actions) != 1 {
+		t.Fatalf("actions = %+v", planned.Actions)
+	}
+	a := planned.Actions[0]
+	if a.Compatibility != "full" || !slices.Contains(a.MappedCapabilities, "mods") || a.RiskLevel != RiskHigh {
+		t.Fatalf("action = %+v, want a full, high-risk plan that maps mods", a)
+	}
+	if a.Mod == nil || !a.Mod.Listed || len(a.Mod.Events) != 1 || a.Mod.Events[0].Name != "tool.call" {
+		t.Fatalf("mod preview = %+v", a.Mod)
+	}
+	if !strings.Contains(strings.Join(a.RiskReasons, "\n"), "FULL TRUST: a Claude Code mod") {
+		t.Fatalf("risk reasons = %v", a.RiskReasons)
 	}
 }

@@ -9,18 +9,32 @@ export interface PermissionLists {
   allow: string[];
   ask: string[];
   deny: string[];
+  // Ask before a call that copies text an external result gave the task. On a
+  // save, absent leaves it as it is.
+  askOnExternalOrigin?: boolean;
 }
 
-// What an editor needs beyond the lists: the file a save lands in, and — only
-// when a project config declares its own — the merge actually in force, which
-// an edit here cannot move.
+export interface DormantPermissionRule {
+  list: string;
+  rule: string;
+  tool: string;
+}
+
+// Editable user lists and separate project rules that are in force. shadowedBy
+// names a project config that outranks the edited file; effective is the
+// merged boundary the controller actually loaded.
 export interface PermissionRules extends PermissionLists {
   path: string;
   // What was allowed on a prompt for this session alone. Nothing wrote it down,
   // so the file on screen is less than the agent may currently do.
   granted?: string[];
+  remembered?: string[];
+  rememberedPath?: string;
+  rememberedErrorCode?: string;
   shadowedBy?: string;
   effective?: PermissionLists;
+  // Saved rules that name no tool, so they match nothing.
+  dormant?: DormantPermissionRule[];
 }
 
 // Where an approved write may land, and whether bash runs jailed. The
@@ -31,6 +45,8 @@ export interface SandboxSettings {
   network: boolean;
   workspaceRoot: string;
   allowWrite: string[];
+  // Refuse a whole-file write over a change made since the agent last saw the file.
+  protectChangedFiles: boolean;
   effectiveWriteRoots: string[];
   // The mode that will actually run, which the configured one does not always
   // survive to: Windows has no OS backend and forces off, an unset value
@@ -46,6 +62,15 @@ export interface SandboxSettings {
   platform: string;
   path: string;
   shadowedBy?: string;
+}
+
+// The project's primary folder and the extra folders the user granted it write
+// access to. pending counts other panes on the project that were busy and take
+// the change at their next rebuild.
+export interface WorkspaceRoots {
+  primary: string;
+  extra: string[];
+  pending?: number;
 }
 
 // What a settings surface shows in place of a save it cannot perform. The
@@ -67,4 +92,337 @@ export interface ConfigProblem {
 export interface ConfigRepair {
   backup: string;
   problem: ConfigProblem | null;
+}
+
+// The built-in browser tools as the user file holds them, beside what this
+// workspace will run with: a project file may set the same key and outrank it.
+export interface BrowserToolsSettings {
+  enabled: boolean;
+  effective: boolean;
+  path: string;
+}
+
+// How a sub-agent that declared no write_paths holds its claim, as the user
+// file records it. A project file cannot set it, so there is one value.
+export interface SubagentClaimsSettings {
+  optimistic: boolean;
+  path: string;
+}
+
+// The bounds on guidance sent to a running sub-agent, as the user file records
+// them: bytes in one message and messages per minute to one sub-agent, zero
+// lifting a bound. A project file cannot set them.
+export interface SubagentSteerSettings {
+  maxBytes: number;
+  perMinute: number;
+  defaultMaxBytes: number;
+  defaultPerMinute: number;
+  path: string;
+}
+
+// How this machine's sessions hold the workspace write lease against one
+// another, as the user file records it. A project file cannot set it. A running
+// session keeps the lease it was built with, so a change reaches sessions
+// opened after it.
+export interface WriteLeaseSettings {
+  optimistic: boolean;
+  maxWaitMinutes: number;
+  path: string;
+}
+
+// Whether a submitted plan starts executing without the approval click, as the
+// user file records it. A project file cannot set it.
+export interface PlanApprovalSettings {
+  auto: boolean;
+  path: string;
+}
+
+// Whether a new conversation starts in plan mode, as the user file records it.
+// A project file cannot set it.
+export interface DefaultModeSettings {
+  plan: boolean;
+  path: string;
+}
+
+// One tool on the settings page: whether the user removed it, and which host
+// feature needs it when it cannot be removed.
+export interface ToolSetting {
+  name: string;
+  description: string;
+  disabled: boolean;
+  requiredBy?: string;
+  byProject?: boolean;
+}
+
+// The tools a request carries plus the ones the user removed, as the user file
+// records them.
+export interface ToolSettings {
+  tools: ToolSetting[];
+  path: string;
+}
+
+export interface PeerView {
+  key: string;
+  title: string;
+  project?: string;
+}
+
+export interface PeerHeld {
+  id: string;
+  fromSession: string;
+  fromTitle?: string;
+  fromProject?: string;
+  sentAt: string;
+  body: string;
+}
+
+export type PeerThreadState = "waiting" | "working" | "replied" | "declined";
+
+export interface PeerThread {
+  key: string;
+  title: string;
+  project: string;
+  sessionPath?: string;
+  state: PeerThreadState;
+  since: string;
+  messageId: string;
+}
+
+export interface PeersState {
+  enabled: boolean;
+  peers: PeerView[];
+  held: PeerHeld[];
+  threads?: PeerThread[];
+}
+
+export interface PeerProject {
+  path: string;
+  name: string;
+}
+
+/** The session-messages switches as the kernel holds them (snake_case on the
+ *  wire). Saved values reach the model only at the next turn boundary, so
+ *  `pending` stays true until then. */
+export interface PeersSettings {
+  enabled: boolean;
+  dispatch: boolean;
+  release_projects: PeerProject[];
+  // Ceilings on chained and simultaneous dispatches; 0 removes a ceiling.
+  max_dispatch_depth: number;
+  max_dispatched_sessions: number;
+  path: string;
+  applies: "next_turn";
+  pending: boolean;
+  // False where the session has no folder to open (a headless run): there is
+  // nowhere for messages to be held, so the switches are inert.
+  available: boolean;
+}
+
+export interface PeersSettingsEdit {
+  enabled?: boolean;
+  dispatch?: boolean;
+  release_projects?: string[];
+  max_dispatch_depth?: number;
+  max_dispatched_sessions?: number;
+}
+
+export type PeerRemember = "project" | "none";
+
+export interface PeerReceipt {
+  id: string;
+  to: PeerView;
+}
+
+export interface AutoArchiveSettings {
+  enabled: boolean;
+  days: number;
+  defaultDays: number;
+  path: string;
+}
+
+// The user's system persona. The kernel serves the built-in starting points
+// with the settings so the page never keeps a second copy of the prompt text.
+export interface PersonaPreset {
+  id: string;
+  prefix: string;
+  suffix: string;
+  include_runtime_context: boolean;
+}
+
+export interface PersonaSettings {
+  prefix: string;
+  suffix: string;
+  include_runtime_context: boolean;
+  path: string;
+  presets: PersonaPreset[];
+}
+
+/** The three fields a save writes; path and presets are the kernel's answer. */
+export type PersonaDraft = Pick<PersonaSettings, "prefix" | "suffix" | "include_runtime_context">;
+
+export type DisplayCurrencyMode = "auto" | "CNY" | "USD";
+
+// Which currency costs are shown in; the user file holds it.
+export interface UnconvertedPrice {
+  provider: string;
+  model: string;
+  currency: string;
+}
+
+export interface DisplayCurrencySettings {
+  mode: DisplayCurrencyMode;
+  path: string;
+  // Models whose price cannot be shown in a pinned currency.
+  unconverted: UnconvertedPrice[];
+}
+
+// Whether the changed-files pill is drawn above the composer; the user file
+// holds it.
+// Whether Studio folds a turn's intermediate work under one line; the user file
+// holds it.
+export interface FoldWorkSettings {
+  fold: boolean;
+  path: string;
+}
+
+// How much the model says between tool calls; the user file holds it.
+export interface TurnNarrationSettings {
+  level: "brief" | "detailed";
+  path: string;
+}
+
+// Where web_search and web_fetch may send things. The lists are ordered; a paid
+// backend is tried only after the ones before it failed, and one named in a
+// paid-allowed list is used without asking each time.
+export interface WebAccessSettings {
+  search_backends: string[];
+  searxng_url: string;
+  search_paid_allowed: string[];
+  fetch_backends: string[];
+  fetch_paid_allowed: string[];
+  known_search_backends: string[];
+  known_fetch_backends: string[];
+  paid_backends: string[];
+  deepseek_api_ready: boolean;
+  video_url_passthrough: boolean;
+  path: string;
+}
+
+// What one test search to a SearXNG address showed. code is empty when it answered.
+export interface SearxngProbe {
+  ok: boolean;
+  code?: string;
+  status?: number;
+}
+
+export type WebAccessPatch = Partial<Pick<WebAccessSettings, "search_backends" | "searxng_url" | "search_paid_allowed" | "fetch_backends" | "fetch_paid_allowed" | "video_url_passthrough">>;
+
+// The opt-in OpenTelemetry trace export. headerEnvSet says the named variable
+// has a value now; the value itself is never read back. A save reaches sessions
+// opened afterwards, not the ones already running.
+export interface ObservabilitySettings {
+  enabled: boolean;
+  endpoint: string;
+  headerName: string;
+  headerEnv: string;
+  serviceName: string;
+  headerEnvSet: boolean;
+  path: string;
+  applies: string;
+}
+
+export type ObservabilityPatch = Partial<Pick<ObservabilitySettings, "enabled" | "endpoint" | "headerName" | "headerEnv" | "serviceName">>;
+
+// Whether the person is told when their feedback level goes up; the user file
+// holds it, and it starts off.
+export interface FeedbackLevelNotices {
+  enabled: boolean;
+  path: string;
+}
+
+export interface ChangedFilesSettings {
+  show: boolean;
+  path: string;
+}
+
+// When a run reads as no longer moving. Only the user file holds it: a
+// project file cannot pause the user's runs.
+// How long an ask question waits before the host skips it; 0 waits. The user
+// file holds it, so the terminal reads the same answer.
+export interface AskTimeoutSettings {
+  seconds: number;
+  // The kernel's code for a value the file holds that cannot be applied.
+  invalid?: string;
+  defaultSeconds: number;
+  minSeconds: number;
+  maxSeconds: number;
+  path: string;
+}
+
+// How many tokens one referenced past conversation may add to a message; the
+// user file holds it.
+export interface SessionRefSettings {
+  tokens: number;
+  defaultTokens: number;
+  minTokens: number;
+  maxTokens: number;
+  path: string;
+}
+
+// Whether the end-of-turn delivery receipt is drawn as a card; the user file
+// holds it, so the terminal reads the same answer.
+export interface ReceiptSettings {
+  show: boolean;
+  path: string;
+}
+
+export interface ProgressWatchSettings {
+  pause: boolean;
+  rounds: number;
+  tokenMultiple: number;
+  defaultRounds: number;
+  defaultTokenMultiple: number;
+  path: string;
+}
+
+/** Where a Claude Code mod's hooks module stands in this session. */
+export type ModState = "inactive" | "starting" | "running" | "restarting" | "disabled";
+
+export interface ModRuntime {
+  // "electron" for Studio's own binary in Node mode, "node" for one found on PATH.
+  kind: string;
+  path: string;
+  version: string;
+}
+
+/** One installed mod. `code` is the typed cause when it is not running
+ *  (mod.switch_off, mod.runtime_missing, mod.crashed, ...); a frontend maps it
+ *  to its own words and never reads `detail` to decide anything. */
+export interface ModStatus {
+  plugin: string;
+  state: ModState;
+  code?: string;
+  detail?: string;
+  restarts: number;
+  runtime?: ModRuntime;
+  // Literal event names the module registered; `unserved` are the ones this host never raises.
+  events?: string[];
+  unserved?: string[];
+}
+
+/** The user file's [mods] table. Turning `enabled` on is Elevated: the module
+ *  of an installed mod then runs on this machine with the user's trust. */
+export interface ModsSettings {
+  enabled: boolean;
+  // One hook's own running time in milliseconds; 0 keeps Claude Code's 10000.
+  hook_budget_ms: number;
+  path: string;
+  // False until the switch can be turned on; the row is not drawn then.
+  available: boolean;
+  applies: "next_session";
+}
+
+export interface ModsSettingsEdit {
+  enabled?: boolean;
+  hook_budget_ms?: number;
 }

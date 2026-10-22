@@ -3,6 +3,7 @@ package builtin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"reasonix/internal/contract/tool"
@@ -16,14 +17,16 @@ func init() { tool.RegisterBuiltin(multiEdit{}) }
 // session-data targets (see SessionDataGuard); workDir, when non-empty, is the
 // directory a relative path resolves against (see resolveIn).
 type multiEdit struct {
-	roots   []string
-	guard   SessionDataGuard
-	managed ManagedConfigPaths
+	readPolicy editReadPolicy
+	roots      []string
+	guard      SessionDataGuard
+	managed    ManagedConfigPaths
 	// sessionTemp, when non-nil, adds the session's own temporary directory
 	// to the writable surface — the same directory bash writes through $TMPDIR.
 	sessionTemp *sessiontemp.Manager
 	workDir     string
 	overlay     FileOverlay
+	views       *FileViews
 }
 
 // editStep is one edit in a multi_edit operation. Mirrors edit_file's args
@@ -89,22 +92,22 @@ func (m multiEdit) Execute(ctx context.Context, args json.RawMessage) (string, e
 		return "", err
 	}
 
-	src, err := readEditSource(ctx, m.overlay, p.Path)
+	src, err := m.readPolicy.source(ctx, m.overlay, p.Path)
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", p.Path, err)
 	}
 	content := src.content
 
-	// Apply edits in order against the running in-memory buffer. Any failure
-	// returns before the write, leaving the file untouched — that's the
-	// safety guarantee that makes multi_edit preferable to chained
-	// edit_file calls.
+	// A failed step leaves the buffer as it was and the sweep goes on, so one
+	// call reports every bad step; any failure still returns before the write.
 	applied := 0
 	usedFuzzy := false
 	receipts := make([]editReplacementReceipt, 0, len(p.Edits))
+	var failures []error
 	for i, step := range p.Edits {
 		if step.OldString == "" {
-			return "", fmt.Errorf("edit %d: old_string is required", i+1)
+			failures = append(failures, fmt.Errorf("edit %d: old_string is required", i+1))
+			continue
 		}
 		result := applyOldStringEdit(content, step.OldString, step.NewString, step.ReplaceAll)
 		switch {
@@ -114,18 +117,36 @@ func (m multiEdit) Execute(ctx context.Context, args json.RawMessage) (string, e
 			usedFuzzy = usedFuzzy || result.fuzzy
 			receipts = append(receipts, result.receipt)
 		case result.matches == 0:
-			return "", fmt.Errorf("edit %d: %w", i+1, oldStringNotFoundError(p.Path, step.OldString, content))
+			failures = append(failures, fmt.Errorf("edit %d: %w", i+1, oldStringNotFoundError(p.Path, step.OldString, content)))
 		default:
-			return "", fmt.Errorf("edit %d: %w", i+1, oldStringNotUniqueError(p.Path, step.OldString, content, result.matches, true))
+			failures = append(failures, fmt.Errorf("edit %d: %w", i+1, oldStringNotUniqueError(p.Path, step.OldString, content, result.matches, true)))
 		}
+	}
+	if err := multiEditFailure(p.Path, len(p.Edits), failures); err != nil {
+		return "", err
 	}
 
 	if err := src.write(ctx, m.overlay, p.Path, content); err != nil {
 		return "", fmt.Errorf("write %s: %w", p.Path, err)
 	}
+	m.views.saw(p.Path, content)
 	summary := fmt.Sprintf("multi_edit %s: %d edits applied (%d total replacements)", p.Path, len(p.Edits), applied)
 	if usedFuzzy {
 		summary += " (fuzzy match)"
 	}
 	return withActualPostWriteReceipts(summary, receipts), nil
+}
+
+// multiEditFailure keeps a lone failure in its single-step form. Several are
+// listed together; steps after a failed one ran without its replacement, so a
+// later failure may only be a consequence of an earlier one.
+func multiEditFailure(path string, total int, failures []error) error {
+	switch len(failures) {
+	case 0:
+		return nil
+	case 1:
+		return failures[0]
+	}
+	return fmt.Errorf("%d of %d edits failed; %s left untouched (each step after a failed one ran without its replacement):\n%w",
+		len(failures), total, path, errors.Join(failures...))
 }

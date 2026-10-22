@@ -2,7 +2,9 @@
 package eventwire
 
 import (
+	"reasonix/internal/base/externalurl"
 	"reasonix/internal/contract/agentgraph"
+	"reasonix/internal/contract/delivery"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/pricing"
 	"reasonix/internal/contract/provider"
@@ -13,10 +15,12 @@ import (
 // offload via content refs without changing provider-visible semantics.
 type Event struct {
 	Kind            string           `json:"kind"`
+	NonPersistable  bool             `json:"nonPersistable,omitempty"` // Live delivery and prompt replay only; never write to a durable event log.
 	Text            string           `json:"text,omitempty" externalizable:"true"`
 	Detail          string           `json:"detail,omitempty" externalizable:"true"`
 	Code            string           `json:"code,omitempty"`
 	Reasoning       string           `json:"reasoning,omitempty" externalizable:"true"`
+	ThoughtMs       int64            `json:"thoughtMs,omitempty"`
 	MemoryCitations []MemoryCitation `json:"memoryCitations,omitempty"`
 	Level           string           `json:"level,omitempty"`
 	// Audience separates a notice about this conversation from one about the
@@ -29,6 +33,7 @@ type Event struct {
 	Compaction      *Compaction         `json:"compaction,omitempty"`
 	Maintenance     *ContextMaintenance `json:"maintenance,omitempty"`
 	TodoProgress    *TodoProgress       `json:"todoProgress,omitempty"`
+	ProgressWatch   *ProgressWatch      `json:"progressWatch,omitempty"`
 	WorkspaceLease  *WorkspaceLease     `json:"workspaceLease,omitempty"`
 	Guardian        *Guardian           `json:"guardian,omitempty"`
 	DecisionReceipt *DecisionReceipt    `json:"decisionReceipt,omitempty"`
@@ -39,6 +44,8 @@ type Event struct {
 	Readiness       *FinalReadiness     `json:"readiness,omitempty"`
 	Receipt         *CompletionReceipt  `json:"receipt,omitempty"`
 	CheckpointTurn  *int                `json:"checkpointTurn,omitempty"`
+	WorkDurationMs  int64               `json:"workDurationMs,omitempty"` // TurnDone: run time up to the final answer
+	WorkStartedAt   int64               `json:"workStartedAt,omitempty"`  // TurnDone: unix ms the turn began
 	// Which producer wrote this frame: the executor, the planner, a sub-agent.
 	// A turn can carry two models, and the alternative is reading it off the
 	// last phase marker — an adjacency a replay cannot even see.
@@ -48,13 +55,22 @@ type Event struct {
 	// own user row, so this is the only thing that names which one.
 	AuthoredTurn *int `json:"authoredTurn,omitempty"`
 	MsgIndex     *int `json:"msgIndex,omitempty"`
+	// turn_started / steer: the sending device (absent is the window); the message rides text.
+	Via         *Via         `json:"via,omitempty"`
+	Attachments []Attachment `json:"attachments,omitempty"` // turn_started / steer
+	// steer: the host wrote this guidance, not the person.
+	HostAuthored bool `json:"hostAuthored,omitempty"`
 	// Which model wrote this. None means the turn's own, which a client
 	// reading it off the composer instead got wrong once the setting moved.
-	ModelRef      string         `json:"modelRef,omitempty"`
-	RetryAttempt  int            `json:"retryAttempt,omitempty"`
-	RetryMax      int            `json:"retryMax,omitempty"`
-	RetryScope    string         `json:"retryScope,omitempty"` // "headers" | "stream"; omit for older clients
-	StreamAttempt *StreamAttempt `json:"streamAttempt,omitempty"`
+	ModelRef         string         `json:"modelRef,omitempty"`
+	RetryAttempt     int            `json:"retryAttempt,omitempty"`
+	RetryMax         int            `json:"retryMax,omitempty"`
+	RetryScope       string         `json:"retryScope,omitempty"` // "headers" | "stream"; omit for older clients
+	RetryCause       string         `json:"retryCause,omitempty"`
+	RetryStatus      int            `json:"retryStatus,omitempty"`
+	RetryDelayMs     int64          `json:"retryDelayMs,omitempty"`
+	RetryTimeoutSecs int            `json:"retryTimeoutSecs,omitempty"`
+	StreamAttempt    *StreamAttempt `json:"streamAttempt,omitempty"`
 	// ItemID correlates Steer / TurnDone / unapplied-steer with a durable
 	// session-inbox entry. Empty for legacy text-only guidance.
 	ItemID    string            `json:"itemId,omitempty"`
@@ -116,11 +132,13 @@ type StreamAttempt struct {
 	Attempt int    `json:"attempt,omitempty"`
 	Max     int    `json:"max,omitempty"`
 	Reason  string `json:"reason,omitempty"` // connection_reset | premature_eof | idle_timeout
+	// FirstTokenMs rides a commit: request sent to first output, host-measured.
+	FirstTokenMs int64 `json:"firstTokenMs,omitempty"`
 }
 
 // ToWire converts a typed runtime event into the shared frontend JSON contract.
 func ToWire(e event.Event) Event {
-	w := Event{Kind: kindNames[e.Kind], Text: e.Text, Detail: e.Detail, Reasoning: e.Reasoning, ItemID: e.ItemID, Source: e.Source}
+	w := Event{Kind: kindNames[e.Kind], Text: e.Text, Detail: e.Detail, Reasoning: e.Reasoning, ThoughtMs: e.ThoughtMs, ItemID: e.ItemID, Source: e.Source, Attachments: ToWireAttachments(e.Attachments)}
 	w.ModelRef = wireModelRef(e)
 	if len(e.MemoryCitations) > 0 {
 		w.MemoryCitations = ToWireMemoryCitations(e.MemoryCitations)
@@ -128,6 +146,7 @@ func ToWire(e event.Event) Event {
 	switch e.Kind {
 	case event.Notice:
 		w.Code = e.Code
+		w.WorkspaceLease = toWireWorkspaceLease(e.WorkspaceLease)
 		if e.DecisionReceipt != nil {
 			w.DecisionReceipt = ToWireDecisionReceipt(e.DecisionReceipt)
 		}
@@ -142,31 +161,12 @@ func ToWire(e event.Event) Event {
 	case event.Usage:
 		w.Usage = toWireUsage(e)
 	case event.ApprovalRequest:
-		w.Approval = &Approval{
-			ID: e.Approval.ID, Tool: e.Approval.Tool, Subject: e.Approval.Subject,
-			Reason: e.Approval.Reason, ReasonCode: e.Approval.ReasonCode, Fresh: e.Approval.Fresh, Kind: e.Approval.Kind,
-			AllowsSession: e.Approval.AllowsSession, AllowsPersist: e.Approval.AllowsPersist,
-		}
-		if e.Approval.Recovery != nil {
-			r := e.Approval.Recovery
-			w.Approval.Recovery = &RecoveryApproval{
-				SourceAgent:     r.SourceAgent,
-				FailedTool:      r.FailedTool,
-				FailedSummary:   r.FailedSummary,
-				Diagnosis:       r.Diagnosis,
-				NextTool:        r.NextTool,
-				NextAction:      r.NextAction,
-				ChangeKind:      r.ChangeKind,
-				ChangeRationale: r.ChangeRationale,
-				ReviewRationale: r.ReviewRationale,
-				PlanBefore:      r.PlanBefore,
-				PlanAfter:       r.PlanAfter,
-				CanGrantTask:    r.CanGrantTask,
-				TaskGrantScope:  r.TaskGrantScope,
-			}
-		}
+		w.Approval = toWireApproval(e.Approval)
 	case event.AskRequest:
 		w.Ask = ToWireAsk(e.Ask)
+		w.NonPersistable = urlAsk(e.Ask)
+	case event.AskEngaged:
+		w.Ask = ToWireAsk(event.Ask{ID: e.Ask.ID})
 	case event.CompactionStarted, event.CompactionDone:
 		w.Compaction = toWireCompaction(e.Compaction)
 	case event.ContextMaintenanceEvent:
@@ -183,6 +183,8 @@ func ToWire(e event.Event) Event {
 		}
 	case event.TodoProgressEvent:
 		w.TodoProgress = toWireTodoProgress(e.TodoProgress)
+	case event.ProgressWatchEvent:
+		w.ProgressWatch = toWireProgressWatch(e.ProgressWatch)
 	case event.WorkspaceLeaseEvent:
 		w.WorkspaceLease = toWireWorkspaceLease(e.WorkspaceLease)
 	case event.GuardianAssessment:
@@ -192,10 +194,13 @@ func ToWire(e event.Event) Event {
 	case event.TurnStarted:
 		w.AuthoredTurn = e.AuthoredTurn
 		w.MsgIndex = e.MsgIndex
+		w.Via = ToWireVia(e.Via)
+	case event.Steer:
+		w.Via = ToWireVia(e.Via)
+		w.HostAuthored = e.HostAuthored
 	case event.TurnDone:
-		w.Cancelled = e.Cancelled
-		w.Outcome = e.Outcome
-		w.CheckpointTurn = e.CheckpointTurn
+		w.Cancelled, w.Outcome = e.Cancelled, e.Outcome
+		w.CheckpointTurn, w.WorkDurationMs, w.WorkStartedAt = e.CheckpointTurn, e.WorkDurationMs, e.WorkStartedAt
 		w.Receipt = completionReceiptWire(e.Receipt)
 		if e.Readiness != nil {
 			w.Readiness = &FinalReadiness{Attempts: e.Readiness.Attempts, Missing: append([]string(nil), e.Readiness.Missing...)}
@@ -204,18 +209,15 @@ func ToWire(e event.Event) Event {
 			w.Err = e.Err.Error()
 		}
 	case event.Retrying:
-		w.RetryAttempt = e.RetryAttempt
-		w.RetryMax = e.RetryMax
-		if e.RetryScope != "" {
-			w.RetryScope = string(e.RetryScope)
-		}
+		w.setRetry(e)
 	case event.StreamAttempt:
 		w.StreamAttempt = &StreamAttempt{
-			ID:      e.StreamAttempt.ID,
-			Action:  string(e.StreamAttempt.Action),
-			Attempt: e.StreamAttempt.Attempt,
-			Max:     e.StreamAttempt.Max,
-			Reason:  e.StreamAttempt.Reason,
+			ID:           e.StreamAttempt.ID,
+			Action:       string(e.StreamAttempt.Action),
+			Attempt:      e.StreamAttempt.Attempt,
+			Max:          e.StreamAttempt.Max,
+			Reason:       e.StreamAttempt.Reason,
+			FirstTokenMs: e.StreamAttempt.FirstTokenMs,
 		}
 	case event.TurnPhase:
 		w.Phase = string(e.PhaseName)
@@ -290,13 +292,28 @@ type DecisionReceipt struct {
 	Tool    string `json:"tool,omitempty"`
 	Subject string `json:"subject,omitempty"`
 	Outcome string `json:"outcome"`
+	Via     *Via   `json:"via,omitempty"`
 }
 
 func ToWireDecisionReceipt(in *provider.DecisionReceipt) *DecisionReceipt {
 	if in == nil {
 		return nil
 	}
-	return &DecisionReceipt{ID: in.ID, Kind: in.Kind, Tool: in.Tool, Subject: in.Subject, Outcome: in.Outcome}
+	return &DecisionReceipt{ID: in.ID, Kind: in.Kind, Tool: in.Tool, Subject: in.Subject, Outcome: in.Outcome, Via: ToWireVia(in.Via)}
+}
+
+// Via is the JSON form of the paired device a person acted from.
+type Via struct {
+	Device  string `json:"device"`
+	Ordinal int    `json:"ordinal"`
+}
+
+// ToWireVia converts a device attribution; nil stays nil, the window's own.
+func ToWireVia(in *provider.Via) *Via {
+	if in == nil {
+		return nil
+	}
+	return &Via{Device: in.Device, Ordinal: in.Ordinal}
 }
 
 type FinalReadiness struct {
@@ -350,6 +367,9 @@ type Compaction struct {
 	// declared window reads as when nothing names the boundary that fired.
 	Boundary      string `json:"boundary,omitempty"`
 	TriggerTokens int    `json:"triggerTokens,omitempty"`
+	Code          string `json:"code,omitempty"` // why a fold installed nothing
+	// What the prompt still holds after a fold that left a large share of the window.
+	Remains *event.ContextComposition `json:"remains,omitempty"`
 }
 
 func toWireCompaction(c event.Compaction) *Compaction {
@@ -359,7 +379,7 @@ func toWireCompaction(c event.Compaction) *Compaction {
 		SourceTokens: c.SourceTokens, ProjectionTokens: c.ProjectionTokens,
 		CoverageRequired: c.CoverageRequired, CoverageMissing: c.CoverageMissing,
 		CoverageBackstopped: c.CoverageBackstopped,
-		Boundary:            c.Boundary, TriggerTokens: c.TriggerTokens,
+		Boundary:            c.Boundary, TriggerTokens: c.TriggerTokens, Code: c.Code, Remains: c.Remains,
 	}
 }
 
@@ -369,20 +389,23 @@ type AskOption struct {
 	Description string `json:"description,omitempty" externalizable:"true"`
 }
 
-// AskQuestion is one JSON-formatted structured ask question.
-type AskQuestion struct {
-	ID      string      `json:"id"`
-	Header  string      `json:"header,omitempty"`
-	Prompt  string      `json:"prompt" externalizable:"true"`
-	Reason  string      `json:"reason,omitempty"`
-	Options []AskOption `json:"options"`
-	Multi   bool        `json:"multi,omitempty"`
+// AskOrigin is the JSON form of an event.AskOrigin.
+type AskOrigin struct {
+	Kind     string `json:"kind"`
+	Source   string `json:"source"`
+	Message  string `json:"message,omitempty" externalizable:"true"`
+	Note     string `json:"note,omitempty"`
+	URL      string `json:"url,omitempty"`
+	URLHost  string `json:"urlHost,omitempty"`
+	URLLocal bool   `json:"urlLocal,omitempty"`
 }
 
 // Ask is the JSON form of an event.Ask.
 type Ask struct {
 	ID        string        `json:"id"`
 	Questions []AskQuestion `json:"questions"`
+	Origin    *AskOrigin    `json:"origin,omitempty"`
+	SkipInMs  int64         `json:"skipInMs,omitempty"`
 }
 
 // Profile carries the subagent model/effort resolved for a tool call.
@@ -391,6 +414,7 @@ type Profile struct {
 	Count  int    `json:"count,omitempty"`
 	Model  string `json:"model,omitempty"`
 	Effort string `json:"effort,omitempty"`
+	Label  string `json:"label,omitempty"`
 }
 
 // Bound is the JSON form of event.OutputBound, present only when the result did
@@ -410,71 +434,59 @@ var boundKindNames = map[event.BoundKind]string{
 	event.BoundTruncated: "truncated",
 }
 
-func toWireTool(t event.Tool) *Tool {
-	wt := &Tool{
-		ID: t.ID, Name: t.Name, Args: t.Args,
-		ResolvedName: t.ResolvedName, CapabilityID: t.CapabilityID,
-		Output: t.Output, Images: t.Images, Err: t.Err, RefusalCode: t.RefusalCode,
-		ReadOnly: t.ReadOnly, Truncated: t.Bound.Lossy(),
-		DurationMs: t.DurationMs, ContextTokens: t.ContextTokens(),
-		Partial: t.Partial, StartedAt: t.StartedAt, EndedAt: t.EndedAt,
-		ArgChars: t.ArgChars, Refreshed: t.Refreshed,
-		ParentID: t.ParentID, AttemptID: t.AttemptID, Issuer: string(t.Issuer),
-		Diff: t.Diff, Added: t.Added, Removed: t.Removed,
-	}
-	if b := t.Bound; b.Kind != event.BoundWhole {
-		wt.Bound = &Bound{
-			Kind: boundKindNames[b.Kind], Lines: b.Lines,
-			Bytes: b.Bytes, KeptBytes: b.KeptBytes, Path: b.Path,
-		}
-	}
-	if t.Profile != nil {
-		wt.Profile = &Profile{Name: t.Profile.Name, Count: t.Profile.Count, Model: t.Profile.Model, Effort: t.Profile.Effort}
-	}
-	if t.Execution != nil {
-		wt.Execution = toWireShellExecution(t.Execution)
-	}
-	return wt
+// VideoShown is the JSON form of an event.VideoShown.
+type VideoShown struct {
+	Name       string `json:"name"`
+	Size       int64  `json:"size"`
+	DurationMs int64  `json:"durationMs,omitempty"`
+	Model      string `json:"model"`
 }
 
-// toWireWorkspace renders a workspace mutation. A nil payload still renders,
-// so a frontend reading the field never has to tell "no changes" apart from
-// "the event arrived without one".
-func toWireWorkspace(ws *event.WorkspaceChangedPayload) *WorkspaceChanged {
-	if ws == nil {
-		ws = &event.WorkspaceChangedPayload{}
+func toWireVideos(in []event.VideoShown) []VideoShown {
+	if len(in) == 0 {
+		return nil
 	}
-	changes := make([]WorkspacePathChange, 0, len(ws.Changes))
-	for _, c := range ws.Changes {
-		changes = append(changes, WorkspacePathChange{Path: c.Path, OldPath: c.OldPath, Op: c.Op})
+	out := make([]VideoShown, len(in))
+	for i, v := range in {
+		out[i] = VideoShown{Name: v.Name, Size: v.Size, DurationMs: v.DurationMs, Model: v.Model}
 	}
-	return &WorkspaceChanged{
-		Revisions: WorkspaceRevision{Content: ws.Revisions.Content, Tree: ws.Revisions.Tree, WorkingTree: ws.Revisions.WorkingTree, GitMeta: ws.Revisions.GitMeta, Session: ws.Revisions.Session},
-		Changes:   changes, AllPaths: ws.AllPaths, Source: ws.Source, WatchState: string(ws.WatchState),
-	}
+	return out
 }
 
 // Tool is the JSON form of an event.Tool.
 type Tool struct {
-	ID           string `json:"id,omitempty"`
-	Name         string `json:"name"`
-	Args         string `json:"args,omitempty" externalizable:"true"`
-	ResolvedName string `json:"resolvedName,omitempty"`
-	CapabilityID string `json:"capabilityId,omitempty"`
-	Output       string `json:"output,omitempty" externalizable:"true"`
+	Deliveries            []delivery.File                 `json:"deliveries,omitempty"`
+	ID                    string                          `json:"id,omitempty"`
+	Name                  string                          `json:"name"`
+	Args                  string                          `json:"args,omitempty" externalizable:"true"`
+	ArgumentNormalization *provider.ArgumentNormalization `json:"argumentNormalization,omitempty"`
+	ResolvedName          string                          `json:"resolvedName,omitempty"`
+	CapabilityID          string                          `json:"capabilityId,omitempty"`
+	Output                string                          `json:"output,omitempty" externalizable:"true"`
 	// Images the call showed the model, as data URLs.
 	Images []string `json:"images,omitempty"`
-	Err    string   `json:"err,omitempty" externalizable:"true"`
+	// Videos the call handed to the model to watch natively; the file's name and
+	// size, never its bytes.
+	Videos []VideoShown `json:"videos,omitempty"`
+	Err    string       `json:"err,omitempty" externalizable:"true"`
 	// RefusalCode is the host's dotted identity for a refusal. Err is only its
 	// wording, and a reader that has to tell one refusal from another cannot
 	// use a sentence.
-	RefusalCode string `json:"refusalCode,omitempty"`
-	ReadOnly    bool   `json:"readOnly"`
+	RefusalCode    string          `json:"refusalCode,omitempty"`
+	WorkspaceLease *WorkspaceLease `json:"workspaceLease,omitempty"`
+	// OutputDiff marks a shell result whose whole output is a unified diff, so a
+	// frontend renders it as a diff. Set only when [agent].embedded_diff_detection
+	// is on.
+	OutputDiff bool `json:"outputDiff,omitempty"`
+	ReadOnly   bool `json:"readOnly"`
 	// Truncated is the compatibility projection of Bound for journals written
 	// before it existed; Bound is what a current frontend reads.
 	Truncated  bool   `json:"truncated,omitempty"`
 	Bound      *Bound `json:"bound,omitempty"`
 	DurationMs int64  `json:"durationMs,omitempty"`
+	// RateTokensPerSec is a sub-agent's estimated streaming rate, on its status
+	// channel while it reasons or answers. Estimated, never billed.
+	RateTokensPerSec int `json:"rate,omitempty"`
 	// ContextTokens is what this call left in the prompt (args + result), so a
 	// card can say which step is eating the window. Estimated, never billed.
 	ContextTokens int    `json:"contextTokens,omitempty"`
@@ -586,38 +598,6 @@ type CacheDiagnostics struct {
 	BodyHash            string   `json:"bodyHash"`
 }
 
-// Approval is the JSON form of an event.Approval.
-type Approval struct {
-	ID         string `json:"id"`
-	Tool       string `json:"tool"`
-	Subject    string `json:"subject" externalizable:"true"`
-	Reason     string `json:"reason,omitempty" externalizable:"true"`
-	ReasonCode string `json:"reasonCode,omitempty"`
-	Fresh      bool   `json:"fresh,omitempty"`
-	// Which answers beyond "once" the host will honour for this call.
-	AllowsSession bool              `json:"allowsSession,omitempty"`
-	AllowsPersist bool              `json:"allowsPersist,omitempty"`
-	Kind          string            `json:"kind,omitempty"` // tool | plan | recovery
-	Recovery      *RecoveryApproval `json:"recovery,omitempty"`
-}
-
-// RecoveryApproval is the JSON form of an event.RecoveryApproval.
-type RecoveryApproval struct {
-	SourceAgent     string `json:"source_agent,omitempty"`
-	FailedTool      string `json:"failed_tool,omitempty"`
-	FailedSummary   string `json:"failed_summary,omitempty"`
-	Diagnosis       string `json:"diagnosis,omitempty"`
-	NextTool        string `json:"next_tool,omitempty"`
-	NextAction      string `json:"next_action,omitempty"`
-	ChangeKind      string `json:"change_kind,omitempty"`
-	ChangeRationale string `json:"change_rationale,omitempty"`
-	ReviewRationale string `json:"review_rationale,omitempty"`
-	PlanBefore      string `json:"plan_before,omitempty"`
-	PlanAfter       string `json:"plan_after,omitempty"`
-	CanGrantTask    bool   `json:"can_grant_task,omitempty"`
-	TaskGrantScope  string `json:"task_grant_scope,omitempty"`
-}
-
 // Guardian is the JSON form of an event.GuardianResult.
 type Guardian struct {
 	ID                string `json:"id"`
@@ -672,9 +652,16 @@ func ToWireAsk(a event.Ask) *Ask {
 		for j, o := range q.Options {
 			opts[j] = AskOption{Label: o.Label, Description: o.Description}
 		}
-		qs[i] = AskQuestion{ID: q.ID, Header: q.Header, Prompt: q.Prompt, Reason: q.Reason, Options: opts, Multi: q.Multi}
+		qs[i] = AskQuestion{ID: q.ID, Header: q.Header, Prompt: q.Prompt, Reason: q.Reason, Options: opts, Multi: q.Multi, Default: q.Default, Surface: q.Surface, CallID: q.CallID}
 	}
-	return &Ask{ID: a.ID, Questions: qs}
+	out := &Ask{ID: a.ID, Questions: qs, SkipInMs: a.SkipInMs}
+	if o := a.Origin; o != nil {
+		out.Origin = &AskOrigin{Kind: o.Kind, Source: o.Source, Message: o.Message, Note: o.Note, URL: o.URL}
+		if o.URL != "" {
+			out.Origin.URLHost, out.Origin.URLLocal, _ = externalurl.Host(o.URL)
+		}
+	}
+	return out
 }
 
 // ToWireCacheDiagnostics converts cache diagnostics into their JSON wire form.
@@ -693,62 +680,6 @@ func ToWireCacheDiagnostics(d *event.CacheDiagnostics) *CacheDiagnostics {
 		BodyChanged:         d.BodyChanged,
 		BodyHash:            d.BodyHash,
 	}
-}
-
-// KindNames returns every stable frontend event kind in event.Kind order. It is
-// the protocol-neutral source used by consumers such as the Remote schema
-// generator; callers receive a copy and may sort it without mutating eventwire.
-func KindNames() []string {
-	names := make([]string, 0, int(event.KindCount))
-	for kind := range event.KindCount {
-		if name, ok := kindNames[kind]; ok {
-			names = append(names, name)
-		}
-	}
-	return names
-}
-
-// KindName returns the stable wire name of one event kind, or false for a
-// kind outside the known set.
-func KindName(kind event.Kind) (string, bool) {
-	name, ok := kindNames[kind]
-	return name, ok
-}
-
-var kindNames = map[event.Kind]string{
-	event.TurnStarted:             "turn_started",
-	event.Reasoning:               "reasoning",
-	event.Text:                    "text",
-	event.Message:                 "message",
-	event.ToolDispatch:            "tool_dispatch",
-	event.ToolResult:              "tool_result",
-	event.Usage:                   "usage",
-	event.Notice:                  "notice",
-	event.Phase:                   "phase",
-	event.ApprovalRequest:         "approval_request",
-	event.AskRequest:              "ask_request",
-	event.TurnDone:                "turn_done",
-	event.CompactionStarted:       "compaction_started",
-	event.CompactionProgress:      "compaction_progress",
-	event.CompactionDone:          "compaction_done",
-	event.ToolProgress:            "tool_progress",
-	event.MCPSurfaceReady:         "mcp_surface_ready",
-	event.Retrying:                "retrying",
-	event.Steer:                   "steer",
-	event.GuardianAssessment:      "guardian_assessment",
-	event.ExtensionSurface:        "extension_surface",
-	event.ExtensionStatus:         "extension_status",
-	event.StreamAttempt:           "stream_attempt",
-	event.ContextMaintenanceEvent: "context_maintenance",
-	event.TodoProgressEvent:       "todo_progress",
-	event.WorkspaceLeaseEvent:     "workspace_lease",
-	event.WorkspaceChanged:        "workspace_changed",
-	event.TurnPhase:               "turn_phase",
-	event.CompletionSummary:       "completion_summary",
-	event.AdjudicationsChanged:    "adjudications_changed",
-	event.BrowserTabsChanged:      "browser_tabs_changed",
-	event.InboxChanged:            "inbox_changed",
-	event.GraphDelta:              "graph_delta",
 }
 
 func toWireTodoProgress(p *event.TodoProgress) *TodoProgress {
@@ -789,3 +720,5 @@ type ContextMaintenance struct {
 	Boundary            string `json:"boundary,omitempty"`
 	TriggerTokens       int    `json:"triggerTokens,omitempty"`
 }
+
+func urlAsk(a event.Ask) bool { return a.Origin != nil && a.Origin.URL != "" }

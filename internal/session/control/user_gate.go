@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"reasonix/internal/base/i18n"
+	"reasonix/internal/contract/event"
 )
 
 // Two host decisions follow from a turn having recorded a user gate: the Goal
@@ -33,15 +34,25 @@ func (c *Controller) noticeUserGate() {
 		return
 	}
 	if need := c.turnUserGate(); need != "" {
-		c.notice(fmt.Sprintf(i18n.M.AwaitingUserFmt, need))
+		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeAwaitUser,
+			Text: fmt.Sprintf(i18n.M.AwaitingUserFmt, need), Detail: need})
 	}
 }
 
-// liftUserGatedGoal resumes a Goal paused on a gate, the starting turn being
-// the message it waits for. Other pause causes stay the user's to lift.
+// liftUserGatedGoal resumes a Goal waiting on the user, the starting turn being
+// the message it waits for: one gated by await_user, or one the model or the
+// evaluator reported blocked. Other pause causes stay the user's to lift.
 func (c *Controller) liftUserGatedGoal(synthetic bool) {
-	if synthetic || c.goals.runtimeView().StopCause != stopCauseUserGate {
+	if synthetic || !c.goals.awaitsUser() {
 		return
 	}
 	c.ResumeGoal()
+}
+
+// awaitsUser reports a Goal that cannot go on without something from the user:
+// gated by await_user, or blocked by a report with no pause cause of its own.
+func (g *goalMachine) awaitsUser() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.stopCause == stopCauseUserGate || (g.status == GoalStatusBlocked && g.stopCause == "")
 }

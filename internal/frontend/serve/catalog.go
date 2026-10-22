@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"reasonix/internal/base/secrets"
 	"reasonix/internal/base/textutil"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/ext/mcpsetup"
@@ -54,7 +55,7 @@ func (s *Server) slash(w http.ResponseWriter, r *http.Request) {
 		}
 		seen[name] = true
 		out = append(out, slashEntry{
-			Name: name, Kind: "skill", Description: sk.Description,
+			Name: name, Kind: "skill", Description: sk.Description, ArgHint: sk.ArgumentHint,
 			Scope: string(sk.Scope), Plugin: sk.Plugin,
 			Subagent: sk.RunAs == skill.RunSubagent,
 		})
@@ -66,17 +67,26 @@ func (s *Server) slash(w http.ResponseWriter, r *http.Request) {
 // slash list answers "what can I type"; this answers "what may run", which is
 // the larger set: a skill with no slash name still fires on model discovery.
 type skillEntry struct {
-	Name        string   `json:"name"`
-	SlashName   string   `json:"slashName,omitempty"`
-	Description string   `json:"description,omitempty"`
-	Scope       string   `json:"scope,omitempty"`
-	Plugin      string   `json:"plugin,omitempty"`
-	Path        string   `json:"path,omitempty"`
-	Subagent    bool     `json:"subagent,omitempty"`
-	ReadOnly    bool     `json:"readOnly,omitempty"`
-	Model       string   `json:"model,omitempty"`
-	Effort      string   `json:"effort,omitempty"`
-	AllowedURI  []string `json:"allowedTools,omitempty"`
+	Name        string `json:"name"`
+	SlashName   string `json:"slashName,omitempty"`
+	Description string `json:"description,omitempty"`
+	Scope       string `json:"scope,omitempty"`
+	Plugin      string `json:"plugin,omitempty"`
+	Path        string `json:"path,omitempty"`
+	// Removes is what uninstalling would delete from disk, and RemovesFolder says
+	// whether that is a whole folder; empty when the skill cannot be removed.
+	Removes       string   `json:"removes,omitempty"`
+	RemovesFolder bool     `json:"removesFolder,omitempty"`
+	Subagent      bool     `json:"subagent,omitempty"`
+	ReadOnly      bool     `json:"readOnly,omitempty"`
+	Model         string   `json:"model,omitempty"`
+	Effort        string   `json:"effort,omitempty"`
+	AllowedURI    []string `json:"allowedTools,omitempty"`
+	// License, Compatibility and Metadata are the specification's descriptive
+	// fields as the skill wrote them.
+	License       string            `json:"license,omitempty"`
+	Compatibility string            `json:"compatibility,omitempty"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
 	// Manual means the model never discovers it; only an explicit call runs it.
 	Manual  bool `json:"manual,omitempty"`
 	Enabled bool `json:"enabled"`
@@ -84,6 +94,9 @@ type skillEntry struct {
 	// this project set it for itself, "global" when it applies everywhere, and
 	// empty when nothing overrides what the skill itself declares.
 	SwitchScope string `json:"switchScope,omitempty"`
+	// Source is where an installed copy came from and whether it still matches;
+	// absent for a skill the installer never recorded.
+	Source *skillSource `json:"source,omitempty"`
 }
 
 // skills lists every discoverable skill, disabled ones included, so the
@@ -102,27 +115,38 @@ func (s *Server) skills(w http.ResponseWriter, r *http.Request) {
 	}
 	ctl := s.ctl()
 	raw := ctl.AllSkills()
+	enabled := ctl.SkillActivation()
 	entries := make([]skillEntry, 0, len(raw))
+	sources := loadSkillSources()
 	for _, sk := range raw {
 		switchScope := ""
 		if scope, found := ctl.SkillOverrideScope(sk.Name); found {
 			switchScope = string(scope)
 		}
+		slashName := sk.SlashName()
+		if sk.DisableUserInvocation {
+			slashName = ""
+		}
+		removes, folder, _ := ctl.SkillRemoval(sk)
 		entries = append(entries, skillEntry{
-			SwitchScope: switchScope,
-			Name:        sk.Name,
-			SlashName:   sk.SlashName(),
-			Description: sk.Description,
-			Scope:       string(sk.Scope),
-			Plugin:      sk.Plugin,
-			Path:        sk.Path,
-			Subagent:    sk.RunAs == skill.RunSubagent,
-			ReadOnly:    sk.ReadOnly,
-			Model:       sk.Model,
-			Effort:      sk.Effort,
-			AllowedURI:  sk.AllowedTools,
-			Manual:      strings.EqualFold(strings.TrimSpace(sk.Invocation), "manual"),
-			Enabled:     ctl.SkillEnabled(sk.Name),
+			Removes:       removes,
+			RemovesFolder: folder,
+			SwitchScope:   switchScope,
+			Name:          sk.Name,
+			SlashName:     slashName,
+			Description:   sk.Description,
+			Scope:         string(sk.Scope),
+			Plugin:        sk.Plugin,
+			Path:          sk.Path,
+			Subagent:      sk.RunAs == skill.RunSubagent,
+			ReadOnly:      sk.ReadOnly,
+			Model:         sk.Model,
+			Effort:        sk.Effort,
+			AllowedURI:    sk.AllowedTools,
+			License:       sk.License, Compatibility: sk.Compatibility, Metadata: sk.Metadata,
+			Manual:  sk.DisableModelInvocation || strings.EqualFold(strings.TrimSpace(sk.Invocation), "manual"),
+			Enabled: enabled(sk.Name),
+			Source:  sources.of(sk.Name, string(sk.Scope), sk.Path),
 		})
 	}
 	writeJSON(w, map[string]any{
@@ -248,7 +272,38 @@ type mcpEntry struct {
 	// LocalOverride marks a switch this project set for itself instead of
 	// inheriting the global one, which the surface shows as a local exception.
 	LocalOverride bool `json:"localOverride,omitempty"`
+	// AlwaysLoad is what config asks for now; InSchema is what this session's
+	// schema carries. They differ until the next session starts.
+	AlwaysLoad bool `json:"alwaysLoad,omitempty"`
+	InSchema   bool `json:"inSchema,omitempty"`
+	// Launch is what starting the server runs or contacts, redacted for display.
+	Launch string `json:"launch,omitempty"`
+	// PendingReason says why a pending server waits for the user, as a code.
+	PendingReason string `json:"pendingReason,omitempty"`
+	// ScopeUpgrade is the access a signed-in server asked for when it refused a
+	// call: its own words, shown as such and never acted on.
+	ScopeUpgrade []string `json:"scopeUpgrade,omitempty"`
+	// Held lists tools withheld from the model for a definition the user has not
+	// approved. HeldDigest names that whole set and comes back with the approval.
+	// HeldMore counts the withheld tools past the list's cap.
+	Held       []mcpHeld `json:"held,omitempty"`
+	HeldDigest string    `json:"heldDigest,omitempty"`
+	HeldMore   int       `json:"heldMore,omitempty"`
+	// FollowsChanges is the user's choice to take this server's definition changes
+	// without being asked; each one is still announced.
+	FollowsChanges bool `json:"followsChanges,omitempty"`
 }
+
+// mcpHeld is one withheld tool: its visible name and how it differs from what
+// was approved (added, changed, or unverifiable when the record cannot be read).
+type mcpHeld struct {
+	Name  string `json:"name"`
+	Class string `json:"class"`
+}
+
+// mcpHeldLimit bounds how many withheld tools one row lists; the rest are only
+// counted, so a server that withholds thousands cannot make the page heavy.
+const mcpHeldLimit = 50
 
 // mcpTool is one tool as the server describes it, plus the two hints that
 // decide how a call is classified. Error carries a schema the host rejected:
@@ -266,6 +321,7 @@ type mcpTool struct {
 // cannot make the page it is listed on expensive to load.
 const (
 	mcpServerTextLimit = 400
+	mcpLaunchTextLimit = 300
 	mcpToolTextLimit   = 240
 )
 
@@ -302,83 +358,63 @@ func (s *Server) mcp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctl := s.ctl()
-	out := []mcpEntry{}
 	configured := ctl.ConfiguredMCPServers()
 	declared := make(map[string]control.MCPServerState, len(configured))
 	for _, st := range configured {
 		declared[st.Entry.Name] = st
 	}
-	// A runtime-only server has no configured declaration; it is live, so it is
-	// on by definition.
-	on := func(name string) bool {
-		st, ok := declared[name]
-		return st.Enabled || !ok
-	}
 	host := ctl.Host()
-	seen := map[string]bool{}
+	live := map[string]plugin.ServerStatus{}
+	failures := map[string]plugin.Failure{}
 	if host != nil {
 		for _, srv := range host.Servers() {
-			seen[srv.Name] = true
-			out = append(out, mcpEntry{
-				Name: srv.Name, State: "ready", Enabled: on(srv.Name), LocalOverride: declared[srv.Name].LocalOverride,
-				Transport: srv.Transport, Source: srv.ConfigSource,
-				Description: displayText(srv.Description, mcpServerTextLimit),
-				Tools:       srv.Tools, Prompts: srv.Prompts, Resources: srv.Resources,
-				ToolList: mcpToolViews(srv.ToolList),
-			})
-		}
-		for _, name := range host.ConnectingServers() {
-			if !seen[name] {
-				seen[name] = true
-				out = append(out, remembered(declared[name], mcpEntry{
-					Name: name, State: "connecting", Enabled: on(name),
-					Source: string(declared[name].Entry.Source), LocalOverride: declared[name].LocalOverride,
-				}))
-			}
+			live[srv.Name] = srv
 		}
 		for _, f := range host.Failures() {
-			if seen[f.Name] {
-				continue
-			}
-			seen[f.Name] = true
-			out = append(out, remembered(declared[f.Name], mcpEntry{
-				Name: f.Name, State: "failed", Enabled: on(f.Name), LocalOverride: declared[f.Name].LocalOverride,
-				Transport: f.Transport, Source: string(declared[f.Name].Entry.Source), Error: f.Error,
-				HTTPStatus: f.HTTPStatus,
-			}))
+			failures[f.Name] = f
 		}
 	}
-	// Configured with no process running, which is three different things —
-	// the catalog tells the last two apart, not the host. configuredState below
-	// carries the reasoning.
-	inCatalog := ctl.MCPCatalogTools()
-	for _, st := range configured {
-		if seen[st.Entry.Name] {
-			continue
+	out := make([]mcpEntry, 0, len(configured))
+	for _, health := range ctl.MCPServerHealth() {
+		st, configured := declared[health.Name]
+		row := mcpEntry{
+			Name: health.Name, State: health.Status, Enabled: health.Status != control.MCPHealthPending && (st.Enabled || !configured),
+			LocalOverride: st.LocalOverride, Transport: st.Entry.Type,
+			Source: string(st.Entry.Source), Error: health.Error, HTTPStatus: health.HTTPStatus,
+			Tools: health.Tools, AlwaysLoad: st.AlwaysLoad, InSchema: st.InSchema,
+			PendingReason: string(health.Reason), ScopeUpgrade: health.ScopeUpgrade,
 		}
-		out = append(out, remembered(st, mcpEntry{
-			Name: st.Entry.Name, State: configuredState(st, inCatalog[st.Entry.Name]),
-			Enabled: st.Enabled, LocalOverride: st.LocalOverride,
-			Transport: st.Entry.Type, Source: string(st.Entry.Source),
-		}))
+		if srv, ok := live[health.Name]; ok && health.Status == control.MCPHealthReady {
+			row.Transport, row.Source = srv.Transport, srv.ConfigSource
+			row.Description = displayText(srv.Description, mcpServerTextLimit)
+			row.Prompts, row.Resources = srv.Prompts, srv.Resources
+			row.ToolList = mcpToolViews(srv.ToolList)
+		} else {
+			if f, ok := failures[health.Name]; ok && (health.Status == control.MCPHealthFailed || health.Status == control.MCPHealthPending) {
+				row.Transport = f.Transport
+			}
+			row = remembered(st, row)
+		}
+		if configured {
+			row.Launch = launchText(st.Entry)
+			row.Held, row.HeldDigest, row.HeldMore = mcpHeldViews(st.Held)
+			row.FollowsChanges = st.FollowsToolChanges
+		}
+		out = append(out, row)
 	}
 	writeJSON(w, map[string]any{"servers": out, "scope": scopeView(ctl)})
 }
 
-// configuredState is what a server with no process running is. Three answers,
-// not two: switched off, standing by with its tools already in the catalog and
-// the process due to start on the first call, or holding nothing to offer yet.
-// The middle one is the steady state of every working cache-hit server, and
-// reporting it as a failed connection is what sent people looking for a fault.
-func configuredState(st control.MCPServerState, inCatalog int) string {
-	switch {
-	case !st.Enabled:
-		return "disabled"
-	case inCatalog == 0:
-		return "idle"
-	default:
-		return "standby"
+func mcpHeldViews(held []plugin.HeldTool) ([]mcpHeld, string, int) {
+	if len(held) == 0 {
+		return nil, "", 0
 	}
+	shown := held[:min(len(held), mcpHeldLimit)]
+	out := make([]mcpHeld, len(shown))
+	for i, h := range shown {
+		out[i] = mcpHeld{Name: displayText(h.VisibleName, mcpServerTextLimit), Class: string(h.Class)}
+	}
+	return out, plugin.HeldDigest(held), len(held) - len(shown)
 }
 
 // remembered fills a row that has no live connection to ask with what the last
@@ -399,6 +435,20 @@ func remembered(st control.MCPServerState, e mcpEntry) mcpEntry {
 	return e
 }
 
+func (s *Server) mcpRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /mcp", s.mcp)
+	mux.HandleFunc("POST /mcp/reconnect", s.mcpReconnect)
+	mux.HandleFunc("POST /mcp/trust", s.mcpTrust)
+	mux.HandleFunc("POST /mcp/signin", s.mcpSignIn)
+	mux.HandleFunc("POST /mcp/upgrade", s.mcpUpgrade)
+	mux.HandleFunc("POST /mcp/follow", s.mcpFollow)
+	mux.HandleFunc("POST /mcp/enabled", s.mcpEnabled)
+	mux.HandleFunc("POST /mcp/load", s.mcpLoad)
+	mux.HandleFunc("POST /mcp/parse", s.mcpParse)
+	mux.HandleFunc("POST /mcp/install", s.mcpInstall)
+	mux.HandleFunc("POST /mcp/remove", s.mcpRemove)
+}
+
 // mcpReconnect retries one server. It answers with the refreshed row rather than
 // a bare 204: the outcome the user is waiting for is the new state, and a
 // follow-up GET would race the connect that just finished.
@@ -408,11 +458,82 @@ func (s *Server) mcpReconnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tools, err := s.ctl().ReconnectMCPServer(name)
-	if err != nil {
-		writeJSONStatus(w, http.StatusBadGateway, map[string]any{"name": name, "state": "failed", "error": err.Error()})
+	if errors.Is(err, control.ErrMCPApprovalOwed) {
+		refuse(w, http.StatusConflict, "mcp.approval_owed", err.Error(), nil)
 		return
 	}
-	writeJSON(w, map[string]any{"name": name, "state": "ready", "tools": tools})
+	if err != nil {
+		writeJSONStatus(w, http.StatusBadGateway, map[string]any{"name": name, "state": control.MCPHealthFailed, "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"name": name, "state": control.MCPHealthReady, "tools": tools})
+}
+
+// mcpTrust approves the definitions a server's connection withheld and
+// reconnects it, answering like mcpReconnect with the refreshed row.
+func (s *Server) mcpTrust(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name   string `json:"name"`
+		Digest string `json:"digest"`
+	}
+	if !decodeBody(w, r, &body) {
+		return
+	}
+	name, digest := strings.TrimSpace(body.Name), strings.TrimSpace(body.Digest)
+	if name == "" {
+		missingField(w, "name")
+		return
+	}
+	if digest == "" {
+		missingField(w, "digest")
+		return
+	}
+	tools, err := s.ctl().AcceptMCPHeldTools(name, digest)
+	switch {
+	case errors.Is(err, control.ErrMCPDigestMismatch):
+		refuse(w, http.StatusConflict, "mcp.digest_mismatch", err.Error(), nil)
+	case errors.Is(err, control.ErrMCPNothingHeld):
+		refuse(w, http.StatusConflict, "mcp.nothing_held", err.Error(), nil)
+	case errors.Is(err, control.ErrMCPApprovalOwed):
+		refuse(w, http.StatusConflict, "mcp.approval_owed", err.Error(), nil)
+	case err != nil:
+		writeJSONStatus(w, http.StatusBadGateway, map[string]any{"name": name, "state": control.MCPHealthFailed, "error": err.Error()})
+	default:
+		writeJSON(w, map[string]any{"name": name, "state": control.MCPHealthReady, "tools": tools})
+	}
+}
+
+// mcpLoad sets whether a server's tools load into the provider schema. An
+// empty load clears the user's choice so the server's declaration applies.
+// The schema is fixed when a runtime is assembled, so the runtime is rebuilt.
+func (s *Server) mcpLoad(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name string `json:"name"`
+		Load string `json:"load"`
+	}
+	if !decodeBody(w, r, &body) {
+		return
+	}
+	name := strings.TrimSpace(body.Name)
+	if name == "" {
+		missingField(w, "name")
+		return
+	}
+	switch body.Load {
+	case "", config.MCPLoadAlways, config.MCPLoadDeferred:
+	default:
+		badValue(w, "load", config.MCPLoadAlways, config.MCPLoadDeferred, "")
+		return
+	}
+	if err := config.SetUserMCPLoad(name, body.Load); err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	if err := s.rebuildInPlace(r.Context()); err != nil {
+		rebuildFailed(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"name": name, "load": body.Load})
 }
 
 // mcpEnabled flips the durable activation switch for one server at the
@@ -466,13 +587,18 @@ func (s *Server) mcpEnabled(w http.ResponseWriter, r *http.Request) {
 // draftServer is one server a paste resolved to, in the shape the confirmation
 // card reads: what will run, what it will read, and what is risky about it.
 type draftServer struct {
-	Name      string            `json:"name"`
-	Transport string            `json:"transport"`
-	Command   string            `json:"command,omitempty"`
-	Args      []string          `json:"args,omitempty"`
-	URL       string            `json:"url,omitempty"`
-	Env       map[string]string `json:"env,omitempty"`
-	Headers   map[string]string `json:"headers,omitempty"`
+	Name           string            `json:"name"`
+	Transport      string            `json:"transport"`
+	Command        string            `json:"command,omitempty"`
+	Args           []string          `json:"args,omitempty"`
+	URL            string            `json:"url,omitempty"`
+	Env            map[string]string `json:"env,omitempty"`
+	Headers        map[string]string `json:"headers,omitempty"`
+	DisplayURL     string            `json:"displayUrl,omitempty"`
+	DisplayEnv     map[string]string `json:"displayEnv,omitempty"`
+	DisplayHeaders map[string]string `json:"displayHeaders,omitempty"`
+	DisplayCommand string            `json:"displayCommand,omitempty"`
+	DisplayArgs    []string          `json:"displayArgs,omitempty"`
 }
 
 type draftRisk struct {
@@ -503,6 +629,9 @@ func (s *Server) mcpParse(w http.ResponseWriter, r *http.Request) {
 		servers = append(servers, draftServer{
 			Name: e.Name, Transport: transportOf(e), Command: e.Command, Args: e.Args,
 			URL: e.URL, Env: e.Env, Headers: e.Headers,
+			DisplayURL: mcpsetup.RedactURL(e.URL),
+			DisplayEnv: secrets.RedactConfigMap(e.Env), DisplayHeaders: secrets.RedactConfigMap(e.Headers),
+			DisplayCommand: secrets.RedactConfigValue("", e.Command), DisplayArgs: secrets.RedactArgs(e.Args),
 		})
 	}
 	risks := make([]draftRisk, 0, len(draft.Risks))
@@ -598,4 +727,8 @@ func decodeMCPName(w http.ResponseWriter, r *http.Request) (string, bool) {
 		return "", false
 	}
 	return strings.TrimSpace(body.Name), true
+}
+
+func launchText(e config.PluginEntry) string {
+	return textutil.TruncateGraphemes(mcpsetup.LaunchLine(e), mcpLaunchTextLimit, "…")
 }

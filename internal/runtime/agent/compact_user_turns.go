@@ -15,6 +15,8 @@ type userTurnRetention struct {
 	Kept          int
 	Dropped       int
 	DroppedTokens int
+	// MarkedDropped counts [[keep]] turns the marked-turn budget could not hold.
+	MarkedDropped, MarkedDroppedTokens int
 }
 
 // keepUserTurns protects the user's own words from summarizer judgement: a
@@ -22,7 +24,7 @@ type userTurnRetention struct {
 // the work it governs stays re-derivable from the workspace. Unlike the keep
 // policy it ignores policyStart — a bounded budget, not a fold horizon, is what
 // stops it growing.
-func (a *Agent) keepUserTurns(region []provider.Message, keep []bool) userTurnRetention {
+func (a *contextWindow) keepUserTurns(region []provider.Message, keep []bool) userTurnRetention {
 	budget := a.keptUserTurnsBudget()
 	var ret userTurnRetention
 	// Oldest-first: the recent tail already covers the newest turns verbatim,
@@ -32,8 +34,8 @@ func (a *Agent) keepUserTurns(region []provider.Message, keep []bool) userTurnRe
 			continue
 		}
 		if keep[i] {
-			// Already held by the keep policy — a [[keep]] marker, which is the
-			// documented way past the size budget below.
+			// Already held by the keep policy: a [[keep]] marker, which has a
+			// budget of its own.
 			ret.Kept++
 			continue
 		}
@@ -58,7 +60,7 @@ func (a *Agent) keepUserTurns(region []provider.Message, keep []bool) userTurnRe
 // the acceptance ceiling, which fails compaction outright rather than degrading
 // it — so a bound stays, but it scales with the window instead of stopping at a
 // fixed token count, and the user can name their own.
-func (a *Agent) keptUserTurnsBudget() int {
+func (a *contextWindow) keptUserTurnsBudget() int {
 	if a.budgets.UserTurnKeepTokens > 0 {
 		return a.budgets.UserTurnKeepTokens
 	}
@@ -75,7 +77,14 @@ func (a *Agent) keptUserTurnsBudget() int {
 // noticeDroppedUserTurns reports the turns the budget could not hold. Without
 // it the drop is invisible: the projection reads as complete, and the escape
 // hatch is only useful to someone told it exists at the moment it is needed.
-func (a *Agent) noticeDroppedUserTurns(ret userTurnRetention) {
+func (a *contextWindow) noticeDroppedUserTurns(ret userTurnRetention) {
+	if ret.MarkedDropped > 0 {
+		a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn,
+			Text: fmt.Sprintf("%s you marked [[keep]] %s past the room [[keep]] has, so the oldest now survive only through the summary.",
+				pluralTurns(ret.MarkedDropped), wereOrWas(ret.MarkedDropped)),
+			Detail: fmt.Sprintf("compaction folded %d [[keep]] turn(s) (~%d tokens) past the marked-turn budget of %d",
+				ret.MarkedDropped, ret.MarkedDroppedTokens, a.keptMarkedBudget())})
+	}
 	if ret.Dropped == 0 {
 		return
 	}

@@ -2,29 +2,43 @@ package sandbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"reasonix/internal/base/fileutil"
 	"reasonix/internal/base/proc"
 	"reasonix/internal/base/secrets"
 )
 
-// psUTF8Prologue forces PowerShell to emit UTF-8 instead of the host's OEM code
-// page (e.g. CP936 on a Chinese Windows), so non-ASCII command output and error
-// text come back as valid UTF-8 rather than mojibake.
-const psUTF8Prologue = "$OutputEncoding=[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;"
+// psUTF8Prologue makes captured output UTF-8 rather than the console code page
+// (CP936 on a Chinese Windows). Each assignment is guarded on its own: without a
+// console, or under ConstrainedLanguage, the Console one throws, and that must
+// neither skip $OutputEncoding nor print an error ahead of every command.
+const psUTF8Prologue = "if($ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage'){try{[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)}catch{};try{$OutputEncoding=[Text.UTF8Encoding]::new($false)}catch{}};"
 
-// PowerShellUTF8Script prepares a PowerShell script for captured execution.
-// Setting both encodings keeps PowerShell's own output and native child-process
-// output UTF-8 across Windows console code pages.
+// psToolFileDefaults is for the agent's shell tool only: Windows PowerShell 5.1
+// writes '>' and Out-File as UTF-16LE, so there they default to UTF-8 (with the
+// BOM 5.1 always adds). Hooks run the user's own scripts and keep its defaults.
+const psToolFileDefaults = "if($PSVersionTable.PSVersion.Major -lt 6){try{$PSDefaultParameterValues['Out-File:Encoding']='utf8'}catch{}};"
+
+// PowerShellUTF8Script prepares a PowerShell script for captured execution, so
+// PowerShell's own output and what it pipes to native programs are UTF-8.
 func PowerShellUTF8Script(command string) string {
 	return psUTF8Prologue + command
+}
+
+func powerShellToolScript(command string) string {
+	return psUTF8Prologue + psToolFileDefaults + command
 }
 
 // ShellKind is the interpreter a shell command runs under.
@@ -42,21 +56,37 @@ func (k ShellKind) String() string {
 	return "bash"
 }
 
+// FallbackReason says why auto-detection settled on PowerShell instead of bash.
+type FallbackReason string
+
+const (
+	FallbackNone         FallbackReason = ""
+	FallbackNotFound     FallbackReason = "not_found"
+	FallbackProbeTimeout FallbackReason = "probe_timeout"
+	FallbackProbeFailed  FallbackReason = "probe_failed"
+)
+
 // Shell is the resolved interpreter the bash tool executes commands with: a kind
-// (so callers can adapt prompts) and the executable to invoke.
+// (so callers can adapt prompts) and the executable to invoke. Fallback is set
+// only when bash was wanted and could not be used.
 type Shell struct {
 	Kind ShellKind
 	Path string
+	// launcherArgs, NUL-joined so Shell stays comparable, come between Path and
+	// -c for a launcher such as wsl.exe, which needs them to reach a shell at
+	// all. They are the user's own and run by argv.
+	launcherArgs string
+	// Drives says where the Windows drives appear inside a WSL launcher's Linux
+	// side, as the distro itself reports it ("C:\ is /mnt/host/c/").
+	Drives   string
+	Fallback FallbackReason
 }
 
-// ResolveShell picks the interpreter the shell tool runs commands under. With
-// prefer "auto"/"" it favours a real bash so the model's POSIX habits work and
-// only falls back to PowerShell on Windows when bash is absent. prefer "bash" or
-// "powershell"/"pwsh" forces that interpreter (path overrides the PATH lookup),
-// warning to warn and falling back to auto-detection if the forced one is
-// missing — so a typo or an uninstalled shell can never leave the tool broken.
+// ResolveShell picks the interpreter the shell tool runs commands under: auto
+// favours bash; a forced kind overrides the PATH lookup with path and falls back
+// to auto if unusable, so a typo cannot leave the tool broken.
 func ResolveShell(prefer, path string, warn io.Writer) Shell {
-	return resolveShell(prefer, path, warn, runtime.GOOS, exec.LookPath, fileExists, windowsBashCandidates(), windowsPowerShellCandidates(), probeBash, isWindowsWSLBash)
+	return ShellDiscovery{Prefer: prefer, Path: path, Warn: warn}.Resolve()
 }
 
 // shellHost holds the lookups shell discovery needs. Resolution and enumeration
@@ -70,25 +100,18 @@ type shellHost struct {
 	winPS    []string
 	probe    func(string) bool
 	isWSL    func(string) bool
+	launches func(string) bool // whether a found PowerShell starts; asked of every candidate at once
+	search   *bashSearch       // nil means the defaults
 }
 
 func currentHost() shellHost {
-	return shellHost{runtime.GOOS, exec.LookPath, fileExists, windowsBashCandidates(), windowsPowerShellCandidates(), probeBash, isWindowsWSLBash}
+	return shellHost{runtime.GOOS, exec.LookPath, fileExists, windowsBashCandidates(), windowsPowerShellCandidates(), probeBash, isWindowsWSLBash, powerShellLaunches, nil}
 }
 
-func (h shellHost) bash() (Shell, bool) {
-	if p, err := h.lookPath("bash"); err == nil && !h.isWSL(p) && h.probe(p) {
-		return Shell{Kind: ShellBash, Path: p}, true
-	}
-	for _, p := range h.winBash {
-		if h.exists(p) && h.probe(p) {
-			return Shell{Kind: ShellBash, Path: p}, true
-		}
-	}
-	return Shell{}, false
-}
-
+// powerShell proves the first PowerShell that starts, sharing bash's budget so
+// aliases that never answer cost one budget in total, not a launch timeout each.
 func (h shellHost) powerShell(order []string) (Shell, bool) {
+	var cands []string
 	for _, name := range order {
 		for _, p := range h.winPS {
 			base := strings.ToLower(pathBase(p))
@@ -96,26 +119,80 @@ func (h shellHost) powerShell(order []string) (Shell, bool) {
 				continue
 			}
 			if h.exists(p) {
-				return Shell{Kind: ShellPowerShell, Path: p}, true
+				cands = append(cands, p)
 			}
 		}
-		if p, err := h.lookPath(name); err == nil {
-			return Shell{Kind: ShellPowerShell, Path: p}, true
+		if p, ok := h.lookShell(name); ok {
+			cands = append(cands, p)
 		}
 	}
-	return Shell{}, false
+	path, ok := h.firstProven(cands, h.launches, func(string) {})
+	if !ok {
+		return Shell{}, false
+	}
+	return Shell{Kind: ShellPowerShell, Path: path}, true
 }
 
-func (h shellHost) auto() Shell {
+func (h shellHost) auto(warn io.Writer) Shell {
 	if sh, ok := h.bash(); ok {
 		return sh
 	}
 	if h.goos == "windows" {
 		if sh, ok := h.powerShell([]string{"pwsh", "powershell"}); ok {
+			sh.Fallback = h.bashFallback()
+			warnBashFallback(warn, sh)
 			return sh
 		}
 	}
+	// Detection found nothing, so the bare name is all that is left to try. Say
+	// so rather than hand the session an interpreter no probe confirmed: a shell
+	// the host may not have is the failure this resolver exists to prevent.
+	if warn != nil {
+		fmt.Fprintf(warn, "warning: [tools.shell] no usable shell was found; falling back to %q, which may fail to start\n", "bash")
+	}
 	return Shell{Kind: ShellBash, Path: "bash"}
+}
+
+// bashFallback explains why bash was not usable: no candidate exists, or the
+// ones that exist did not run a command (and whether that was a timeout).
+func (h shellHost) bashFallback() FallbackReason {
+	var tried []string
+	if p, ok := h.lookShell("bash"); ok && !h.isWSL(p) {
+		tried = append(tried, p)
+	}
+	for _, p := range h.winBash {
+		if h.exists(p) && !h.isWSL(p) {
+			tried = append(tried, p)
+		}
+	}
+	if len(tried) == 0 {
+		return FallbackNotFound
+	}
+	if slices.ContainsFunc(tried, bashProbeTimedOut) {
+		return FallbackProbeTimeout
+	}
+	return FallbackProbeFailed
+}
+
+// warnBashFallback tells the user the session runs PowerShell because bash was
+// unusable: the model writes bash syntax unless it is told otherwise, and that
+// fails here without any other sign of why.
+func warnBashFallback(warn io.Writer, sh Shell) {
+	if warn == nil {
+		return
+	}
+	why := map[FallbackReason]string{
+		FallbackNotFound:     "no Git Bash was found",
+		FallbackProbeTimeout: "Git Bash did not answer in time",
+		FallbackProbeFailed:  "Git Bash did not run a command",
+	}[sh.Fallback]
+	// prefer="powershell" tries Windows PowerShell 5.1 before pwsh, so the advice
+	// names the interpreter actually in use rather than trading pwsh 7 away.
+	keep := "powershell"
+	if sh.SupportsChaining() {
+		keep = "pwsh"
+	}
+	fmt.Fprintf(warn, "warning: [tools.shell] %s; using PowerShell at %s. Commands written for bash that need POSIX tools such as head or grep will fail there. Install Git for Windows or set [tools.shell] path to its bash.exe; set prefer=%q to keep this interpreter and silence this.\n", why, quotedPath(sh.Path), keep)
 }
 
 // available lists the interpreters this host really has, in the order auto
@@ -137,7 +214,7 @@ func (h shellHost) available() []Shell {
 		add(sh)
 	}
 	for _, p := range h.winBash {
-		if h.exists(p) && h.probe(p) {
+		if h.exists(p) && !h.isWSL(p) && h.probe(p) {
 			add(Shell{Kind: ShellBash, Path: p})
 		}
 	}
@@ -156,6 +233,10 @@ func DetectShells() []Shell { return currentHost().available() }
 // surface calls it before persisting, so a typo is refused where it was typed
 // instead of failing every later command far from the screen that caused it.
 func VerifyShell(prefer, path string) error {
+	return verifyShell(prefer, path, fileExists, probeBash, powerShellLaunches)
+}
+
+func verifyShell(prefer, path string, exists, probe, launches func(string) bool) error {
 	kind := ShellBash
 	switch strings.ToLower(strings.TrimSpace(prefer)) {
 	case "", "auto", "bash":
@@ -168,36 +249,56 @@ func VerifyShell(prefer, path string) error {
 	if path == "" {
 		return nil
 	}
-	if !fileExists(path) {
+	if !shellLaunchPlace(windowsPaths, path) {
+		return fmt.Errorf("%s: not an absolute path on a local volume", path)
+	}
+	if !exists(path) {
 		return fmt.Errorf("%s: no such executable", path)
 	}
-	if kind == ShellBash && !probeBash(path) {
+	if kind == ShellBash && !probe(path) {
 		return fmt.Errorf("%s: did not run a command", path)
+	}
+	// A pinned PowerShell is launch-probed too: an existing executable that
+	// cannot start is not a usable shell.
+	if kind == ShellPowerShell && !launches(path) {
+		return fmt.Errorf("%s: did not start", path)
 	}
 	return nil
 }
 
-// resolveShell is ResolveShell with its environment lookups injected — including
-// the Git-for-Windows bash candidates, which derive from %ProgramFiles% and so
-// are empty off Windows — so the decision table is deterministically testable on
-// any host.
-func resolveShell(prefer, path string, warn io.Writer, goos string, lookPath func(string) (string, error), exists func(string) bool, winBashCandidates []string, winPowerShellCandidates []string, probe func(string) bool, isWSL func(string) bool) Shell {
-	h := shellHost{goos, lookPath, exists, winBashCandidates, winPowerShellCandidates, probe, isWSL}
+// resolveShell is ResolveShell with its environment lookups injected, including
+// Git-for-Windows candidates whose %ProgramFiles% values are empty off Windows.
+// launches is injected too, so any host can test "pwsh will not start, 5.1 will".
+func resolveShell(prefer, path string, warn io.Writer, goos string, lookPath func(string) (string, error), exists func(string) bool, winBashCandidates []string, winPowerShellCandidates []string, probe func(string) bool, isWSL func(string) bool, launches func(string) bool) Shell {
+	return resolveOn(shellHost{goos, lookPath, exists, winBashCandidates, winPowerShellCandidates, probe, isWSL, launches, nil}, prefer, path, warn)
+}
+
+func resolveOn(h shellHost, prefer, path string, warn io.Writer) Shell {
+	exists, probe, launches := h.exists, h.probe, h.launches
 	switch strings.ToLower(strings.TrimSpace(prefer)) {
 	case "", "auto":
-		return h.auto()
+		return h.auto(warn)
 	case "bash":
-		if path != "" && exists(path) && probe(path) {
+		if path != "" && shellLaunchPlace(h.goos == "windows", path) && exists(path) && probe(path) {
 			return Shell{Kind: ShellBash, Path: path}
+		}
+		if path != "" {
+			warnUnusablePath(warn, path, "bash")
 		}
 		if sh, ok := h.bash(); ok {
 			return sh
 		}
 		warnMissingShell(warn, prefer)
-		return h.auto()
+		return h.auto(warn)
 	case "powershell", "pwsh":
-		if path != "" && exists(path) {
+		// A pinned path is proven the same way the bash arm proves its own. A Store
+		// alias that will not start is exactly the failure this resolver keeps out
+		// of a session, so existence alone must not win.
+		if path != "" && shellLaunchPlace(h.goos == "windows", path) && exists(path) && launches(path) {
 			return Shell{Kind: ShellPowerShell, Path: path}
+		}
+		if path != "" {
+			warnUnusablePath(warn, path, "PowerShell")
 		}
 		order := []string{"pwsh", "powershell"}
 		if strings.EqualFold(strings.TrimSpace(prefer), "powershell") {
@@ -207,12 +308,12 @@ func resolveShell(prefer, path string, warn io.Writer, goos string, lookPath fun
 			return sh
 		}
 		warnMissingShell(warn, prefer)
-		return h.auto()
+		return h.auto(warn)
 	default:
 		if warn != nil {
 			fmt.Fprintf(warn, "warning: [tools.shell] prefer=%q is not recognised (use auto/bash/powershell); using auto-detection\n", prefer)
 		}
-		return h.auto()
+		return h.auto(warn)
 	}
 }
 
@@ -222,25 +323,48 @@ func warnMissingShell(warn io.Writer, prefer string) {
 	}
 }
 
+// warnUnusablePath reports a pinned interpreter that detection will ignore.
+// Detection answers in its place so the session still has a shell, while the
+// warning tells the user their pin was dropped.
+func warnUnusablePath(warn io.Writer, path, what string) {
+	if warn != nil {
+		fmt.Fprintf(warn, "warning: [tools.shell] path %q is not a usable %s; using auto-detection instead\n", path, what)
+	}
+}
+
 // isWindowsWSLBash reports whether a resolved bash path is the WSL launcher
 // Windows ships under %SystemRoot% (e.g. C:\Windows\System32\bash.exe). With WSL
 // installed it runs commands inside the Linux VM — where the Windows workspace is
 // a /mnt/<drive> path — so it must never be chosen for a native Windows workspace;
 // the only bash.exe Microsoft places under the Windows dir is that launcher.
 func isWindowsWSLBash(path string) bool {
-	if runtime.GOOS != "windows" || path == "" {
+	if runtime.GOOS != "windows" {
 		return false
 	}
-	win := os.Getenv("SystemRoot")
-	if win == "" {
-		win = os.Getenv("windir")
-	}
-	if win == "" {
+	return isWSLLauncherPath(path, systemWindowsDir())
+}
+
+// isWSLLauncherPath judges by file identity, not spelling. A Store app-execution
+// alias is a reparse point Go reports as irregular; the launchers Windows ships are
+// the bash.exe in System32 and SysWOW64, and os.Stat follows every link to them, so
+// short names, junctions, symlinks and hard links all compare equal.
+func isWSLLauncherPath(path, winDir string) bool {
+	if path == "" {
 		return false
 	}
-	p := strings.ToLower(filepath.Clean(path))
-	root := strings.ToLower(filepath.Clean(win)) + string(filepath.Separator)
-	return strings.HasPrefix(p, root)
+	if fi, err := os.Lstat(path); err == nil && fi.Mode()&os.ModeIrregular != 0 {
+		return true
+	}
+	fi, err := os.Stat(path)
+	if err != nil || winDir == "" {
+		return false
+	}
+	for _, dir := range []string{"System32", "SysWOW64"} {
+		if ref, err := os.Stat(filepath.Join(winDir, dir, "bash.exe")); err == nil && os.SameFile(fi, ref) {
+			return true
+		}
+	}
+	return false
 }
 
 // Windows ships a bash.exe launcher stub in %SystemRoot% that opens the WSL
@@ -250,12 +374,69 @@ func probeBash(path string) bool {
 	if runtime.GOOS != "windows" {
 		return true
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	return probeBashMemo(path, runBashProbe)
+}
+
+// bashProbeTimeout bounds one launch and bashProbeAttempts how many a hang gets.
+// A cold Git Bash starts in under a second here, so a launch that is still silent
+// after 5s is stuck rather than slow (MSYS process start can wedge), and a fresh
+// process usually clears it; two launches fit the discovery budget.
+const (
+	bashProbeTimeout  = 5 * time.Second
+	bashProbeAttempts = 2
+)
+
+// probeWaitDelay bounds the wait for a killed probe to actually exit: a process
+// held in the kernel by security software outlives its context otherwise.
+const probeWaitDelay = 2 * time.Second
+
+// bashProbeFailures remembers, per path, why the last probe of it failed.
+var bashProbeFailures sync.Map
+
+func bashProbeTimedOut(path string) bool {
+	v, ok := bashProbeFailures.Load(path)
+	return ok && v == FallbackProbeTimeout
+}
+
+func runBashProbe(path string) bool { return probeWithRetry(path, launchBashProbe) }
+
+// probeWithRetry relaunches only after a timeout; a command that ran and failed
+// would fail again. The last attempt's reason is what bashProbeFailures keeps.
+func probeWithRetry(path string, attempt func(string) FallbackReason) bool {
+	why := FallbackProbeFailed
+	for range bashProbeAttempts {
+		if why = attempt(path); why != FallbackProbeTimeout {
+			break
+		}
+	}
+	if why == FallbackNone {
+		bashProbeFailures.Delete(path)
+		return true
+	}
+	bashProbeFailures.Store(path, why)
+	return false
+}
+
+func launchBashProbe(path string) FallbackReason {
+	ctx, cancel := context.WithTimeout(context.Background(), bashProbeTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, path, "-c", "true")
+	cmd.WaitDelay = probeWaitDelay
 	cmd.Env = secrets.ProcessEnv()
 	proc.HideWindow(cmd)
-	return cmd.Run() == nil
+	if cmd.Run() == nil {
+		return FallbackNone
+	}
+	return probeFailureReason(ctx.Err())
+}
+
+// probeFailureReason is a timeout only when the probe's own deadline expired; a
+// command that ran and exited non-zero, or would not start, is a plain failure.
+func probeFailureReason(ctxErr error) FallbackReason {
+	if errors.Is(ctxErr, context.DeadlineExceeded) {
+		return FallbackProbeTimeout
+	}
+	return FallbackProbeFailed
 }
 
 func fileExists(p string) bool {
@@ -273,31 +454,120 @@ func pathBase(p string) string {
 // windowsBashCandidates lists the bash.exe paths a Git-for-Windows install
 // ships, across the usual program-files roots and a per-user install.
 func windowsBashCandidates() []string {
-	var roots []string
-	for _, env := range []string{"ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"} {
-		if v := os.Getenv(env); v != "" {
-			roots = append(roots, v)
+	return appendGitInstallRoots(bashCandidates(os.Getenv, exec.LookPath), gitInstallRoots())
+}
+
+// appendGitInstallRoots adds the install locations Git for Windows records for
+// itself, after every candidate already found so none of their order changes. An
+// install outside the standard roots whose git is not on PATH is otherwise
+// invisible.
+func appendGitInstallRoots(existing, roots []string) []string {
+	seen := map[string]bool{}
+	for _, p := range existing {
+		seen[strings.ToLower(filepath.Clean(p))] = true
+	}
+	out := existing
+	for _, r := range roots {
+		r = strings.TrimSpace(r)
+		if !gitInstallRootOK(r) {
+			continue
+		}
+		for _, p := range []string{filepath.Join(r, "bin", "bash.exe"), filepath.Join(r, "usr", "bin", "bash.exe")} {
+			key := strings.ToLower(filepath.Clean(p))
+			if !seen[key] {
+				seen[key] = true
+				out = append(out, p)
+			}
 		}
 	}
-	if v := os.Getenv("LOCALAPPDATA"); v != "" {
-		roots = append(roots, filepath.Join(v, "Programs"))
+	return out
+}
+
+// gitInstallRootOK accepts only a drive-absolute directory exactly as given: the
+// registry records a drive path, so a relative or drive-relative value is not an
+// install root. Callers trim first, so the string checked is the string used.
+func gitInstallRootOK(p string) bool {
+	return driveAbsolute(p) && shellLaunchPlace(true, p)
+}
+
+func driveAbsolute(p string) bool {
+	if len(p) < 3 || p[1] != ':' || (p[2] != '\\' && p[2] != '/') {
+		return false
+	}
+	c := p[0]
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+
+// windowsPaths is the host's path rule for the candidate lists; tests replace it.
+var windowsPaths = runtime.GOOS == "windows"
+
+// shellLaunchPlace is the one answer to where a shell may be started from. Under
+// Windows rules it is an absolute path on a local volume: a network share or
+// device namespace is read from the spelling alone, so every source of
+// candidates, every PATH lookup and every pinned path is held to the same rule
+// before anything is launched there. Elsewhere `//x` is an ordinary local path
+// and only an empty path is refused.
+func shellLaunchPlace(windows bool, p string) bool {
+	if !windows {
+		return p != ""
+	}
+	return (filepath.IsAbs(p) || driveAbsolute(p)) && !fileutil.IsNetworkPath(p)
+}
+
+// lookShell is exec.LookPath held to shellLaunchPlace: a PATH entry on a share
+// is not a place a shell is found.
+func (h shellHost) lookShell(name string) (string, bool) {
+	p, err := h.lookPath(name)
+	return p, err == nil && shellLaunchPlace(h.goos == "windows", p)
+}
+
+// bashCandidates adds to the standard roots every absolute PATH directory and the
+// Git tree the git.exe on PATH sits in: exec.LookPath sees only the first
+// bash.exe (usually the WSL launcher). Relative entries would resolve against the
+// workspace, and duplicates would be probed twice, so both are dropped.
+func bashCandidates(getenv func(string) string, lookPath func(string) (string, error)) []string {
+	var roots []string
+	for _, env := range []string{"ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"} {
+		if v := getenv(env); shellLaunchPlace(windowsPaths, v) {
+			roots = append(roots, filepath.Join(v, "Git"))
+		}
+	}
+	if v := getenv("LOCALAPPDATA"); shellLaunchPlace(windowsPaths, v) {
+		roots = append(roots, filepath.Join(v, "Programs", "Git"))
+	}
+	if g, err := lookPath("git"); err == nil && shellLaunchPlace(windowsPaths, g) {
+		// git.exe is in <root>\cmd or <root>\bin, or one level deeper in
+		// <root>\mingw64\bin.
+		dir := filepath.Dir(g)
+		roots = append(roots, filepath.Dir(dir), filepath.Dir(filepath.Dir(dir)))
 	}
 	var out []string
+	seen := map[string]bool{}
+	add := func(p string) {
+		key := strings.ToLower(filepath.Clean(p))
+		if !seen[key] {
+			seen[key] = true
+			out = append(out, p)
+		}
+	}
 	for _, r := range roots {
-		out = append(out,
-			filepath.Join(r, "Git", "bin", "bash.exe"),
-			filepath.Join(r, "Git", "usr", "bin", "bash.exe"),
-		)
+		add(filepath.Join(r, "bin", "bash.exe"))
+		add(filepath.Join(r, "usr", "bin", "bash.exe"))
+	}
+	for _, d := range filepath.SplitList(getenv("PATH")) {
+		if shellLaunchPlace(windowsPaths, d) {
+			add(filepath.Join(d, "bash.exe"))
+		}
 	}
 	return out
 }
 
 // windowsPowerShellCandidates lists common PowerShell executables that are not
-// always present on PATH, especially PowerShell 7's default MSI install path.
+// always present on PATH: PowerShell 7's MSI path, then the Store's execution alias.
 func windowsPowerShellCandidates() []string {
 	var roots []string
 	for _, env := range []string{"ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"} {
-		if v := os.Getenv(env); v != "" {
+		if v := os.Getenv(env); shellLaunchPlace(windowsPaths, v) {
 			roots = append(roots, v)
 		}
 	}
@@ -305,9 +575,12 @@ func windowsPowerShellCandidates() []string {
 	for _, r := range roots {
 		out = append(out, filepath.Join(r, "PowerShell", "7", "pwsh.exe"))
 	}
-	if v := os.Getenv("SystemRoot"); v != "" {
+	if v := os.Getenv("LOCALAPPDATA"); shellLaunchPlace(windowsPaths, v) {
+		out = append(out, filepath.Join(v, "Microsoft", "WindowsApps", "pwsh.exe"))
+	}
+	if v := os.Getenv("SystemRoot"); shellLaunchPlace(windowsPaths, v) {
 		out = append(out, filepath.Join(v, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"))
-	} else if v := os.Getenv("windir"); v != "" {
+	} else if v := os.Getenv("windir"); shellLaunchPlace(windowsPaths, v) {
 		out = append(out, filepath.Join(v, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"))
 	}
 	return out
@@ -336,7 +609,9 @@ func normalizeNullRedirects(command, sink string) string {
 				i++
 				continue
 			}
-			if c == '`' && i < len(command) {
+			// PowerShell's escape, and only inside its double quotes: single-quoted
+			// text is literal in both shells, so a backtick there ends nothing.
+			if c == '`' && quote == '"' && i < len(command) {
 				write(command[i])
 				i++
 				continue
@@ -442,9 +717,9 @@ func (s Shell) argv(command string) []string {
 		path = s.Kind.String()
 	}
 	if s.Kind == ShellPowerShell {
-		return []string{path, "-NoProfile", "-NonInteractive", "-Command", PowerShellUTF8Script(normalizeNullRedirects(command, "$null"))}
+		return []string{path, "-NoProfile", "-NonInteractive", "-Command", powerShellToolScript(normalizeNullRedirects(command, "$null"))}
 	}
-	return []string{path, "-c", normalizeNullRedirects(command, "/dev/null")}
+	return append(append([]string{path}, s.Args()...), "-c", normalizeNullRedirects(command, "/dev/null"))
 }
 
 // SupportsChaining reports whether the shell parses '&&' / '||'. bash does;
@@ -455,4 +730,24 @@ func (s Shell) SupportsChaining() bool {
 	}
 	base := strings.ToLower(pathBase(s.Path))
 	return base == "pwsh" || base == "pwsh.exe"
+}
+
+// quotedPath quotes a path for a one-line notice: control characters stay
+// escaped, while Windows separators read as the path is written.
+func quotedPath(p string) string {
+	return strings.ReplaceAll(strconv.Quote(p), `\\`, `\`)
+}
+
+// Args are the launcher arguments this shell is started with, if any.
+func (s Shell) Args() []string {
+	if s.launcherArgs == "" {
+		return nil
+	}
+	return strings.Split(s.launcherArgs, "\x00")
+}
+
+// WithArgs is s started through the given launcher arguments.
+func (s Shell) WithArgs(args []string) Shell {
+	s.launcherArgs = strings.Join(args, "\x00")
+	return s
 }

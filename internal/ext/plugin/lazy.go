@@ -26,11 +26,6 @@ import (
 	"reasonix/internal/contract/tool"
 )
 
-// DefaultStartupBudget is the per-plugin latency budget used by boot when
-// deciding whether to auto-demote (see Recommend). Kept here rather than in
-// stats.go because it's the value boot.go pairs with each Recommend call.
-func DefaultStartupBudget() time.Duration { return defaultStartTimeout }
-
 // spawnState is the lazy-spawn state machine. Transitions are:
 //
 //	idle → inFlight → ready
@@ -98,9 +93,8 @@ func (s *lazySpawn) broadcastReady() {
 	}
 }
 
-// kick starts the spawn if it has not yet started. Cache-miss catalog discovery
-// and tests may call this; cache-hit boot registration uses kick=false so the
-// process starts on first real tool call via EnsureConnected.
+// kick starts the spawn if it has not yet started. A cache-hit kick changes no
+// registry entry: the placeholders keep presenting the cached schema.
 func (s *lazySpawn) kick() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -124,7 +118,7 @@ func (s *lazySpawn) run() {
 	real, err := s.host.EnsureConnectedWithLifecycle(s.ctx, startupCtx, s.spec, s.generation)
 	cancel()
 	if err != nil {
-		err = newStartupFailure("connect", started, "", err)
+		err = newStartupFailure("connect", started, 0, err)
 	}
 	var cacheTools []tool.Tool
 	s.mu.Lock()
@@ -147,20 +141,29 @@ func (s *lazySpawn) run() {
 		s.real[t.Name()] = t
 	}
 	s.state = spawnReady
+	ApplyHeldMCPPolicy(s.reg, s.host, s.spec)
 	s.trySwap()
 	cacheTools = real
 	s.broadcastReady()
 	// Save cache outside the critical path of tool dispatch. Register the write
 	// before this deferred spawn ends so Host.Close observes and drains it.
-	s.host.queueBackgroundWrite(func() {
-		saveLazyCachedSchema(s.spec, cacheTools, s.host.serverInstructions(s.spec.Name))
-	})
+	s.host.queueBackgroundWrite(s.cacheWrite(cacheTools))
 }
 
-func saveLazyCachedSchema(spec Spec, real []tool.Tool, instructions string) {
+func (s *lazySpawn) cacheWrite(real []tool.Tool) func() {
+	// Capture the live handshake before this spawn releases deferredWG. Close
+	// may clear the clients before the queued persistence callback can run.
+	instructions := s.host.serverInstructions(s.spec.Name)
+	capabilities := s.host.cachedCapabilities(s.spec.Name, len(real) > 0)
+	return func() {
+		saveLazyCachedSchema(s.spec, real, instructions, capabilities)
+	}
+}
+
+func saveLazyCachedSchema(spec Spec, real []tool.Tool, instructions string, capabilities map[string]bool) {
 	_ = SaveCachedSchema(spec.Name, CachedSchema{
 		CacheKey:     SchemaCacheKey(spec),
-		Capabilities: map[string]bool{"tools": len(real) > 0},
+		Capabilities: capabilities,
 		Instructions: instructions,
 		Tools:        cacheableToolsOf(real),
 	})
@@ -282,9 +285,15 @@ func (lt *lazyTool) Execute(ctx context.Context, args json.RawMessage) (string, 
 				return fmt.Sprintf("MCP server %q is connected; its real tools are now available on the next turn", sp.spec.Name), nil
 			}
 			real := sp.real[lt.name]
+			if meta, ok := real.(tool.MCPMetadata); !ok || meta.MCPServerName() != sp.spec.Name || meta.MCPRawToolName() != lt.rawName {
+				real = nil
+			}
 			safetyErr := lt.reconcileLiveSafety(real)
 			sp.mu.Unlock()
 			if real == nil {
+				if refusal, ok := lt.heldRefusal(); ok {
+					return "", refusal
+				}
 				return "", fmt.Errorf("MCP server %q did not expose tool %q (the cached schema may be stale)", sp.spec.Name, lt.name)
 			}
 			if safetyErr != nil {
@@ -354,6 +363,18 @@ func (lt *lazyTool) Execute(ctx context.Context, args json.RawMessage) (string, 
 	}
 }
 
+// heldRefusal reports whether the live server withheld this placeholder's tool
+// because its definition is not the approved one.
+func (lt *lazyTool) heldRefusal() (tool.Refusal, bool) {
+	held, _ := lt.shared.host.HeldTools(lt.shared.spec.Name)
+	for _, h := range held {
+		if h.RawName == lt.rawName {
+			return tool.HeldMCPRefusalFor(tool.HeldMCP{Binding: h.Binding(lt.shared.spec), Class: h.Class}), true
+		}
+	}
+	return tool.Refusal{}, false
+}
+
 func waitForLazyStartup(ctx, sessionCtx context.Context, ready <-chan struct{}, waitBudget time.Duration, server string, startupLimit time.Duration) error {
 	if waitBudget <= 0 {
 		waitBudget = defaultStartTimeout
@@ -399,9 +420,9 @@ func (lt *lazyTool) reconcileLiveSafety(real tool.Tool) error {
 // "mcp__<server>__connect": the model can call it to drive the handshake, and
 // the real tools surface on the next turn.
 //
-// kick=true starts a one-shot catalog discovery immediately (used for cache-miss
-// servers at boot). kick=false leaves the process idle until the first real
-// tool call — the product default for cache-hit sessions.
+// kick=true starts the shared handshake immediately: catalog discovery for a
+// cache-miss server, or a warm connection for an always-loaded one. kick=false
+// leaves the process idle until the first real tool call.
 //
 // host is the Host that receives the real Client. reg is the registry where
 // real tools land after a successful spawn. sessionCtx must outlive any
@@ -422,6 +443,9 @@ func LazyToolset(spec Spec, cs *CachedSchema, host *Host, reg *tool.Registry, se
 	}
 	shared.generation = host.registerDeferredCancel(spec.Name, cancel)
 
+	if cs != nil && !cachedToolNamesUsable(spec, cs.Tools) {
+		cs = nil
+	}
 	var out []tool.Tool
 	// A snapshot with zero tools presents nothing the model could call, so it
 	// gets the same connect stub as a cache miss — otherwise the live tools
@@ -438,6 +462,9 @@ func LazyToolset(spec Spec, cs *CachedSchema, host *Host, reg *tool.Registry, se
 	} else {
 		out = make([]tool.Tool, 0, len(cs.Tools))
 		for _, ct := range cs.Tools {
+			if !spec.ToolEnabled(ct.Name) {
+				continue
+			}
 			visibleName := ct.Name
 			if spec.StripRawPrefix != "" {
 				visibleName = strings.TrimPrefix(visibleName, spec.StripRawPrefix)

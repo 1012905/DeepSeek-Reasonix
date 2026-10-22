@@ -114,6 +114,22 @@ func (o *MutationObserver) OwnershipTurn() int {
 	return o.ownershipTurn
 }
 
+// BeginWrite retires undo durably before a tool or hook can modify files.
+func (o *MutationObserver) BeginWrite() (func(), error) {
+	if o == nil || o.store == nil {
+		return nil, nil
+	}
+	barrier := o.store.Barrier()
+	if err := barrier.EnterWrite(); err != nil {
+		return nil, err
+	}
+	if err := o.store.InvalidateUndo(); err != nil {
+		barrier.ExitWrite()
+		return nil, fmt.Errorf("prepare workspace write: %w", err)
+	}
+	return barrier.ExitWrite, nil
+}
+
 // RegisterWriter marks a background writer as active. Rollback precheck returns
 // busy while any writer is registered.
 func (o *MutationObserver) RegisterWriter(id, kind string, turn int) error {
@@ -134,12 +150,11 @@ func (o *MutationObserver) RegisterWriter(id, kind string, turn int) error {
 	o.reg.writers[id] = ActiveWriter{ID: id, Turn: turn, StartedAt: time.Now(), Kind: kind}
 	snap := o.snapshotWritersLocked()
 	if o.store != nil {
-		o.store.SetActiveWriters(snap)
-		if err := o.store.Barrier().EnterWrite(); err != nil {
+		if _, err := o.BeginWrite(); err != nil {
 			delete(o.reg.writers, id)
-			o.store.SetActiveWriters(o.snapshotWritersLocked())
 			return fmt.Errorf("register background writer: %w", err)
 		}
+		o.store.SetActiveWriters(snap)
 	}
 	o.reg.barrierHeld[id] = true
 	return nil
@@ -191,6 +206,18 @@ func (o *MutationObserver) HasActiveWriters() bool {
 	return len(o.ActiveWriters()) > 0
 }
 
+// HasOtherActiveWriters reports whether a background writer other than this
+// observer's own is still running: a background child is itself registered,
+// and its own run is not another writer beside it.
+func (o *MutationObserver) HasOtherActiveWriters() bool {
+	for _, w := range o.ActiveWriters() {
+		if w.ID != o.writerID {
+			return true
+		}
+	}
+	return false
+}
+
 // BeforeMutation captures the preimage for a known path before a tool or hook runs.
 // Prefer this over the legacy Snapshot(diff.Change) path for built-in tools.
 func (o *MutationObserver) BeforeMutation(path, tool string, source CaptureSource) {
@@ -226,12 +253,12 @@ func (o *MutationObserver) BeforeMutationFromChange(ch diff.Change, tool string)
 
 // AfterMutation re-reads the path after a tool attempt (success or failure) and
 // records the after fingerprint under Reasonix ownership.
-func (o *MutationObserver) AfterMutation(path, tool string) {
+func (o *MutationObserver) AfterMutation(path, tool string) error {
 	if o == nil || o.store == nil || path == "" {
-		return
+		return nil
 	}
 	seq := o.seq.Add(1)
-	o.store.CaptureAfter(path, CaptureAfterOpts{
+	return o.store.CaptureAfter(path, CaptureAfterOpts{
 		Seq:           seq,
 		Tool:          tool,
 		Source:        CaptureAfterMutation,

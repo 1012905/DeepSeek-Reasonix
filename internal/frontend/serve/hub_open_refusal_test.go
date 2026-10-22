@@ -69,7 +69,7 @@ func TestOpenPaneOnADeletedSessionSaysItIsGoneNotHeld(t *testing.T) {
 	root := testenv.TempDir(t)
 	h := NewHub(HubOptions{})
 	hubRuntime(t, h, root)
-	srv := httptest.NewServer(h.Handler())
+	srv := httptest.NewServer(operatorHandler(h))
 	defer srv.Close()
 
 	gone := filepath.Join(SessionDirFor(root), "deleted.jsonl")
@@ -77,8 +77,8 @@ func TestOpenPaneOnADeletedSessionSaysItIsGoneNotHeld(t *testing.T) {
 	if status == http.StatusConflict {
 		t.Errorf("a deleted session opens as 409 Conflict, which reads as in-use: %s", body)
 	}
-	if got := refusalCodeOf(t, body); got != codeSessionBadPath {
-		t.Errorf("refusal code = %q, want %q (body %s)", got, codeSessionBadPath, body)
+	if got := refusalCodeOf(t, body); got != codeSessionUnknown {
+		t.Errorf("refusal code = %q, want %q (body %s)", got, codeSessionUnknown, body)
 	}
 }
 
@@ -91,7 +91,7 @@ func TestOpenPaneReadsASessionAnotherRuntimeHolds(t *testing.T) {
 	root := testenv.TempDir(t)
 	h := NewHub(HubOptions{})
 	hubRuntime(t, h, root)
-	srv := httptest.NewServer(h.Handler())
+	srv := httptest.NewServer(operatorHandler(h))
 	defer srv.Close()
 
 	held := filepath.Join(SessionDirFor(root), "held.jsonl")

@@ -88,6 +88,17 @@ func TestDeepSeekEffortUsesResponsesReasoningShape(t *testing.T) {
 	}
 }
 
+func TestADeclaredEffortReachesAnyResponsesGatewayAsReasoningEffort(t *testing.T) {
+	for _, level := range []string{"low", "high", "max"} {
+		client := New(Config{Name: "custom-opencode-ai", BaseURL: "https://opencode.ai/inference/go/v1", Model: "deepseek-v4.1-flash", Effort: level}).(*client)
+		body, _, _ := client.buildRequestBody(provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}})
+		reasoning, _ := body["reasoning"].(map[string]any)
+		if got, _ := reasoning["effort"].(string); got != level {
+			t.Errorf("effort %q serialized as %q", level, got)
+		}
+	}
+}
+
 func TestRequestSerializesExplicitMaxOutputTokens(t *testing.T) {
 	client := New(Config{Name: "responses", BaseURL: "https://example.com", Model: "model"}).(*client)
 	body, _, _ := client.buildRequestBody(provider.Request{
@@ -1185,5 +1196,36 @@ func TestVendorTableMaxOutputTokens(t *testing.T) {
 	db, _, _ := ds.buildRequestBody(provider.Request{Messages: msg})
 	if got := db["max_output_tokens"]; got != provider.DefaultHighReasoningOutputTokens {
 		t.Fatalf("deepseek auto budget = %#v, want high-reasoning %d", got, provider.DefaultHighReasoningOutputTokens)
+	}
+}
+
+// A strict gateway parses every replayed function_call.arguments as JSON, and
+// an empty string is not JSON. A call recorded with no arguments (a no-argument
+// tool on a gateway that sends "") has to go out as an empty object.
+func TestReplayedToolCallWithNoArgumentsSendsAnEmptyObject(t *testing.T) {
+	for name, recorded := range map[string]string{"empty": "", "blank": "  \n"} {
+		t.Run(name, func(t *testing.T) {
+			var body map[string]any
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewDecoder(r.Body).Decode(&body)
+				writeEvents(w, `{"type":"response.completed","response":{"id":"resp_1","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`)
+			}))
+			defer server.Close()
+			p := New(Config{Name: "gateway", APIKey: "key", BaseURL: server.URL, Model: "m", Mode: "stateless"})
+			collect(t, p, provider.Request{Messages: []provider.Message{
+				{Role: provider.RoleUser, Content: "go"},
+				{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "call_1", Name: "status", Arguments: recorded}}},
+				{Role: provider.RoleTool, ToolCallID: "call_1", Name: "status", Content: "ok"},
+			}})
+			var args string
+			for _, raw := range body["input"].([]any) {
+				if item := raw.(map[string]any); item["type"] == "function_call" {
+					args, _ = item["arguments"].(string)
+				}
+			}
+			if args != "{}" {
+				t.Fatalf("replayed arguments = %q, want {}", args)
+			}
+		})
 	}
 }

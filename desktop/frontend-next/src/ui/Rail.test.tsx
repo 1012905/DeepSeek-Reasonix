@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "./testkit";
 import { Rail, railLocalY, type RailMark } from "./Rail";
@@ -39,5 +39,49 @@ describe("conversation overview rail", () => {
     await waitFor(() => expect(buttons[0].style.top).toBe("295.5px"));
     expect(buttons[1].style.top).toBe("304.5px");
     expect(buttons[0].getAttribute("aria-label")).toBe("定位到你说的：第一条");
+  });
+});
+
+describe("a rail longer than it can show", () => {
+  const rail = async (count: number, onJump = vi.fn()) => {
+    const root = document.createElement("div");
+    Object.defineProperties(root, {
+      clientHeight: { configurable: true, value: 600 },
+      scrollHeight: { configurable: true, value: 90000 },
+      scrollTop: { configurable: true, writable: true, value: 0 },
+    });
+    const marks = Array.from({ length: count }, (_, i) => mark(`m${i}`, i, `message ${i}`));
+    const view = render(
+      <Rail marks={marks} total={count} scroll={{ current: root }} flow={{ current: document.createElement("div") }} onJump={onJump} bound />,
+    );
+    await waitFor(() => {
+      const drawn = view.container.querySelectorAll<HTMLElement>(".srail-m");
+      expect(drawn.length).toBeGreaterThan(0);
+      expect(drawn[drawn.length - 1].style.top).not.toBe("0px");
+    });
+    return { view, marks, onJump };
+  };
+
+  it("draws one mark per distinguishable position, not one per message", async () => {
+    const { view } = await rail(2000);
+    const drawn = view.container.querySelectorAll(".srail-m").length;
+    expect(drawn).toBeLessThanOrEqual(300);
+    expect(drawn).toBeGreaterThan(50);
+  });
+
+  it("draws every mark while they are far enough apart to tell apart", async () => {
+    const { view } = await rail(40);
+    expect(view.container.querySelectorAll(".srail-m").length).toBe(40);
+  });
+
+  it("still addresses every message by position: the pointer lands on the nearest one", async () => {
+    const { view, onJump } = await rail(2000);
+    const nav = view.container.querySelector(".srail") as HTMLElement;
+    nav.getBoundingClientRect = () => ({ top: 0, height: 600, left: 0, width: 20, right: 20, bottom: 600, x: 0, y: 0, toJSON: () => ({}) });
+    fireEvent.mouseMove(nav, { clientY: 300 });
+    fireEvent.click(nav);
+    expect(onJump).toHaveBeenCalledTimes(1);
+    const picked = Number((onJump.mock.calls[0][0] as RailMark).id.slice(1));
+    expect(Math.abs(picked - 1000)).toBeLessThanOrEqual(8);
   });
 });

@@ -196,6 +196,30 @@ func TestCompleteDropsTheRowThatChangesNothing(t *testing.T) {
 	}
 }
 
+// A command typed out in full leaves the rows the menu still offers, and names
+// itself apart from them: a fuzzy neighbour must not be what Enter runs.
+func TestCompleteNamesTheCommandTypedInFull(t *testing.T) {
+	names := []SlashItem{
+		{Label: "/tree", Insert: "/tree", Hint: "show the branch tree"},
+		{Label: "/security-review", Insert: "/security-review "},
+	}
+	got := Complete("/tree", 5, CompletionData{Names: names})
+	if got.Typed == nil || got.Typed.Label != "/tree" || got.Typed.Hint != "show the branch tree" {
+		t.Fatalf("typed = %+v, want /tree", got.Typed)
+	}
+	if hasInsert(got.Items, "/tree") || !hasInsert(got.Items, "/security-review ") {
+		t.Fatalf("items = %v, want only the neighbour", inserts(got.Items))
+	}
+
+	alone := Complete("/tree", 5, CompletionData{Names: names[:1]})
+	if alone.Typed == nil || len(alone.Items) != 0 || alone.Kind != CompleteSlash {
+		t.Fatalf("got %+v, want the command named with no other row", alone)
+	}
+	if partial := Complete("/tre", 4, CompletionData{Names: names}); partial.Typed != nil {
+		t.Fatalf("typed = %+v, want none for a half-typed name", partial.Typed)
+	}
+}
+
 // The menu says what it filtered on, so a frontend can point at the reason a
 // row is there instead of showing an unexplained fuzzy hit.
 func TestCompleteReportsTheQueryItFilteredOn(t *testing.T) {
@@ -274,5 +298,17 @@ func mustWrite(t *testing.T, p, body string) {
 	t.Helper()
 	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A bare @token is typed from the name the user remembers, not its spelling:
+// the letters in order are enough to reach a file anywhere in the workspace.
+func TestCompleteRefFindsFileBySubsequence(t *testing.T) {
+	root := testenv.TempDir(t)
+	writeAt(t, root, "src/pages/project-info/tabs/ProjectInfoNew.tsx")
+
+	got := Complete("@proinf", 7, CompletionData{WorkspaceRoot: root})
+	if !hasInsert(got.Items, "@src/pages/project-info/tabs/ProjectInfoNew.tsx") {
+		t.Fatalf("items = %v, want the ProjectInfoNew.tsx reference", inserts(got.Items))
 	}
 }

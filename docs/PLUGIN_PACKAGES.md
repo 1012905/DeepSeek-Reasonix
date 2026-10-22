@@ -1,7 +1,38 @@
+---
+owner: @SivanCola
+backup: @esengine
+status: active
+reviewed: 2026-09-29
+---
+
 # Reasonix Plugin Packages
 
 Reasonix plugin packages bundle skills, hooks, MCP servers, prompts, themes,
 and code extensions behind one installable unit.
+
+For a copyable local package and the community review path, see the
+[community author guide](MARKET_AUTHOR_GUIDE.md).
+The [multi-file skill example](../examples/release-note-kit/README.md) shows
+how a plugin keeps a required reference file with its skill.
+For an issue-to-PR-draft exercise with a deliberately failing local fixture,
+see the [repository workflow example](../examples/issue-fix-kit/README.md).
+For a packaged read-only subagent, local inputs and lifecycle verification,
+see the [repository orientation example](../examples/repo-map-kit/README.md).
+For a frontend task with a brief, sample data, and browser acceptance steps,
+see the [local interface example](../examples/frontend-page-kit/README.md).
+
+The [API documentation example](../examples/api-notes-kit/README.md) adds local
+OpenAPI inputs, a reference checker, and a source-linked guide format.
+
+The [stdio MCP example](../examples/mcp-line-counter-kit/README.md) bundles a
+local Go server with build, connection, tool-call, and lifecycle checks.
+
+The [Studio theme author guide](THEME_AUTHOR_GUIDE.md) uses a copyable pure-theme
+package, the current token vocabulary, and Appearance activation and cleanup.
+
+The [compatible command example](../examples/command-notes-kit/README.md) shows
+a copied Claude- or Codex-format package, qualified command names, argument
+substitution, and the disable, re-enable and removal checks.
 
 ## CLI Mode
 
@@ -67,6 +98,61 @@ Installed plugin state is stored in:
 ~/.reasonix/plugins/<name>/
 ```
 
+On Windows, copied replacements are validated in a fresh sibling directory
+under `plugins/`, then published by updating the package's recorded `root`.
+On other platforms the validated copy is swapped into the existing directory
+with a backup-protected rename and the recorded `root` does not change.
+
+Directory watches from another process cannot block a rename of the old tree
+because that tree is left intact. Failed publication discards the new copy.
+Use the recorded root to locate the active version after an update.
+
+Previous copies remain on disk so processes still using them keep a
+complete version. Removal deletes the active copy; retained copies require
+manual cleanup after every process using or watching them has stopped.
+An external lock on the package state file can still prevent publication.
+
+#### Approval snapshot
+
+Copy-mode preview parses a bounded, materialized snapshot. Its file-content
+hashes contribute to `contentDigest` and the approval `planId`.
+
+- Apply checks the copied tree against that snapshot before installation and
+  before every registry rename attempt; a failed check ends publication.
+- The digest covers all copied bytes: skills, hooks, runtime binaries, prompts,
+  themes and assets. `.git` is excluded.
+- Internal regular-file links are materialized by the existing copy rules.
+  Link mode remains mutable and has no content pin.
+- Failed actions carry a typed `errorCode` (`install.digest_mismatch` or
+  `install.publication_failed`) alongside diagnostic text.
+
+#### Publication and durability
+
+Registry publication uses a synced temporary file and strict rename. Filesystems
+or Windows filter drivers that reject rename with a cross-device error fail
+closed; publication never truncates and copies over the previous registry.
+
+Copied files are synced before publication; directory syncing is best effort.
+Windows directory-entry persistence and power-loss durability are not guaranteed.
+
+#### Restart and recovery
+
+The registry is the sole authority on restart. A process exit before its rename
+keeps the old root active; an exit after rename loads the new root.
+
+- Unregistered complete or incomplete siblings and registry temporary files are
+  never adopted automatically. Recovery never guesses which orphan was approved.
+- A corrupt registry fails closed with a read error. The package loader excludes
+  invalid registered roots and reports a repair warning.
+- Retained copies may include user edits. After removal, a retained canonical
+  directory can require manual cleanup or an explicit replacement for reinstall.
+
+#### Writable generations
+
+Publication-time digest checks do not prevent later edits or confine a
+same-authority external writer that can replace directories or alter bytes after
+the last check that precedes the successful rename.
+
 ### Manage From CLI
 
 List installed plugins:
@@ -100,7 +186,6 @@ For a workspace-wide capability report (skills, hooks, MCP merge, package roots)
 
 ```bash
 reasonix doctor capabilities --json
-# Desktop: Settings → Diagnostics
 # Agent:   /reasonix-guide
 ```
 
@@ -143,8 +228,9 @@ reopen `/skills` to verify the current session sees the expected skills.
 
 ## Desktop Settings
 
-Open **Settings -> Plugins** to install and manage plugin packages without using
-the CLI.
+Open **Settings → Extension → Installed** (**扩展 → 已安装**) to install and
+manage plugin packages. In **Plugin packages**, choose **Add** to open the
+installer.
 
 ### Install Plugins
 
@@ -156,45 +242,64 @@ The installer takes one source:
   folder).
 
 A local `.zip` archive, such as one made by **Export**, installs through the CLI
-(`reasonix plugin install ./pkg.zip`) and the `install_source` tool.
+(`reasonix plugin install ./pkg.zip --dry-run`, then rerun with `--yes` after
+reviewing the plan) and the `install_source` tool.
 
-Installing is always two steps: the installer first reads the source and shows
-what it will add and what it needs, without writing anything; **Install**
-then applies exactly that plan. A changed source between the two is refused
-rather than installed.
+Installing is always two steps: enter or choose the source, then select
+**See what it is** (**查看内容**) to read its contributions and requirements
+without writing anything. **Install** then applies exactly that plan. A changed
+source between the two is refused rather than installed.
 
-Installer options:
+The Studio installer copies local packages into the user's plugin storage.
 
-- **Overwrite same-name plugin** allows the current source to replace an
-  installed plugin with the same name. Leave it off when duplicate-name installs
-  should fail instead of replacing existing content.
-- **Developer mode: link source folder** appears for **Local folder** installs.
-  It links the selected directory instead of copying it into Reasonix's plugin
-  storage. Use it while developing or debugging a plugin. Moving or deleting the
-  selected directory will break the linked plugin.
+To replace an installed package from its recorded source, choose **Update** on
+its row and review the new plan before applying it.
+
+For a different replacement source or a development link, use the CLI's
+`--replace` or `--link` flags
+described above; these are not checkbox options in the Studio installer.
 
 Preview is the safest first step for a new Git source or local plugin directory.
 
 ### Manage Installed Plugins
 
-The installed-plugin list shows each plugin package and its exported skills,
-hooks, and MCP servers. Use **Refresh plugins** after editing plugin files or
-changing config outside the app.
+The installed-plugin list shows each package's contributions and executable
+capabilities.
+
+After editing plugin files outside the app, use **Reload runtime**
+in the **Runtime** group above the package list. A successful reload refreshes
+the list and makes the new extensions available for the next turn; a refused
+reload reports its reason.
 
 Expand a plugin row to manage it:
 
 - Enable or disable the plugin.
-- Read **How to use** for the plugin's exported skills, hooks, and MCP servers.
+- Read its contribution rows, including the qualified invocations for skills,
+  commands, and agents, and the details of hooks, servers, and runtimes.
 - **Update** pulls or refreshes an installed plugin when an update source is
   available.
-- **Doctor** checks the plugin manifest and reports warnings or diagnostics.
-- **Remove plugin** uninstalls the package after confirmation.
+- Read package errors and warnings in the expanded row. For CLI diagnostics,
+  run `reasonix plugin doctor <name>`; there is no per-package Doctor button.
+- **Export** packages the plugin for sharing, with credentials stripped.
+- **Remove** uninstalls the package after confirmation.
+
+MCP displays mask userinfo, credential query/fragment values, credential path
+suffixes, and opaque fragments. Credential-bearing or uncertain shell text is
+hidden in display; operational install values remain intact. Parse errors redact
+input values. Approval tickets bind operational credentials before projection.
+
+| Surface | Values |
+| --- | --- |
+| Operator MCP parse/install | `url`, `env`, `headers`, `command`, `args`: operational values for the install round-trip. |
+| MCP confirmation UI | Render only `displayUrl`, `displayEnv`, `displayHeaders`, `displayCommand`, `displayArgs`. |
+| Public install plans and package inventories | Display values; operational entries stay internal. |
+| Export | Mask URL credentials and credential flag arguments; replace placeholders before connecting. Env/header literals remain environment references. |
 
 ### Use Installed Plugins From Desktop
 
 The desktop settings page uses the same runtime model as the CLI:
 
-- Expand an installed plugin to see its **How to use** section.
+- Expand an installed plugin to read its contribution rows and warnings.
 - In any desktop session, type `/plugins` to list installed plugins, or
   `/plugins show <name>` to see the same usage details from the chat surface.
 - Skills are shown with package-qualified direct commands such as
@@ -205,8 +310,9 @@ The desktop settings page uses the same runtime model as the CLI:
 - Hooks and MCP servers are listed for transparency. They do not need a manual
   "run" button: enabled hooks trigger automatically, and MCP tools are available
   through ordinary tool use.
-- If a currently open session does not reflect a plugin change, refresh the
-  plugin list and open a new session.
+- If an install or update reports that files were saved but the runtime did not
+  reload, use **Reload runtime** to retry and follow any refusal it reports.
+  A successful reload takes effect on the next turn.
 
 ## Native Manifest
 
@@ -214,27 +320,30 @@ Reasonix plugins can declare `reasonix-plugin.json` at the plugin root:
 
 ```json
 {
+  "apiVersion": "reasonix.io/plugin/v2",
   "name": "example",
   "version": "1.0.0",
   "description": "Example plugin",
-  "skills": "skills",
-  "hooks": {
-    "SessionStart": [
-      {
-        "command": "hooks/session-start",
-        "args": [],
-        "description": "Load startup context"
-      },
-      {
-        "command": "printf 'ready' && ./hooks/audit",
-        "shell": "bash",
-        "description": "Run a compound shell script"
+  "contributes": {
+    "skills": ["skills"],
+    "hooks": {
+      "SessionStart": [
+        {
+          "command": "hooks/session-start",
+          "args": [],
+          "description": "Load startup context"
+        },
+        {
+          "command": "printf 'ready' && ./hooks/audit",
+          "shell": "bash",
+          "description": "Run a compound shell script"
+        }
+      ]
+    },
+    "mcpServers": {
+      "helper": {
+        "command": "bin/helper"
       }
-    ]
-  },
-  "mcpServers": {
-    "helper": {
-      "command": "bin/helper"
     }
   }
 }
@@ -243,8 +352,28 @@ Reasonix plugins can declare `reasonix-plugin.json` at the plugin root:
 Relative paths are resolved inside the plugin root. Reasonix does not run
 third-party install scripts during plugin installation.
 
+A `SessionStart` hook can load packaged text without launching a command:
+
+```json
+"hooks": {
+  "SessionStart": [{"contextFile": "context/startup.md"}]
+}
+```
+
+Put this block inside `contributes` and include the referenced file in the
+package. Reasonix reads the installed copy and adds its text to the first user
+turn as hook context. It keeps that text out of the cached system prompt.
+
+Disabling or removing the package stops this context in newly built sessions.
+Use the existing reload flow to refresh an already running session's hooks;
+earlier conversation messages keep context that was already sent.
+
 Plugin hook execution is explicit:
 
+- A hook with `contextFile` reads that package-relative file directly; it
+  does not run a command. The [session-start context example](../examples/review-context-kit/README.md)
+  includes a complete package, copy/link instructions, and provider-boundary
+  verification of first-turn delivery and session rotation.
 - When `args` is present, including `"args": []`, the hook uses **exec form**.
   `command` is the executable and every argument is passed literally, without
   shell parsing or interpolation.
@@ -348,6 +477,10 @@ New resource types:
     with the plugin;
   - any other file listed under `themes` is ignored.
 
+The [native prompt example](../examples/work-note-kit/README.md) shows a
+template-only package, nested names, argument substitution, and the
+install/update/disable/remove lifecycle without a compiler or sidecar.
+
 The `runtime` block declares a code extension — a sidecar process Reasonix
 launches and talks to over the Extension Protocol (JSON-RPC 2.0 over stdio;
 see `docs/EXTENSION_PROTOCOL.generated.md` for the method index and
@@ -364,7 +497,7 @@ see `docs/EXTENSION_PROTOCOL.generated.md` for the method index and
   slot has exactly one owner across all installed plugins; a collision fails
   the build with both sources named.
 - `capabilities` gates whole feature families: `interceptors`, `strategies`,
-  `providers`, `ui`, `tools`. Anything the sidecar announces beyond the
+  `providers`, `ui`, `tools`, `session`. Anything the sidecar announces beyond the
   manifest is rejected during the handshake.
 - `tools` declares the model-callable tools the runtime serves; it needs the
   `tools` capability. Each tool has:
@@ -408,15 +541,39 @@ imported hook can make is honored. `PreToolUse`/`PermissionRequest` "deny" and
 `PreToolUse`'s `ask`/`defer` decisions are chosen by the script's stdout at
 call time, not by anything in the manifest, so they can't be flagged during
 install; see the hook bullet below for what's implemented.
+
 GitHub-hosted multi-plugin marketplaces with a
 `.claude-plugin/marketplace.json` can be installed from the repository root
 when their plugin entries use relative string sources such as
 `./plugins/example` or `plugins/example`; preview shows one action per plugin
-before anything is written. Set the optional install name to a marketplace
-plugin name to select only that entry. Object sources are accepted only for a
-GitHub repository URL pinned to a full commit SHA. Unpinned external strings,
+before anything is written. Set the optional install name to select one plugin.
+
+Object sources support `source: "url"`
+with a GitHub repository URL pinned to a full commit SHA, and
+`source: "git-subdir"` with a GitHub repository `url` and a relative `path`.
+
+`git-subdir` uses the repository's default branch unless `ref` or a full
+40-character `sha` is supplied; `sha` takes precedence. All `git-subdir`
+sources require a working Git installation, including default-branch and
+SHA-pinned entries. The no-Git tarball fallback used by other GitHub plugin
+sources does not resolve these entries. In a bulk install, an unavailable or
+invalid `git-subdir` entry is skipped with a warning; selecting it by name
+returns the error.
+
+The preview binds the resolved commit and subdirectory to its plan ID,
+and installation still requires approval of that plan.
+The installed source URL is pinned to that commit: updating the plugin keeps
+the same commit, rather than following subsequent changes to the default branch
+or `ref`. Preview the marketplace again to select a newer commit.
+
+Copied plugin packages use the same 256 MiB total budget as plugin archives;
+individual skill installs retain their 20 MiB budget.
+
+Unpinned external strings,
 npm, `strict: false`, and other advanced marketplace protocols are skipped in
-a bulk install and rejected when selected by name. For packages such as
+a bulk install and rejected when selected by name.
+
+For packages such as
 Superpowers and Claude-style skill packs, Reasonix maps the following
 compatibility conventions. Native v2 manifests use only their explicit
 declarations and do not apply these fallbacks:
@@ -526,11 +683,13 @@ declarations and do not apply these fallbacks:
   or `TaskOutput.task_id` when Reasonix `wait` covers multiple/all jobs. Each
   structural gap is reported once per hooks file, so a wildcard-matcher
   plugin sees one warning per gap instead of one per hook.
-- A plugin-root `.mcp.json` to installed MCP entries. Claude `local` maps to
-  stdio, non-ASCII display names receive stable internal IDs, and duplicate
-  declarations are deduplicated. Imported servers default to
-  `auto_start=false`; users connect them on demand so startup does not change
-  the provider-visible tool schema.
+- A plugin-root `.mcp.json` maps to installed MCP entries. Claude `local` maps
+  to stdio, non-ASCII display names receive stable internal IDs, and duplicate
+  declarations are deduplicated. Imported servers default to `auto_start=false`
+  and remain inactive until enabled or explicitly connected.
+- With no usable cached schema, enabled servers connect for catalog discovery.
+  With a cached schema, deferred servers connect on demand. Discovery and
+  connection do not change the current session's provider-visible tool schema.
 
 Unsupported Claude hook item types are skipped with a warning. Reasonix does not
 run third-party install scripts.
@@ -544,6 +703,92 @@ Plugin hooks receive these environment variables:
 - `REASONIX_WORKSPACE_ROOT`
 - `CLAUDE_PROJECT_DIR`
 - `CLAUDE_PLUGIN_ROOT`
+
+## Claude Code mods
+
+A Claude Code mod is a plugin whose `hooks/hooks.json` names one ES module
+(`"modules": ["./register.js"]`) that exports `register(on, options)`.
+Reasonix installs it like any Claude plugin.
+
+The module runs only while **Run Claude Code mods** is on, in Settings or as
+`[mods] enabled = true` in the user file. It is off by default, and a project
+file cannot turn it on.
+
+A mod is **full trust**:
+
+- Its module runs on this machine as you, outside the sandbox.
+- It can read files, start processes and use the network.
+- The install preview says so and lists the module's events and `$` calls from
+  its syntax tree.
+- That listing is an aid, not a guarantee. Code the module imports, and names it
+  builds at run time, are not listed, and the preview shows them as such.
+
+How it runs:
+
+- The host script runs under Studio's own binary in Node mode, or under the
+  `node` on `PATH` for the terminal and `serve`. Node 22 or newer is required,
+  and a `node` inside the open project is never used.
+- `.js .mjs .cjs` modules run everywhere. `.ts .mts .cts` run where the runtime
+  strips types. `.jsx` and `.tsx` do not run.
+- The process is a tighten-only extension runtime. A mod can deny a call or ask
+  the user about it. The host refuses an `allow`, or a rewrite of a permission
+  decision, whatever the process writes.
+- A hook gets `[mods] hook_budget_ms` of its own running time, 10 s by default.
+  A hook stuck in a loop ends the process and the turn goes on without it.
+- The process restarts at the next reload. After three deaths the mod is
+  disabled, and its status says why.
+- Nothing a mod does changes the cached system prompt or the tool list. Its text
+  reaches the model only as data from the mod.
+- While a mod runs, the completion receipt carries the gap `mod_effects_unobserved`:
+  what a full-trust process wrote is outside what the host observes, so a change
+  it made cannot be proven.
+
+Events served:
+
+- `tool.call`: `{ deny }`, argument rewrite, and `{ result }`. A result answers
+  the call in place of the tool: the tool does not run, the model gets a
+  successful result under the host's header naming the mod, and the receipt
+  counts no change.
+- `tool.check`: `deny` and `ask`. An `allow` is ignored. It applies to installed
+  MCP tools as well, and can only tighten.
+- `prompt.submit`: text rewrite, `{ drop }` and `context`, a list of strings or
+  `{ label, text }` blocks. Blocks follow the prompt on the turn's tail under the
+  host's header; they never touch the cached prefix. A block is cut at
+  `[mods] context_bytes` (8192) and a turn keeps `context_blocks` (8).
+- `session.start`, `session.end`, `turn.start`, `command.run`, `ui.press`.
+- `ui.render` for the `AbovePrompt` band.
+
+`$` served:
+
+- `plugin`, `store`, `clock`, `env.get`, `fs`, `process.run`, `http.fetch`.
+- `state`, with `atom`, `read`, `update`, `derive` and `memberOf` imported from
+  `claude-code`.
+- `session.id`, `session.cwd`, `session.root`.
+- `session.messages({ limit })` and `session.usage()`: the last transcript items
+  (credentials redacted, up to `[mods] messages_max`, 200) and the last
+  response's token counts. A mod that calls them is listed in the install
+  preview as reading the session.
+- `prompt.submit(text)`: queues a prompt as the mod's own words, under the host's
+  header, never as yours; `asUser` is not served.
+- It rejects with `mod.submit_rate` over `[mods] submit_per_turn` (3 between two
+  prompts you write), with `mod.submit_too_long` over `[mods] submit_bytes`
+  (8 KiB, 0 for none), and with `mod.submit_refused` while the session has no saved file.
+- A call that needs an answer made while `session.start` runs rejects with
+  `mod.not_ready`: that hook runs before the session is ready.
+- `tool.register/call/list` and `command.register/run/list`. Both register
+  while `session.start` runs.
+- `ui.toast`, `status`, `notice`, `log`, `ask`, `resolve`, `invalidate`.
+
+The turn a queued prompt starts is held to this session's own approvals and
+sandbox like any other turn; that, not the label, is what keeps it safe.
+
+The ceilings above are in the user file only, and `0` removes one.
+
+Anything else is registered and named in the mod's status as unserved; a call to
+an unserved `$` member rejects with the typed code `mod.unsupported`.
+
+`$.ui.ask` is a question from the mod, shown with its name. It can never approve
+a tool call or a permission.
 
 ## Studio HTTP routes
 
@@ -559,3 +804,14 @@ Studio drives plugin packages through these kernel routes:
 - `POST /extensions/reload` rebuilds the runtime from what is on disk
 
 `reasonix plugin doctor` has no route; run it from the CLI.
+
+Both `reasonix plugin doctor <name>` and `GET /plugins` report warnings for
+declared `theme.json` files that the theme reader rejects, and for individual
+tokens it drops. Warnings include the file's path relative to the package root.
+They also appear for disabled packages, so authors can diagnose a theme before
+enabling it.
+
+Theme warnings do not reject an otherwise valid plugin or change the doctor's
+exit status. A rejected theme is absent from the theme picker; a pack with some
+invalid tokens still loads with its valid tokens. Other declared theme files
+are not `theme.json` packs and are not validated by this reader.

@@ -1,8 +1,8 @@
 package config
 
 import (
+	"errors"
 	"fmt"
-	"maps"
 	"reasonix/internal/contract/provider"
 	"slices"
 	"strings"
@@ -18,85 +18,12 @@ const (
 	ReasoningProtocolNone      = "none"
 )
 
-// deepSeekVendorHost is the endpoint DeepSeek's own effort vocabulary was
-// measured against; a relay serving the same models speaks its own.
-const deepSeekVendorHost = "api.deepseek.com"
-
 // EffortCapability describes the abstract effort levels a provider/model can set
 // through the /effort command.
 type EffortCapability struct {
 	Supported bool
 	Levels    []string
 	Default   string
-}
-
-type modelReasoningCapability struct {
-	Protocol string
-	// Levels is the other half of the ContextWindow rule: which levels a request
-	// may carry is a fact about who serves the model, and a relay commonly
-	// speaks a different vocabulary. VendorHost is the endpoint this ladder was
-	// measured against, and it is the only one that inherits it.
-	Levels     []string
-	Default    string
-	Aliases    map[string]string
-	VendorHost string
-	// ContextWindow is what the model holds, which is a fact about the model and
-	// not about who serves it — a relay passing it through has the same ceiling.
-	// Zero means nobody has established one; see ResolvedContextWindow.
-	ContextWindow int
-}
-
-var modelReasoningCapabilities = map[string]modelReasoningCapability{
-	// Windows are the ones already stated for these models in the shipped
-	// entries; carrying them by model is what lets a gateway serving the same
-	// model inherit the ceiling instead of resolving to nothing.
-	DeepSeekFlashModel: deepSeekFlashCapability(),
-	"deepseek-v4-pro": {
-		Protocol:      ReasoningProtocolDeepSeek,
-		VendorHost:    "api.deepseek.com",
-		Levels:        []string{"disabled", "high", "max"},
-		Default:       "high",
-		ContextWindow: 1_000_000,
-	},
-	// The retired flash names are the same model under an old id, so they carry
-	// the same ladder rather than resolving to nothing on a gateway still asked
-	// by one of them.
-	"deepseek-v4-flash":            deepSeekFlashCapability(),
-	"deepseek-v4-flash-vision-exp": deepSeekFlashCapability(),
-	// GPT-5.6, measured 2026-08-20: the endpoint refuses "minimal" by naming the
-	// model, though the generic API vocabulary carries it. Keyed by model so a
-	// gateway serving them under its own name inherits the ladder.
-	"gpt-5.6-luna":  gpt56Capability(),
-	"gpt-5.6-sol":   gpt56Capability(),
-	"gpt-5.6-terra": gpt56Capability(),
-}
-
-// deepSeekFlashCapability is the flash ladder, measured 2026-09-13: the endpoint
-// names its own enum low|medium|high|xhigh|ultra|max in a 400, rejects minimal
-// and none outright, and stops thinking only for thinking.type=disabled — so
-// "disabled" is a level of ours and the aliases carry the rest onto the enum.
-func deepSeekFlashCapability() modelReasoningCapability {
-	return modelReasoningCapability{
-		Protocol:      ReasoningProtocolDeepSeek,
-		VendorHost:    "api.deepseek.com",
-		Levels:        []string{"disabled", "low", "high", "max"},
-		Default:       "high",
-		Aliases:       map[string]string{"minimal": "low", "medium": "high", "xhigh": "high", "ultra": "max"},
-		ContextWindow: 1_000_000,
-	}
-}
-
-func gpt56Capability() modelReasoningCapability {
-	return modelReasoningCapability{
-		Protocol:   ReasoningProtocolOpenAI,
-		Levels:     []string{"none", "low", "medium", "high", "xhigh", "max"},
-		Default:    "medium",
-		Aliases:    map[string]string{"minimal": "low"},
-		VendorHost: "api.openai.com",
-		// ContextWindow unset on purpose: the ladder was measured, a window here
-		// would only have been recalled, and a number nobody checked silently
-		// moves compaction.
-	}
 }
 
 // effortCapabilityForProtocol is the one place a reasoning protocol names its
@@ -111,7 +38,7 @@ func effortCapabilityForProtocol(e *ProviderEntry, protocol string) (EffortCapab
 		}
 		return deepSeekEffortCapability(e), true
 	case ReasoningProtocolGLM:
-		return binaryThinkingEffortCapability("enabled"), true
+		return zhipuEffortCapability(e), true
 	case ReasoningProtocolKimiK3:
 		return kimiK3EffortCapability(), true
 	case ReasoningProtocolAnthropic:
@@ -168,12 +95,7 @@ func EffortCapabilityForEntry(e *ProviderEntry) EffortCapability {
 		// the model default" (== adaptive for M3).
 		return EffortCapability{Supported: true, Levels: []string{"auto", "adaptive", "disabled"}, Default: "adaptive"}
 	case isZhipuEntry(e):
-		// Zhipu GLM exposes a binary thinking knob (enabled|disabled) on its
-		// OpenAI-compatible endpoint and ignores reasoning_effort, so /effort
-		// mirrors that vocabulary. Default is "enabled" because GLM runs with
-		// thinking on out of the box; "auto" means "don't override the model
-		// default" (== enabled for GLM).
-		return binaryThinkingEffortCapability("enabled")
+		return zhipuEffortCapability(e)
 	case isLongCatEntry(e):
 		// LongCat exposes the same binary thinking vocabulary on its
 		// OpenAI-compatible endpoint and documents no reasoning_effort depth scale.
@@ -193,9 +115,76 @@ func EffortCapabilityForEntry(e *ProviderEntry) EffortCapability {
 	}
 }
 
+// NormalizeInheritedEffort accepts an inherited effort only when the entry's own
+// contract can use it, never through NormalizeEffort's cross-provider mappings.
+// A false result means the caller omits the override and the model's default applies.
+func NormalizeInheritedEffort(e *ProviderEntry, raw string) (string, bool) {
+	level := normalizeEffortLevel(raw)
+	if level == "" {
+		return "", false
+	}
+	if level == "auto" {
+		return "", true
+	}
+
+	cap := EffortCapabilityForEntry(e)
+	if !cap.Supported {
+		return "", false
+	}
+	if containsString(cap.Levels, level) {
+		return level, true
+	}
+
+	// An explicit supported_efforts list is the whole vocabulary; no aliases.
+	if len(normalizedSupportedEfforts(e)) > 0 {
+		return "", false
+	}
+
+	// Model-declared aliases only; a relay's synthesized ladder aliases are remaps.
+	if modelCap, ok := resolvedModelReasoningCapability(e); ok {
+		explicit := explicitReasoningProtocol(e)
+		if explicit == "" || explicit == modelCap.Protocol {
+			if normalized, ok := modelCap.Aliases[level]; ok && containsString(cap.Levels, normalized) {
+				return normalized, true
+			}
+		}
+	}
+
+	// DeepSeek keeps legacy spellings (off, medium, xhigh); max -> high is a remap.
+	if ReasoningProtocolForEntry(e) == ReasoningProtocolDeepSeek {
+		if normalized, err := normalizeDeepSeekReasoningEffort(e, level); err == nil && normalized != level && containsString(cap.Levels, normalized) {
+			if level == "max" {
+				return "", false
+			}
+			return normalized, true
+		}
+	}
+
+	return "", false
+}
+
+// ErrEffortUnsupported marks a level the entry's own reasoning contract cannot
+// carry, so callers branch on errors.Is rather than on the message.
+var ErrEffortUnsupported = errors.New("effort level not supported by the model")
+
+type effortUnsupportedError struct{ err error }
+
+func (e effortUnsupportedError) Error() string        { return e.err.Error() }
+func (e effortUnsupportedError) Unwrap() error        { return e.err }
+func (e effortUnsupportedError) Is(target error) bool { return target == ErrEffortUnsupported }
+
 // NormalizeEffort maps a user-supplied /effort level into the value stored in
-// config. Empty means auto/provider default.
+// config. Empty means auto/provider default. A refusal satisfies
+// errors.Is(err, ErrEffortUnsupported).
 func NormalizeEffort(e *ProviderEntry, raw string) (string, error) {
+	out, err := normalizeEffort(e, raw)
+	if err != nil {
+		return "", effortUnsupportedError{err}
+	}
+	return out, nil
+}
+
+func normalizeEffort(e *ProviderEntry, raw string) (string, error) {
 	level := normalizeEffortLevel(raw)
 	if level == "" {
 		return "", fmt.Errorf("usage: /effort auto|<level>")
@@ -239,7 +228,7 @@ func NormalizeEffort(e *ProviderEntry, raw string) (string, error) {
 	case ReasoningProtocolKimiK3:
 		return normalizeKimiK3ReasoningEffort(level)
 	case ReasoningProtocolGLM:
-		return normalizeBinaryThinkingEffort(level)
+		return normalizeZhipuEffort(e, level)
 	case ReasoningProtocolAnthropic:
 		return normalizeAnthropicEffort(level)
 	}
@@ -263,11 +252,7 @@ func NormalizeEffort(e *ProviderEntry, raw string) (string, error) {
 			return "", fmt.Errorf("usage: /effort auto|adaptive|disabled")
 		}
 	case isZhipuEntry(e):
-		// GLM's knob is binary (enabled|disabled); map Anthropic / OpenAI-style
-		// depth levels onto the nearest valid value so a stale /effort high|low
-		// still works. "off" is a retired DeepSeek level meaning "no thinking",
-		// which maps to "disabled".
-		return normalizeBinaryThinkingEffort(level)
+		return normalizeZhipuEffort(e, level)
 	case isLongCatEntry(e):
 		// LongCat's knob is binary (enabled|disabled); depth-like aliases mean
 		// thinking on, while the legacy off spellings disable it.
@@ -297,6 +282,7 @@ func EffortDisplay(e *ProviderEntry) string {
 		return "auto"
 	}
 	effort := normalizeEffortLevel(e.Effort)
+	effort = zhipuLegacyStoredEffort(e, effort)
 	if !effortInContract(e, effort) {
 		return "auto"
 	}
@@ -305,16 +291,17 @@ func EffortDisplay(e *ProviderEntry) string {
 
 // EffectiveEffort resolves the provider-visible effort value. Explicit
 // ProviderEntry.Effort wins; otherwise a configured SupportedEfforts list makes
-// DefaultEffort (or the first supported level) the runtime default. Empty means
-// provider default / omit the provider-specific effort field.
+// DefaultEffort (or the first supported level) the runtime default. A stored
+// level outside the resolved menu reads as auto, as EffortDisplay shows it.
+// Empty means provider default / omit the provider-specific effort field.
 func EffectiveEffort(e *ProviderEntry) string {
 	if e == nil {
 		return ""
 	}
-	if effort := normalizeStoredEffort(e.Effort); effort != "" {
-		if !effortInContract(e, effort) {
-			return ""
-		}
+	if explicitReasoningProtocol(e) == ReasoningProtocolNone {
+		return ""
+	}
+	if effort := zhipuLegacyStoredEffort(e, normalizeStoredEffort(e.Effort)); effort != "" && effortInContract(e, effort) {
 		return effort
 	}
 	if explicitReasoningProtocol(e) == ReasoningProtocolKimiK3 {
@@ -521,101 +508,6 @@ func mimoEffortCapability() EffortCapability {
 	return EffortCapability{Supported: true, Levels: []string{"auto", "none", "low", "medium", "high"}, Default: "auto"}
 }
 
-// resolvedModelEffortLadder is the model table's ladder. The endpoint it was
-// measured against gets all of it; anyone else serving the same model gets the
-// standard vocabulary of it, because the levels an API accepts belong to the
-// endpoint and a relay that never took "max" answers 400 for as long as the
-// setting stands.
-func resolvedModelEffortLadder(e *ProviderEntry) (modelReasoningCapability, bool) {
-	cap, ok := resolvedModelReasoningCapability(e)
-	if !ok {
-		return modelReasoningCapability{}, false
-	}
-	if servedByVendor(e, cap.VendorHost) {
-		return cap, true
-	}
-	return standardLadder(cap), true
-}
-
-// servedByVendor reports whether this entry points at the endpoint a ladder was
-// measured against. Host-only, matching isMimoEntry: a full-URL substring would
-// let an unrelated URL enable a vendor's extensions.
-func servedByVendor(e *ProviderEntry, host string) bool {
-	return e != nil && host != "" && officialProviderHost(e.BaseURL) == host
-}
-
-// standardLadder drops the levels only the vendor's own endpoint is known to
-// take. What is left is the API's documented depth vocabulary plus the switches
-// the host resolves locally and never sends, so the control stays on screen for
-// a relay instead of disappearing. supported_efforts restores the rest.
-func standardLadder(cap modelReasoningCapability) modelReasoningCapability {
-	out := cap
-	out.Levels = nil
-	var dropped []string
-	for _, level := range cap.Levels {
-		if standardEffortLevel(level) {
-			out.Levels = append(out.Levels, level)
-			continue
-		}
-		dropped = append(dropped, level)
-	}
-	// A dropped level degrades onto the deepest standard one rather than being
-	// refused: asking for more depth than the endpoint's vocabulary carries is
-	// answered with the most it does, the way "minimal" already degrades.
-	if deepest := deepestStandardLevel(out.Levels); deepest != "" && len(dropped) > 0 {
-		aliases := make(map[string]string, len(cap.Aliases)+len(dropped))
-		maps.Copy(aliases, cap.Aliases)
-		for _, level := range dropped {
-			aliases[level] = deepest
-		}
-		out.Aliases = aliases
-	}
-	if !containsString(out.Levels, out.Default) {
-		out.Default = ""
-	}
-	return out
-}
-
-// deepestStandardLevel is the most depth a standard vocabulary can ask for.
-func deepestStandardLevel(levels []string) string {
-	for _, level := range []string{"high", "medium", "low"} {
-		if containsString(levels, level) {
-			return level
-		}
-	}
-	return ""
-}
-
-// standardEffortLevel reports a level any OpenAI-compatible endpoint is
-// expected to take. "max" and "xhigh" are vendor extensions and are the ones an
-// unmeasured endpoint rejects.
-func standardEffortLevel(level string) bool {
-	switch level {
-	case "auto", "none", "disabled", "off", "low", "medium", "high":
-		return true
-	}
-	return false
-}
-
-func resolvedModelReasoningCapability(e *ProviderEntry) (modelReasoningCapability, bool) {
-	if e == nil || e.Kind != "openai" {
-		return modelReasoningCapability{}, false
-	}
-	cap, ok := modelReasoningCapabilities[strings.ToLower(strings.TrimSpace(e.Model))]
-	return cap, ok
-}
-
-func effortCapabilityFromModel(cap modelReasoningCapability) EffortCapability {
-	levels := make([]string, 0, len(cap.Levels)+1)
-	levels = append(levels, "auto")
-	levels = append(levels, cap.Levels...)
-	def := normalizeEffortLevel(cap.Default)
-	if def == "" || !containsString(cap.Levels, def) {
-		def = "auto"
-	}
-	return EffortCapability{Supported: true, Levels: levels, Default: def}
-}
-
 // deepSeekEffortCapability is the ladder for a DeepSeek-protocol endpoint with
 // no model-table entry. "max" is the vendor's own extension, so only the
 // vendor's endpoint is offered it: a relay that never took it answers 400 for
@@ -623,7 +515,7 @@ func effortCapabilityFromModel(cap modelReasoningCapability) EffortCapability {
 // supported_efforts.
 func deepSeekEffortCapability(e *ProviderEntry) EffortCapability {
 	levels := []string{"auto", "disabled", "high", "max"}
-	if !servedByVendor(e, deepSeekVendorHost) {
+	if !servedByVendor(e, deepSeekVendor) {
 		levels = levels[:len(levels)-1]
 	}
 	return EffortCapability{Supported: true, Levels: levels, Default: "high"}
@@ -638,6 +530,95 @@ func openAIEffortCapability() EffortCapability {
 // Anthropic-compatible gateways. def is what "auto" resolves to.
 func binaryThinkingEffortCapability(def string) EffortCapability {
 	return EffortCapability{Supported: true, Levels: []string{"auto", "enabled", "disabled"}, Default: def}
+}
+
+// zhipuEffortCapability is the /effort menu for a Zhipu GLM entry. The depth
+// models (GLM-5.2, GLM-5.3, GLM-5.3-Flash) take their levels from the one
+// contract table in the provider package; every other GLM keeps the binary
+// thinking knob. Zhipu documents the levels per model at
+// https://docs.z.ai/guides/overview/concept-param.
+func zhipuEffortCapability(e *ProviderEntry) EffortCapability {
+	contract, ok := zhipuDepthContract(e)
+	if !ok {
+		return binaryThinkingEffortCapability("enabled")
+	}
+	levels := make([]string, 0, len(contract.Levels)+1)
+	levels = append(levels, "auto")
+	levels = append(levels, contract.Levels...)
+	return EffortCapability{Supported: true, Levels: levels, Default: contract.Default}
+}
+
+// zhipuDepthContract resolves the documented depth contract for the entry. It
+// applies when the entry resolves to the glm reasoning protocol — declared on the
+// entry or its model — or sits on Zhipu's own endpoint, and the model has a row
+// in the contract table. No other host is consulted.
+func zhipuDepthContract(e *ProviderEntry) (provider.ZhipuEffort, bool) {
+	if e == nil || e.Kind != "openai" {
+		return provider.ZhipuEffort{}, false
+	}
+	if ReasoningProtocolForEntry(e) != ReasoningProtocolGLM && !isZhipuEntry(e) {
+		return provider.ZhipuEffort{}, false
+	}
+	return provider.ZhipuEffortContract(e.Model)
+}
+
+// zhipuMenuContract is zhipuDepthContract for an entry whose menu is the
+// contract itself. A menu the connection typed is its own vocabulary, so the
+// contract's spellings (`none`, `low`, its default) do not translate stored
+// choices onto it.
+func zhipuMenuContract(e *ProviderEntry) (provider.ZhipuEffort, bool) {
+	if len(normalizedSupportedEfforts(e)) > 0 {
+		return provider.ZhipuEffort{}, false
+	}
+	return zhipuDepthContract(e)
+}
+
+// EffortForcesThinking reports whether the entry's model always runs thinking,
+// so even its lowest level reasons (and is billed). True for GLM-5.3 and
+// GLM-5.3-Flash, which cannot disable thinking; a saved `disabled` choice lands
+// on their cheapest level instead. The /effort menu says so where it offers the
+// level.
+func EffortForcesThinking(e *ProviderEntry) bool {
+	contract, ok := zhipuMenuContract(e)
+	return ok && contract.ForcesThinking()
+}
+
+// zhipuLegacyStoredEffort translates a choice saved under the old binary knob
+// onto the depth contract. `enabled` becomes the model's documented default;
+// `disabled` becomes the contract's DisabledTo — which is `none` where thinking
+// can be switched off, and `low` where it cannot (GLM-5.3).
+func zhipuLegacyStoredEffort(e *ProviderEntry, effort string) string {
+	contract, ok := zhipuMenuContract(e)
+	if !ok {
+		return effort
+	}
+	switch effort {
+	case "enabled":
+		return contract.Default
+	case "disabled":
+		return contract.DisabledTo
+	}
+	return effort
+}
+
+func normalizeZhipuEffort(e *ProviderEntry, level string) (string, error) {
+	cap := zhipuEffortCapability(e)
+	if containsString(cap.Levels, level) {
+		return level, nil
+	}
+	if contract, ok := zhipuMenuContract(e); ok {
+		switch level {
+		case "enabled":
+			return contract.Default, nil
+		case "disabled", "off":
+			return contract.DisabledTo, nil
+		}
+		return "", fmt.Errorf("usage: /effort %s", strings.Join(cap.Levels, "|"))
+	}
+	if cap.Default == "enabled" {
+		return normalizeBinaryThinkingEffort(level)
+	}
+	return "", fmt.Errorf("usage: /effort %s", strings.Join(cap.Levels, "|"))
 }
 
 // normalizeBinaryThinkingEffort maps depth vocabularies onto the binary knob so
@@ -656,6 +637,14 @@ func normalizeBinaryThinkingEffort(level string) (string, error) {
 	}
 }
 
+// EffortUndeclared reports an entry whose reasoning levels nothing declares: no
+// supported_efforts, no known ladder for its model, and no protocol switched off
+// by the user. That is a gap in what the entry says, which the person can fill,
+// and not a statement that the model has no reasoning levels.
+func EffortUndeclared(e *ProviderEntry) bool {
+	return e != nil && !EffortCapabilityForEntry(e).Supported && explicitReasoningProtocol(e) != ReasoningProtocolNone
+}
+
 func effortNotConfigurableError(e *ProviderEntry) error {
 	name := ""
 	if e != nil {
@@ -663,6 +652,9 @@ func effortNotConfigurableError(e *ProviderEntry) error {
 	}
 	if name == "" {
 		name = "this model"
+	}
+	if EffortUndeclared(e) {
+		return fmt.Errorf("effort is not configurable for %s: no levels are declared; list the provider's levels as supported_efforts on its [[providers]] entry", name)
 	}
 	return fmt.Errorf("effort is not configurable for %s", name)
 }
@@ -737,7 +729,7 @@ func normalizedModelOverrides(overrides map[string]ProviderModelOverride) map[st
 		if ov.DefaultEffort != "" && !containsString(ov.SupportedEfforts, ov.DefaultEffort) {
 			ov.DefaultEffort = ""
 		}
-		if ov.ReasoningProtocol == "" && len(ov.SupportedEfforts) == 0 && ov.DefaultEffort == "" && ov.Vision == nil && ov.ContextWindow == 0 {
+		if modelOverrideEmpty(ov) {
 			continue
 		}
 		out[model] = ov

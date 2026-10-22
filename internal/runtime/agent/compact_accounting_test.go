@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reasonix/internal/runtime/agent/testutil"
 	"reasonix/internal/state/sessionstore"
 	"slices"
 	"strings"
@@ -32,7 +33,7 @@ type scriptedSummarizer struct {
 
 func (p *scriptedSummarizer) Name() string { return "scripted" }
 
-func (p *scriptedSummarizer) Stream(_ context.Context, _ provider.Request) (<-chan provider.Chunk, error) {
+func (p *scriptedSummarizer) Stream(_ context.Context, req provider.Request) (<-chan provider.Chunk, error) {
 	p.mu.Lock()
 	at := p.calls
 	p.calls++
@@ -43,7 +44,7 @@ func (p *scriptedSummarizer) Stream(_ context.Context, _ provider.Request) (<-ch
 	r := p.replies[at]
 	ch := make(chan provider.Chunk, 4)
 	if r.text != "" {
-		ch <- provider.Chunk{Type: provider.ChunkText, Text: r.text}
+		ch <- provider.Chunk{Type: provider.ChunkText, Text: testutil.SummaryReply(req, r.text)}
 	}
 	if r.usage != nil {
 		ch <- provider.Chunk{Type: provider.ChunkUsage, Usage: r.usage}
@@ -87,7 +88,7 @@ func foldWithSpend(t *testing.T, replies []scriptedReply) (CompactionTelemetry, 
 	a := New(&scriptedSummarizer{replies: replies}, coverageRegistry(), &sessionstore.Session{},
 		Options{ContextWindow: 200000}, sink)
 	ctx, _ := withCompactionSpend(context.Background())
-	_, tele, err := a.foldOrDegrade(ctx, CompactionTriggerPressure, false, coverageRegion(), "", 4000)
+	_, tele, err := a.window().foldOrDegrade(ctx, CompactionTriggerPressure, false, coverageRegion(), "", 4000)
 	return tele, sink, err
 }
 
@@ -101,7 +102,7 @@ func callsInOneTransaction(t *testing.T, replies []scriptedReply) (sessionstore.
 		Options{ContextWindow: 200000}, sink)
 	ctx, spend := withCompactionSpend(context.Background())
 	for range replies {
-		if _, err := a.foldToSummary(ctx, coverageRegion(), ""); err != nil && !strings.Contains(err.Error(), "stream broke") {
+		if _, err := a.window().foldToSummary(ctx, coverageRegion(), ""); err != nil && !strings.Contains(err.Error(), "stream broke") {
 			t.Fatalf("foldToSummary: %v", err)
 		}
 	}
@@ -210,10 +211,10 @@ func TestReceiptCarriesTheWholeTransactionBill(t *testing.T) {
 	a := New(prov, reg, sess, Options{ContextWindow: 60_000, CompactRatio: 0.5, RecentKeep: 2,
 		ArchiveDir: testenv.TempDir(t)}, sink)
 
-	if _, _, err := a.compactToProjection(context.Background(), CompactionTriggerManual, "", compactionScope{ignoreThreshold: true, ignoreEconomics: true}, false); err != nil {
+	if _, _, err := a.window().compactToProjection(context.Background(), CompactionTriggerManual, "", compactionScope{ignoreThreshold: true, ignoreEconomics: true}, false); err != nil {
 		t.Fatalf("compactToProjection: %v", err)
 	}
-	r := a.sess.compactionState.LastReceipt
+	r := a.sess.win.compactionState.LastReceipt
 	if r == nil || r.Status != "applied" {
 		t.Fatalf("receipt = %+v, want an applied one", r)
 	}

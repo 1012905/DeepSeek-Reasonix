@@ -1,6 +1,6 @@
 // Package worktree creates durable, Git-backed workspaces for parallel
 // Delivery sessions. Worktrees live under Reasonix-managed state, never inside
-// the source repository, and are never deleted automatically.
+// the source repository. Published worktrees are never deleted automatically.
 package worktree
 
 import (
@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"reasonix/internal/base/proc"
 	"reasonix/internal/platform/gitcmd"
 )
 
@@ -45,14 +46,14 @@ type Result struct {
 
 type inspection struct {
 	Availability
-	head      string
-	prefix    string
-	commonDir string
+	repo   gitcmd.Repo // pinned at the work tree root
+	head   string
+	prefix string
 }
 
 // Inspect checks Git and repository prerequisites without changing state.
-func Inspect(ctx context.Context, workspaceRoot string) Availability {
-	info, err := inspect(ctx, workspaceRoot)
+func Inspect(ctx context.Context, repo gitcmd.Repo) Availability {
+	info, err := inspect(ctx, repo)
 	if err != nil {
 		return Availability{Available: false, Reason: err.Error()}
 	}
@@ -63,9 +64,36 @@ func Inspect(ctx context.Context, workspaceRoot string) Availability {
 // source repository's committed HEAD. Uncommitted source changes are reported
 // but never copied or modified. When workspaceRoot names a repository
 // subdirectory, Result.WorkspaceRoot points at the corresponding subdirectory
-// in the new worktree.
-func Create(ctx context.Context, workspaceRoot, managedRoot string) (Result, error) {
-	info, err := inspect(ctx, workspaceRoot)
+// in the new worktree. repo is the workspace's identity, resolved when it opened.
+func Create(ctx context.Context, repo gitcmd.Repo, managedRoot string) (Result, error) {
+	return CreateFrom(ctx, repo, managedRoot, "")
+}
+
+// CreateFrom starts an independent branch at a local or remote-tracking ref.
+// An empty ref retains Create's committed-HEAD behavior.
+func CreateFrom(ctx context.Context, repo gitcmd.Repo, managedRoot, ref string) (Result, error) {
+	result, err := CreateFromProgress(ctx, repo, managedRoot, ref, nil)
+	if err != nil && result.WorktreeRoot != "" {
+		err = errors.Join(err, DiscardUnpublished(context.WithoutCancel(ctx), repo, managedRoot, result))
+		return Result{}, err
+	}
+	return result, err
+}
+
+// Progress reports only stages the worktree owner has actually entered.
+type Progress struct {
+	Phase         string
+	Branch        string
+	WorkspaceRoot string
+}
+
+func CreateFromProgress(ctx context.Context, repo gitcmd.Repo, managedRoot, ref string, report func(Progress)) (Result, error) {
+	update := func(progress Progress) {
+		if report != nil {
+			report(progress)
+		}
+	}
+	info, err := inspectFrom(ctx, repo, ref)
 	if err != nil {
 		return Result{}, err
 	}
@@ -77,7 +105,7 @@ func Create(ctx context.Context, workspaceRoot, managedRoot string) (Result, err
 		return Result{}, fmt.Errorf("create Reasonix worktree storage: %w", err)
 	}
 
-	repoSum := sha256.Sum256([]byte(info.commonDir))
+	repoSum := sha256.Sum256([]byte(info.repo.CommonDir))
 	repoKey := hex.EncodeToString(repoSum[:8])
 	repoBase := safePathComponent(filepath.Base(info.RepoRoot))
 	if repoBase == "" {
@@ -91,6 +119,8 @@ func Create(ctx context.Context, workspaceRoot, managedRoot string) (Result, err
 		}
 		branch := fmt.Sprintf("reasonix/delivery-%s-%s", time.Now().Format("20060102-150405"), id)
 		worktreeRoot := filepath.Join(managedRoot, repoKey, id, repoBase)
+		result := Result{WorkspaceRoot: worktreeRoot, WorktreeRoot: worktreeRoot, SourceRoot: info.RepoRoot, Branch: branch, Head: info.head, SourceDirty: info.SourceDirty}
+		update(Progress{Phase: "creating", Branch: branch, WorkspaceRoot: worktreeRoot})
 		if _, statErr := os.Stat(worktreeRoot); statErr == nil {
 			continue
 		} else if !os.IsNotExist(statErr) {
@@ -100,7 +130,10 @@ func Create(ctx context.Context, workspaceRoot, managedRoot string) (Result, err
 			return Result{}, fmt.Errorf("create worktree parent: %w", err)
 		}
 
-		_, stderr, addErr := runGit(ctx, info.RepoRoot, "worktree", "add", "-b", branch, worktreeRoot, info.head)
+		// --no-checkout, then populate through gitcmd inside the new worktree,
+		// where the reset's driver listing sees an includeIf keyed on that
+		// worktree's gitdir or new branch (a checkout during add would not).
+		_, stderr, addErr := runGit(ctx, info.repo, "worktree", "add", "--no-checkout", "-b", branch, worktreeRoot, info.head)
 		if addErr != nil {
 			// A random branch collision is retryable. We deliberately leave any
 			// non-empty partial directory untouched rather than risk deleting user
@@ -108,7 +141,11 @@ func Create(ctx context.Context, workspaceRoot, managedRoot string) (Result, err
 			if strings.Contains(strings.ToLower(stderr), "already exists") {
 				continue
 			}
-			return Result{}, fmt.Errorf("create Git worktree: %w%s", addErr, stderrSuffix(stderr))
+			return result, fmt.Errorf("create Git worktree: %w%s", addErr, stderrSuffix(stderr))
+		}
+		update(Progress{Phase: "checking_out", Branch: branch, WorkspaceRoot: worktreeRoot})
+		if resetStderr, resetErr := populate(ctx, worktreeRoot, info.head); resetErr != nil {
+			return result, fmt.Errorf("populate Git worktree: %w%s", resetErr, stderrSuffix(resetStderr))
 		}
 
 		selectedRoot := worktreeRoot
@@ -116,7 +153,7 @@ func Create(ctx context.Context, workspaceRoot, managedRoot string) (Result, err
 			selectedRoot = filepath.Join(worktreeRoot, prefix)
 			st, statErr := os.Stat(selectedRoot)
 			if statErr != nil || !st.IsDir() {
-				return Result{}, fmt.Errorf("created worktree is missing selected project subdirectory %q", prefix)
+				return result, fmt.Errorf("created worktree is missing selected project subdirectory %q", prefix)
 			}
 		}
 		return Result{
@@ -154,8 +191,13 @@ func IsManagedPath(path, managedRoot string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-func inspect(ctx context.Context, workspaceRoot string) (inspection, error) {
-	workspaceRoot = strings.TrimSpace(workspaceRoot)
+func inspect(ctx context.Context, repo gitcmd.Repo) (inspection, error) {
+	return inspectFrom(ctx, repo, "")
+}
+
+func inspectFrom(ctx context.Context, repo gitcmd.Repo, ref string) (inspection, error) {
+	ref = strings.TrimSpace(ref)
+	workspaceRoot := strings.TrimSpace(repo.Dir)
 	if workspaceRoot == "" {
 		return inspection{}, errors.New("project folder is required")
 	}
@@ -169,69 +211,81 @@ func inspect(ctx context.Context, workspaceRoot string) (inspection, error) {
 	if !gitcmd.Available() {
 		return inspection{}, errors.New("Git is not installed; Delivery remains safe and will serialize writes in this folder")
 	}
-
-	repoRoot, stderr, err := runGit(ctx, workspaceRoot, "rev-parse", "--show-toplevel")
-	if err != nil {
-		return inspection{}, fmt.Errorf("project folder is not inside a Git repository%s", stderrSuffix(stderr))
+	if !repo.Valid() {
+		return inspection{}, fmt.Errorf("project folder is not inside a Git repository: %w", gitcmd.ErrNotRepository)
 	}
-	repoRoot = filepath.Clean(strings.TrimSpace(repoRoot))
-	if repoRoot == "" {
-		return inspection{}, errors.New("Git did not report a repository root")
+	top := repo.Top()
+	if ref == "" {
+		ref = "HEAD"
+	} else if ref != "HEAD" {
+		sources, err := Sources(ctx, repo)
+		if err != nil {
+			return inspection{}, err
+		}
+		found := false
+		for _, source := range sources {
+			found = found || source.Ref == ref
+		}
+		if !found {
+			return inspection{}, fmt.Errorf("%w: %s", ErrSourceUnknown, ref)
+		}
 	}
-	bare, _, err := runGit(ctx, workspaceRoot, "rev-parse", "--is-bare-repository")
-	if err != nil || strings.EqualFold(strings.TrimSpace(bare), "true") {
-		return inspection{}, errors.New("bare Git repositories cannot be opened as Delivery workspaces")
-	}
-	head, _, err := runGit(ctx, repoRoot, "rev-parse", "--verify", "HEAD")
+	head, _, err := runGit(ctx, top, "rev-parse", "--verify", "--end-of-options", ref+"^{commit}")
 	if err != nil || strings.TrimSpace(head) == "" {
+		if ref != "HEAD" {
+			return inspection{}, fmt.Errorf("%w: %s", ErrSourceUnknown, ref)
+		}
 		return inspection{}, errors.New("the Git repository needs an initial commit before a worktree can be created")
 	}
 	head = strings.TrimSpace(head)
-	prefix, _, err := runGit(ctx, workspaceRoot, "rev-parse", "--show-prefix")
+	prefix, _, err := runGit(ctx, repo, "rev-parse", "--show-prefix")
 	if err != nil {
 		return inspection{}, fmt.Errorf("resolve selected project path inside repository: %w", err)
 	}
 	prefix = strings.TrimSpace(prefix)
 	if prefix != "" {
-		objectType, _, objectErr := runGit(ctx, repoRoot, "cat-file", "-t", head+":"+strings.TrimSuffix(prefix, "/"))
+		objectType, _, objectErr := runGit(ctx, top, "cat-file", "-t", head+":"+strings.TrimSuffix(prefix, "/"))
 		if objectErr != nil || strings.TrimSpace(objectType) != "tree" {
-			return inspection{}, errors.New("the selected project folder is not present in the committed HEAD; commit it before creating a worktree")
+			return inspection{}, errors.New("the selected project folder is not present in the source commit; choose a branch containing it")
 		}
 	}
-	commonDir, _, err := runGit(ctx, repoRoot, "rev-parse", "--git-common-dir")
-	if err != nil {
-		return inspection{}, fmt.Errorf("resolve Git common directory: %w", err)
-	}
-	commonDir = strings.TrimSpace(commonDir)
-	if !filepath.IsAbs(commonDir) {
-		commonDir = filepath.Join(repoRoot, commonDir)
-	}
-	commonDir = filepath.Clean(commonDir)
-	branch, _, _ := runGit(ctx, repoRoot, "symbolic-ref", "--quiet", "--short", "HEAD")
-	status, _, statusErr := runGit(ctx, repoRoot, "status", "--porcelain=v1", "--untracked-files=normal")
+	branch, _, _ := runGit(ctx, top, "symbolic-ref", "--quiet", "--short", "HEAD")
+	status, _, statusErr := runGit(ctx, top, "status", "--porcelain=v1", "--untracked-files=normal")
 	if statusErr != nil {
 		return inspection{}, fmt.Errorf("inspect Git working tree: %w", statusErr)
 	}
 	return inspection{
 		Availability: Availability{
 			Available:   true,
-			RepoRoot:    repoRoot,
+			RepoRoot:    top.WorkTree,
 			Branch:      strings.TrimSpace(branch),
-			SourceDirty: strings.TrimSpace(status) != "",
+			SourceDirty: strings.TrimSpace(status) != "" && (ref == "HEAD" || ref == "refs/heads/"+strings.TrimSpace(branch)),
 		},
-		head:      head,
-		prefix:    prefix,
-		commonDir: commonDir,
+		repo:   top,
+		head:   head,
+		prefix: prefix,
 	}, nil
 }
 
-func runGit(parent context.Context, dir string, args ...string) (stdout, stderr string, err error) {
+// populate checks head out into a worktree the host just added, under the
+// identity that worktree resolves to now, before anything else has run in it.
+func populate(ctx context.Context, root, head string) (string, error) {
+	repo, err := gitcmd.Open(ctx, root)
+	if err != nil {
+		return "", err
+	}
+	_, stderr, err := runGit(ctx, repo, "reset", "--hard", head)
+	return stderr, err
+}
+
+func runGit(parent context.Context, repo gitcmd.Repo, args ...string) (stdout, stderr string, err error) {
 	if parent == nil {
 		parent = context.Background()
 	}
 	ctx, cancel := context.WithTimeout(parent, gitTimeout(args))
 	defer cancel()
-	cmd := gitcmd.Command(ctx, dir, args...)
+	cmd := repo.Command(ctx, args...)
+	proc.SetCancelKillsTree(cmd)
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
@@ -244,6 +298,10 @@ func runGit(parent context.Context, dir string, args ...string) (stdout, stderr 
 
 func gitTimeout(args []string) time.Duration {
 	if len(args) >= 2 && args[0] == "worktree" && args[1] == "add" {
+		return gitWorktreeAddTimeout
+	}
+	// The reset after worktree add is where the checkout happens.
+	if len(args) >= 1 && args[0] == "reset" {
 		return gitWorktreeAddTimeout
 	}
 	return gitProbeTimeout

@@ -8,11 +8,11 @@ package permission
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"reasonix/internal/contract/permrule"
 	"strings"
 
 	"reasonix/internal/base/shellparse"
+	"reasonix/internal/safety/shellsafe"
 )
 
 // Decision is the outcome of evaluating a tool call against a Policy.
@@ -119,6 +119,9 @@ type Policy struct {
 	// substitution and interpreter -c/-e forms. It is deliberately opt-in:
 	// broad Bash allow rules alone must not re-open nested-command bypasses.
 	AllowDynamicBash bool
+	ReadOnly         bool // denies every call that is not a read, whatever the rules allow
+	// AskOnOrigin puts a call that repeats external text to a person when only Mode allows it.
+	AskOnOrigin bool
 }
 
 // WithSessionAllow returns a copy of p with additional ephemeral allow rules.
@@ -175,46 +178,11 @@ func (p Policy) ExplicitlyDenies(toolName string, args json.RawMessage) bool {
 // DecideSubject evaluates a tool call when the caller already extracted the
 // stable approval subject from args.
 func (p Policy) DecideSubject(toolName string, readOnly bool, subject string) Decision {
+	if p.ReadOnly && !readOnly {
+		return Deny
+	}
 	if canonicalRuleTool(toolName) == "bash" {
-		approvalClass := classifyBashApproval(subject)
-		requiresExact := approvalClass != bashApprovalReusable
-		requiresHuman := approvalClass == bashApprovalRequireHuman
-		parts := DecomposeBashCommand(subject)
-		switch {
-		case matchAnyRaw(p.Deny, toolName, subject):
-			return Deny
-		case matchAnyExact(p.SessionAllow, toolName, subject):
-			return Allow
-		case !requiresExact && parts == nil && matchAnyAllow(p.SessionAllow, toolName, subject):
-			return Allow
-		case matchAnyRaw(p.Ask, toolName, subject):
-			return Ask
-		case matchAnyExact(p.Allow, toolName, subject):
-			return Allow
-		}
-		if parts != nil {
-			return p.decideBashSegments(readOnly, parts)
-		}
-		switch {
-		case requiresHuman && p.Mode == Deny:
-			return Deny
-		case requiresHuman && p.AllowDynamicBash && p.Mode == Allow:
-			return Allow
-		case requiresHuman:
-			return Ask
-		case requiresExact && readOnly:
-			return Allow
-		case requiresExact:
-			return p.Mode
-		}
-		switch {
-		case matchAnyAllow(p.Allow, toolName, subject):
-			return Allow
-		case readOnly:
-			return Allow
-		default:
-			return p.Mode
-		}
+		return p.decideBashSubject(toolName, readOnly, subject)
 	}
 	if d, ok := p.decideBrowserCredential(toolName, subject); ok {
 		return d
@@ -235,6 +203,53 @@ func (p Policy) DecideSubject(toolName string, readOnly bool, subject string) De
 		return Allow
 	case subjectRequiresHuman(toolName, subject):
 		return Ask
+	default:
+		return p.Mode
+	}
+}
+
+func (p Policy) decideBashSubject(toolName string, readOnly bool, subject string) Decision {
+	approvalClass := classifyBashApproval(subject)
+	requiresExact := approvalClass != bashApprovalReusable
+	requiresHuman := approvalClass == bashApprovalRequireHuman
+	parts := DecomposeBashCommand(subject)
+	switch {
+	case matchAnyRaw(p.Deny, toolName, subject):
+		return Deny
+	case matchAnyExact(p.SessionAllow, toolName, subject):
+		return Allow
+	case !requiresExact && parts == nil && matchAnyAllow(p.SessionAllow, toolName, subject):
+		return Allow
+	case matchAnyRaw(p.Ask, toolName, subject):
+		return Ask
+	case matchAnyExact(p.Allow, toolName, subject):
+		return Allow
+	}
+	if parts != nil {
+		return p.decideBashSegments(readOnly, parts)
+	}
+	// A remembered prefix rule never covers a network path: the user approved a
+	// command, not a connection to whatever machine a later argument names.
+	if shellsafe.OperandsNameNetworkPath(subject) {
+		requiresHuman = true
+	}
+	switch {
+	case requiresHuman && p.Mode == Deny:
+		return Deny
+	case requiresHuman && p.AllowDynamicBash && p.Mode == Allow:
+		return Allow
+	case requiresHuman:
+		return Ask
+	case requiresExact && readOnly:
+		return Allow
+	case requiresExact:
+		return p.Mode
+	}
+	switch {
+	case matchAnyAllow(p.Allow, toolName, subject):
+		return Allow
+	case readOnly:
+		return Allow
 	default:
 		return p.Mode
 	}
@@ -415,20 +430,21 @@ func rawRuleSubjectMatches(rule Rule, subject string) bool {
 	return matchGlob(rule.Subject, subject)
 }
 
+// rawBashPrefixMatches reports whether a Bash rule's command prefix names the
+// subject's program, or the program a wrapper in shellparse.PeelWrappers hands
+// it to. Only deny and ask matching reach it; allow rules keep the command
+// as written.
 func rawBashPrefixMatches(base, subject string) bool {
 	baseFields, malformed := shellparse.StaticFields(base)
 	if malformed == "" && len(baseFields) > 0 {
-		if features, ok := shellparse.AnalyzeApprovalFeatures(subject); ok && len(features.CommandPrefix) >= len(baseFields) {
-			matched := true
-			for i, want := range baseFields {
-				got := features.CommandPrefix[i]
-				if got != want && !(i == 0 && isCaseInsensitivePowerShellCmdlet(want) && strings.EqualFold(got, want)) {
-					matched = false
-					break
+		if features, ok := shellparse.AnalyzeApprovalFeatures(subject); ok && prefixFieldsMatch(baseFields, features.CommandPrefix) {
+			return true
+		}
+		if inv, ok := shellparse.PeelWrappers(subject); ok {
+			for _, layer := range inv.Layers {
+				if prefixFieldsMatch(baseFields, layer) {
+					return true
 				}
-			}
-			if matched {
-				return true
 			}
 		}
 	}
@@ -453,6 +469,19 @@ func rawBashPrefixMatches(base, subject string) bool {
 	default:
 		return false
 	}
+}
+
+func prefixFieldsMatch(baseFields, fields []string) bool {
+	if len(fields) < len(baseFields) {
+		return false
+	}
+	for i, want := range baseFields {
+		got := fields[i]
+		if got != want && !(i == 0 && isCaseInsensitivePowerShellCmdlet(want) && strings.EqualFold(got, want)) {
+			return false
+		}
+	}
+	return true
 }
 
 func isCaseInsensitivePowerShellCmdlet(s string) bool {
@@ -580,69 +609,6 @@ type Gate struct {
 
 // NewGate wires a Policy to an Approver (nil for non-interactive use).
 func NewGate(p Policy, a Approver) *Gate { return &Gate{Policy: p, Approver: a} }
-
-// Check decides whether a tool call may run. It is the method the agent's Gate
-// interface expects. A denied or refused call returns allow=false with a short
-// reason the agent feeds back to the model.
-func (g *Gate) Check(ctx context.Context, toolName string, args json.RawMessage, readOnly bool) (bool, string, error) {
-	if toolName == "bash" && !readOnly {
-		if BashCommandIsReadOnly(args) {
-			readOnly = true
-		}
-	}
-	// Producing an install plan reads the source and writes nothing. Treating
-	// the preview as the write it precedes would train the user to approve the
-	// question that carries no information, ahead of the one that does.
-	if toolName == "install_source" && !readOnly && InstallSourceIsPlanOnly(args) {
-		readOnly = true
-	}
-	decision := g.Policy.Decide(toolName, readOnly, args)
-	ruleReason := ""
-	if rule, ok := g.Policy.MatchedRule(toolName, decision, args); ok {
-		ruleReason = fmt.Sprintf("Matched permission rule: %s %s", decision, rule)
-	}
-	switch decision {
-	case Deny:
-		reason := "denied by permission policy — this tool/command is on the deny list. Do not retry it; choose another approach or stop and explain."
-		if ruleReason != "" {
-			reason = ruleReason + "\n" + reason
-		}
-		return false, reason, nil
-	case Ask:
-		if g.Approver == nil {
-			return unattendedAsk(toolName, args)
-		}
-		subject := Subject(args)
-		allow, remember, approverReason, err := g.approve(ctx, toolName, subject, args, ruleReason)
-		if err != nil {
-			return false, "approval aborted", err
-		}
-		if !allow {
-			reason := "the user declined this tool call — do not retry it; ask how they would like to proceed or choose another approach."
-			if approverReason != "" {
-				reason = approverReason
-			}
-			return false, reason, nil
-		}
-		if remember && g.OnRemember != nil {
-			// "Always allow" is tool-wide: persist the bare tool name so any
-			// later subject (a different file / command) is allowed without
-			// re-prompting. Deny rules still take precedence on every call.
-			g.OnRemember(toolName)
-			// Also add the rule to the in-memory Policy immediately so it
-			// takes effect in the current session without requiring a restart.
-			// The session-level grant (controller.granted) already covers the
-			// Approver path, but any code path that consults Policy.Decide()
-			// directly would miss the rule until the next controller build.
-			if rule, ok := ParseRule(toolName); ok {
-				g.Policy.Allow = append(g.Policy.Allow, rule)
-			}
-		}
-		return true, "", nil
-	default:
-		return true, "", nil
-	}
-}
 
 // ExplicitlyDenies reports whether an explicit deny rule matches. Authorized
 // MCP servers use this narrow view so install-time authorization is not

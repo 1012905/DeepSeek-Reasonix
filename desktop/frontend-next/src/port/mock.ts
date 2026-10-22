@@ -1,22 +1,24 @@
-import type { PlanAction } from "./session";
+import { sessionCompletion } from "./mock_sessions";
+import type { SurfaceActionRequest, SurfaceActionRecord } from "./surface";
+import type { JobOutput, PlanAction } from "./session";
+import { approvalKind } from "./mock_approval";
 import { HttpError } from "./port";
-import type { AccountState, AgentPort, ChangeDiff, Completion, CompletionItem, DeviceGrant, VersionHub, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, SessionEntry, SessionStatus, WalletReading, MemoryCatalog, MemoryEdit, UsageReport, MemoryEntry, WorkspaceInfo, WorkspaceChanges, Attachment, DroppedRef, Queue, QueueItem, Queued, NotifyPrefs, TrayPrefs } from "./port";
+import type { AccountState, AgentPort, Completion, CompletionItem, DeviceGrant, StudioLogs, VersionHub, VersionNotes, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindUndo, RewindScope, HistoryMessage, HostTodo, BrowserTab, ModelEntry, Preset, ProviderSetup, RoleAssignments, RoleOverride, SessionEntry, SessionStatus, WalletReading, MemoryCatalog, MemoryEdit, UsageReport, MemoryEntry, WorkspaceInfo, Attachment, DroppedRef, Queue, QueueItem, Queued, ChipCall, NotifyPrefs, TrayPrefs, UsageQuery } from "./port";
 import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
-import { MockTheme } from "./mock_theme";
+import { MockWorkspace, mockWorkspaces, mockWorktreeSources, MockPreparations } from "./mock_workspace";
 import { SCRIPT, mockMsgIndex, mockTurnStart } from "./fixture";
 import { MockExecutionHold, mockExecutionGraph } from "./mock_graph";
 import { mockStorage, mockStoragePlan } from "./mock_storage";
-import { MEMORIES } from "./mock_memory";
+import { MEMORIES, mockMemoryCatalog } from "./mock_memory";
+import { mockModels } from "./mock_models";
 import { mockUsage } from "./mock_usage";
 
-
-
-export class MockPort extends MockTheme implements AgentPort {
+export class MockPort extends MockWorkspace implements AgentPort {
   private listeners = new Set<(ev: WireEvent) => void>();
   private log: WireEvent[] = [];
   // What the user has sent, so checkpoints() can mirror one per turn.
   private prompts: string[] = [];
-  private undone: string[] | null = null;
+  private undone: { prompts: string[]; offer: RewindUndo } | null = null;
   private at = 0;
   // The kernel numbers every frame a client cannot afford to miss, and a
   // bootstrap cut is read against those numbers.
@@ -66,72 +68,56 @@ export class MockPort extends MockTheme implements AgentPort {
 
   // The subagent runs somewhere cheaper; everything else rides the main model.
   private assigned: RoleAssignments = {
-    planner: "",
-    subagent: "deepseek/deepseek-flash",
-    guardian: "",
-    decision: "",
-    vision: "",
+    web_search: "",
+    roles: {
+      title: "", planner: "",
+      subagent: "deepseek/deepseek-flash",
+      guardian: "", decision: "", vision: "",
+    },
+    efforts: {},
   };
 
   async roles(): Promise<RoleAssignments> {
     return this.assigned;
   }
 
-  async setRole(role: string, ref: string) {
-    this.assigned = { ...this.assigned, [role]: ref };
+  async setRole(role: string, ref: string, effort?: string) {
+    if (role === "web_search") {
+      this.assigned = { ...this.assigned, web_search: ref };
+      return;
+    }
+    this.assigned = { ...this.assigned, roles: { ...this.assigned.roles, [role]: ref }, efforts: { ...this.assigned.efforts, [role]: effort ?? "auto" } };
   }
 
-  // Two protocols onto one host, plus a second vendor carrying the only model
-  // that reads images: the two shapes the picker has to render correctly.
-  async models(): Promise<ModelEntry[]> {
-    const efforts = ["auto", "low", "high", "max"];
-    return [
-      {
-        ref: "deepseek/deepseek-v4-pro", provider: "deepseek", model: "deepseek-v4-pro",
-        kind: "openai", vendor: "api.deepseek.com", keyEnv: "DEEPSEEK_API_KEY", active: true, efforts, effort: "high",
-        contextWindow: 131072, price: { input: 2, output: 8, currency: "CNY" },
-      },
-      {
-        ref: "deepseek-anthropic/deepseek-v4-pro", provider: "deepseek-anthropic",
-        model: "deepseek-v4-pro", kind: "anthropic", vendor: "api.deepseek.com", keyEnv: "DEEPSEEK_API_KEY",
-        efforts, effort: "high", contextWindow: 131072,
-      },
-      {
-        ref: "deepseek/deepseek-flash", provider: "deepseek", model: "deepseek-flash",
-        kind: "openai", vendor: "api.deepseek.com", keyEnv: "DEEPSEEK_API_KEY", efforts, effort: "high",
-        contextWindow: 131072, price: { input: 0.5, output: 2, currency: "CNY" },
-      },
-      {
-        ref: "kimi/kimi-k2-vision", provider: "kimi", model: "kimi-k2-vision",
-        kind: "openai", vendor: "api.moonshot.cn", keyEnv: "KIMI_API_KEY", vision: true, contextWindow: 262144,
-      },
-      {
-        ref: "myrelay/gpt-4o", provider: "myrelay", model: "gpt-4o", kind: "openai",
-        vendor: "relay.example.com", keyEnv: "MYRELAY_API_KEY", vision: true, contextWindow: 131072,
-      },
-      {
-        ref: "myrelay/claude-sonnet-4", provider: "myrelay", model: "claude-sonnet-4", kind: "openai",
-        vendor: "relay.example.com", keyEnv: "MYRELAY_API_KEY", contextWindow: 200000,
-      },
-      {
-        ref: "myrelay-work/gpt-4o", provider: "myrelay-work", model: "gpt-4o", kind: "openai",
-        vendor: "relay.example.com", keyEnv: "MYRELAY_WORK_API_KEY", contextWindow: 131072,
-      },
-    ];
+  overrides: Record<string, RoleOverride[]> = {};
+
+  async roleOverrides(): Promise<Record<string, RoleOverride[]>> {
+    return this.overrides;
   }
+
+  async clearRoleOverride(role: string, key: string) {
+    this.overrides = { ...this.overrides, [role]: (this.overrides[role] ?? []).filter((o) => o.key !== key) };
+  }
+
+  async models(answers: "chat" | "decision" | "all" = "chat"): Promise<ModelEntry[]> {
+    const efforts = ["auto", "low", "high", "max"];
+    return mockModels(efforts)
+      .filter((m) => answers === "all" || (m.answers ?? "chat") === answers)
+      .map((m) => ({ ...m, default: m.ref === this.defaultRef }));
+  }
+
+  // The one model the catalogue marks as default, so a pick in the settings row
+  // has something to read back after the list is reloaded.
+  private defaultRef = "";
 
   private mem: MemoryEntry[] = MEMORIES.map((m) => ({ ...m }));
 
-  async usage(days: number): Promise<UsageReport> {
-    return mockUsage(days);
+  async usage(query: number | UsageQuery): Promise<UsageReport> {
+    return mockUsage(query);
   }
 
   async memories(): Promise<MemoryCatalog> {
-    return {
-      memories: this.mem.map((m) => ({ ...m })),
-      recallQuery: "缓存命中率为什么会掉",
-      indexPath: "~/.reasonix/projects/reasonix/memory/MEMORY.md",
-    };
+    return mockMemoryCatalog(this.mem);
   }
 
   // The fixture reports a clean revert on the first ask and a conflicted one
@@ -191,7 +177,7 @@ export class MockPort extends MockTheme implements AgentPort {
     this.mem = this.mem.filter((m) => m.name !== name);
   }
 
-  async versions(): Promise<VersionHub> {
+  async versions(_refresh?: boolean): Promise<VersionHub> {
     return { current: "dev", pinned: "", stalePin: false, latest: "", newer: false, versions: [] };
   }
 
@@ -200,17 +186,29 @@ export class MockPort extends MockTheme implements AgentPort {
   async markWelcomed(): Promise<void> { this.welcomed = true; }
 
   async pinVersion(): Promise<void> {}
+  async versionNotes(version: string): Promise<VersionNotes> {
+    return { version, markdown: "", cached: false };
+  }
+  async studioLogs(): Promise<StudioLogs> {
+    return {
+      dir: "C:\\Users\\demo\\AppData\\Roaming\\Reasonix Studio\\io.reasonix.studio.1a2b3c\\logs",
+      crashDir: "C:\\Users\\demo\\AppData\\Roaming\\Reasonix Studio\\io.reasonix.studio.1a2b3c\\logs\\crash",
+      crashes: [{ name: "host-20261010T230806Z-2.31.0-4412.log", at: "2026-10-10T23:08:06Z", bytes: 8421 }],
+      truncated: false,
+    };
+  }
   async acknowledgeLaunchHealth(): Promise<void> {} // booted from no update
   async goToVersion(): Promise<void> {
     throw new Error("演示模式不会真的安装版本");
   }
+  async restartToVersion(): Promise<void> { throw new Error("演示模式不会真的安装版本"); }
 
   onUpdateProgress(): () => void {
     return () => {};
   }
 
   async account(): Promise<AccountState> {
-    return { signedIn: false };
+    return localStorage.getItem("reasonix.mock.account") ? { signedIn: true, user: { handle: "demo", email: "demo@example.com", label: "demo" } } : { signedIn: false };
   }
 
   async accountLogin(): Promise<DeviceGrant> {
@@ -224,15 +222,7 @@ export class MockPort extends MockTheme implements AgentPort {
   async accountLogout(): Promise<void> {}
 
   async workspaces(): Promise<WorkspaceInfo> {
-    return {
-      current: this.state.workspaceRoot ?? "",
-      canSwitch: true,
-      canIsolate: true,
-      recents: [
-        { path: "~/projects/reasonix-site", name: "reasonix-site" },
-        { path: "~/work/notes", name: "notes" },
-      ],
-    };
+    return mockWorkspaces(this.state.workspaceRoot ?? "");
   }
 
   async setWorkspace(path: string) {
@@ -241,13 +231,26 @@ export class MockPort extends MockTheme implements AgentPort {
     await this.newSession();
   }
 
-  async isolateWorkspace() {
+  async worktreeSources(): Promise<import("./workspace").WorktreeSources> {
+    return mockWorktreeSources(this.state.workspaceRoot ?? "", this.branchState.branch);
+  }
+
+  private preparations = new MockPreparations();
+  prepareWorktree(id: string, selection: import("./workspace").WorktreeSelection) { return this.preparations.prepare(id, selection, async () => { await this.isolateWorkspace(selection); return (await this.status()).workspaceRoot ?? ""; }); }
+  worktreePreparation(id: string) { return this.preparations.read(id); }
+  cancelWorktreePreparation(id: string) { return this.preparations.read(id); }
+
+  async isolateWorkspace(_selection?: import("./workspace").WorktreeSelection) {
     await this.setWorkspace((this.state.workspaceRoot ?? "") + " (隔离副本)");
+    this.branchState.branch = "reasonix/delivery-demo";
   }
 
   async openInEditor() {
     return { editor: "Visual Studio Code", root: "/work/demo" };
   }
+  async openDocument() {}
+  revealsFiles() { return true; }
+  async revealInFileManager() {}
 
   async openExternal(url: string) {
     window.open(url, "_blank", "noopener,noreferrer");
@@ -286,6 +289,8 @@ export class MockPort extends MockTheme implements AgentPort {
     { label: "/review", insert: "/review ", hint: "复核这一轮改动，给出严重度分级", kind: "subagent" },
     { label: "/init", insert: "/init ", hint: "为这个仓库生成一份项目说明", kind: "skill" },
     { label: "/security-review", insert: "/security-review ", hint: "只读地过一遍安全面", kind: "subagent" },
+    { label: "/mcp__docs__summarize", insert: "/mcp__docs__summarize ", hint: "总结一份文档", kind: "prompt",
+      args: [{ name: "topic", description: "要总结的主题", required: true }, { name: "length", description: "篇幅，如 short 或 long" }] },
   ];
 
   async refinePrompt(draft: string): Promise<string> {
@@ -293,7 +298,7 @@ export class MockPort extends MockTheme implements AgentPort {
     return `目标：${draft.trim()}\n\n约束：不改变现有行为。\n\n完成标准：相关测试通过。`;
   }
 
-  async complete(line: string, cursor: number): Promise<Completion> {
+  async complete(line: string, cursor: number, _signal?: AbortSignal): Promise<Completion> {
     const before = line.slice(0, cursor);
     const at = before.lastIndexOf("@");
     if (at >= 0 && !/\s/.test(before.slice(at + 1)) && (at === 0 || /\s/.test(line[at - 1]))) {
@@ -316,9 +321,11 @@ export class MockPort extends MockTheme implements AgentPort {
           insert: "@" + dir + n,
           descend: n.endsWith("/"),
           kind: n.endsWith("/") ? "dir" : "file",
-        }));
+        })).filter((it) => it.insert !== line.slice(at, to));
       return { kind: "ref", from: at, to, query: frag.slice(dir.length), items };
     }
+    const hash = sessionCompletion(line, cursor);
+    if (hash) return hash;
     if (line.startsWith("/") && !/\s/.test(line)) {
       const q = line.toLowerCase();
       const items = [...this.builtins, ...this.commands].filter((it) => it.label.toLowerCase().startsWith(q));
@@ -336,6 +343,7 @@ export class MockPort extends MockTheme implements AgentPort {
   }
 
   async newSession() {
+    this.clearUndo();
     this.log = [];
     this.at = 0;
     this.state.goal = "";
@@ -345,8 +353,10 @@ export class MockPort extends MockTheme implements AgentPort {
 
   async deleteSession(_name: string) {}
 
-  async status() {
-    return { ...this.state };
+  async markSessionViewed() {}
+
+  async status(): Promise<SessionStatus> {
+    return { ...this.state, agentCompositionLocked: this.compositions.compositionStarted, ...(location.search.includes("tariff") && { tariff: { peak: !location.search.includes("tariff=off"), changesAt: new Date(Date.now() + 130 * 60_000).toISOString() } }) };
   }
 
   async balance(): Promise<WalletReading | null> {
@@ -368,53 +378,14 @@ export class MockPort extends MockTheme implements AgentPort {
     return paths.map((path) => ({ ref: "@" + path, path }));
   }
 
-  // The tree the scripted transcript is written against. It used to answer
-  // repo:false, which made the panel fall back to the transcript — and left
-  // every row unopenable, because only git can say what a path differs by.
-  async changes(): Promise<WorkspaceChanges> {
-    return {
-      repo: true,
-      changes: [
-        { path: "internal/provider/retry.go", status: "M" },
-        { path: "internal/config/credentials.go", status: "M" },
-        { path: "internal/provider/openai/streaming/chunk_decoder.go", status: "A" },
-      ],
-    };
-  }
-
-  // Scripted, because there is no tree to read: enough of a diff for the
-  // preview to be worked on without a kernel behind the window.
-  async changeDiff(path: string): Promise<ChangeDiff> {
-    return {
-      path,
-      diff: [
-        `--- a/${path}`,
-        `+++ b/${path}`,
-        "@@ -1,6 +1,7 @@",
-        " package permission",
-        " ",
-        "-func allows(cmd string) bool {",
-        "-	return strings.Contains(cmd, \"rm -rf\")",
-        "+func allows(cmd string) bool {",
-        "+	ast, err := shellparse.Parse(cmd)",
-        "+	if err != nil {",
-        "+		return false",
-        "+	}",
-        " }",
-      ].join("\n"),
-      truncated: false,
-    };
-  }
-
-  async workspaceFiles(path = "", query = "") {
-    const all = ["README.md", "internal/provider/retry.go"];
+  async workspaceFiles(path = "", query = "", hidden = false) {
+    const all = ["README.md", "internal/provider/retry.go", ...(hidden ? [".gitignore", ".reasonix/REASONIX.local.md"] : [])];
     if (query) return { files: all.filter((p) => p.toLowerCase().includes(query.toLowerCase())), directories: [] };
     if (path === "internal") return { files: [], directories: ["internal/provider"] };
     if (path === "internal/provider") return { files: ["internal/provider/retry.go"], directories: [] };
-    return { files: ["README.md"], directories: ["internal"] };
+    if (path === ".reasonix") return { files: [".reasonix/REASONIX.local.md"], directories: [] };
+    return hidden ? { files: [".gitignore", "README.md"], directories: [".reasonix", "internal"] } : { files: ["README.md"], directories: ["internal"] };
   }
-  async workspaceFile(path: string) { return { path, content: `// ${path}\n`, revision: "fixture" }; }
-  workspaceImageURL(path: string) { return `/fixture/${path}`; }
   async saveWorkspaceFile(file: import("./port").WorkspaceFile) { return { ...file, revision: file.revision + "-saved" }; }
 
   async trajectory(): Promise<TrajectoryRead> {
@@ -437,7 +408,11 @@ export class MockPort extends MockTheme implements AgentPort {
   // Mock mode has to be able to show the rewind entry, so every prompt it has
   // seen becomes a checkpoint the way the kernel opens one per user turn.
   async checkpoints(): Promise<Checkpoint[]> {
-    return this.prompts.map((prompt, i) => ({ turn: i, prompt, files: i === 0 ? 0 : 3, msgIndex: mockMsgIndex(i + 1) }));
+    return this.prompts.map((prompt, i) => ({ turn: i, prompt, files: this.prompts.length > 1 ? 3 : 0, msgIndex: mockMsgIndex(i + 1) }));
+  }
+
+  async branchAt(turn: number): Promise<string> {
+    return `/mock/branch-${turn}.jsonl`;
   }
 
   // The second prompt onwards is scripted to have run bash, so mock mode can
@@ -453,21 +428,34 @@ export class MockPort extends MockTheme implements AgentPort {
         : undefined,
       canFiles: true,
       canConversation: true,
-      files: ["note.txt"],
-      fileCount: turn > 0 ? 3 : 0,
+      files: this.prompts.length > 1 ? ["note.txt", "main.ts", "style.css"] : [],
+      fileCount: this.prompts.length > 1 ? 3 : 0,
       requiresConfirmation: partial,
     };
   }
 
   async commitRewind(planId: string): Promise<RewindResult> {
-    const turn = Number(planId.split("-")[2] ?? 0);
-    this.undone = this.prompts.slice();
-    this.prompts = this.prompts.slice(0, turn);
-    return { ok: true, transactionId: `mock-tx-${turn}`, undoAvailable: true, deleted: ["note.txt"] };
+    const turn = Number(planId.split("-")[2] ?? 0), files = !planId.endsWith("conversation") && this.prompts.length > 1;
+    const scope = planId.split("-")[3];
+    const offer = { transactionId: `mock-tx-${turn}-${crypto.randomUUID()}`, turn, files: files ? 3 : 0 };
+    this.undone = { prompts: this.prompts.slice(), offer };
+    this.emit({ kind: "rewind_changed" });
+    if (scope !== "code") this.prompts = this.prompts.slice(0, turn);
+    return { ok: true, transactionId: offer.transactionId, undoAvailable: true, conversationOk: scope !== "code",
+      written: files ? ["main.ts", "style.css"] : [], deleted: files ? ["note.txt"] : [] };
   }
 
+  private clearUndo() {
+    if (!this.undone) return;
+    this.undone = null;
+    this.emit({ kind: "rewind_changed" });
+  }
+
+  async availableUndo(): Promise<RewindUndo | null> { return this.state.running ? null : this.undone?.offer ?? null; }
+
   async undoRewind(_transactionId: string): Promise<void> {
-    if (this.undone) this.prompts = this.undone;
+    if (this.undone) this.prompts = this.undone.prompts;
+    this.clearUndo();
   }
 
   subscribe(onEvent: (ev: WireEvent) => void, _onGap?: () => void, bootstrap?: () => Promise<number>) {
@@ -534,6 +522,7 @@ export class MockPort extends MockTheme implements AgentPort {
   // that wait is the only window in which taking it back means anything. A
   // fixture that echoed it at once made the state undesignable.
   async steer(text: string): Promise<Queued> {
+    if (this.queuePaused) return this.queueFollowup(text);
     const itemId = `inbox-${this.queued.size + 1}-${Date.now()}`;
     const at = window.setTimeout(() => {
       // Three states, not two. The kernel marks the line consumed when the turn
@@ -580,7 +569,7 @@ export class MockPort extends MockTheme implements AgentPort {
 
   // The fixture has a window with an icon, because the state worth designing
   // is the one where both switches mean something.
-  private notifications: NotifyPrefs = { enabled: false, turnDone: true, approval: true, ask: true };
+  private notifications: NotifyPrefs = { enabled: false, turnDone: true, approval: true, ask: true, feedbackReply: true, diskLow: true, sound: false, phone: { enabled: false, approval: false, input: false, error: false } };
 
   async notifyPrefs(): Promise<NotifyPrefs | null> {
     return { ...this.notifications };
@@ -609,7 +598,7 @@ export class MockPort extends MockTheme implements AgentPort {
   async queueFollowup(text: string): Promise<Queued> {
     const itemId = `inbox-followup-${Date.now()}`;
     this.addQueued(itemId, "followup", text);
-    return { itemId, disposition: "queued_followup" };
+    return { itemId, disposition: "queued_followup", paused: this.queuePaused };
   }
 
   async browserTabs(): Promise<BrowserTab[]> {
@@ -619,6 +608,8 @@ export class MockPort extends MockTheme implements AgentPort {
   async browserOpen(url: string): Promise<BrowserTab> {
     return { id: "mock", target: "mock", url, title: url, active: true };
   }
+
+  async browserClose(_tab: string): Promise<void> {}
 
   async queue(): Promise<Queue> {
     return {
@@ -657,10 +648,21 @@ export class MockPort extends MockTheme implements AgentPort {
 
   // Nothing in the fixture blocks, so nothing can be retried out of it. The
   // port is still a contract, and half of one is not a contract.
+  async cancelJob(jobId: string) {
+    const job = this.state.jobs?.find((j) => j.id === jobId && j.status === "running");
+    if (!job) throw new HttpError(409, "no running background job with this id", { code: "job.not_running" });
+    this.state = { ...this.state, jobs: this.state.jobs?.map((j) => (j === job ? { ...j, status: "killed" } : j)) };
+  }
+
+  async jobOutput(jobId: string): Promise<JobOutput> {
+    const job = this.state.jobs?.find((j) => j.id === jobId);
+    if (!job || job.status !== "running") throw new HttpError(409, "no running background job with this id", { code: "job.not_running" });
+    return { text: "> dev\n> vite\n\n  VITE ready in 312 ms\n  Local: http://localhost:5173/\n", status: job.status, bytes: 66, truncated: false };
+  }
+
   async retryQueued(itemId: string) {
     void itemId;
   }
-
   async refreshQueued(itemId: string) {
     void itemId;
   }
@@ -681,13 +683,18 @@ export class MockPort extends MockTheme implements AgentPort {
     if (at === undefined) throw new HttpError(409, "already applied", { code: "steer.already_applied" });
     window.clearTimeout(at);
     this.queued.delete(itemId);
+    this.dropQueued(itemId);
+    for(const [id,record] of this.surfaceActions) if(record.itemId===itemId)this.surfaceActions.set(id,{...record,status:"withdrawn"});
   }
 
-  async submit(text: string) {
+  async submit(text: string, chips?: ChipCall): Promise<Queued | void> {
+    this.compositions.markCompositionStarted();
+    if (chips && this.queuePaused) return this.queueFollowup(text);
     if (this.state.running) {
       this.emit({ kind: "steer", text });
       return;
     }
+    this.clearUndo();
     this.prompts.push(text);
     // The first turn is what puts the session on disk. serve answers with a
     // truncated first message straight away and swaps in the generated title
@@ -713,6 +720,7 @@ export class MockPort extends MockTheme implements AgentPort {
   }
 
   async resume(_path: string) {
+    this.clearUndo();
     this.log = [];
     this.at = 0;
   }
@@ -738,7 +746,12 @@ export class MockPort extends MockTheme implements AgentPort {
   async answer(_id: string, _answers: { questionId: string; selected: string[] }[]) {
     this.ungate();
   }
+  async engageQuestion(_id: string) {}
 
+  private surfaceActions = new Map<string,SurfaceActionRecord>();
+  async surfaceActionState(callId: string):Promise<SurfaceActionRecord> {return this.surfaceActions.get(callId) ?? {active:true,action:{surfaceId:"mock",sessionId:"mock",callId,actionId:"",requestId:"",values:{}}};}
+  async surfaceAction(request: SurfaceActionRequest) {const rec=await (request.delivery==="steer"?this.steer(JSON.stringify(request.action)):this.queueFollowup(JSON.stringify(request.action)));this.surfaceActions.set(request.action.callId,{active:true,action:request.action,itemId:rec.itemId,status:"accepted",canWithdraw:true});return rec;}
+  async extensionSurfaces(): Promise<import("./surface_replay").ExtensionSurfaceReplay> { return { surfaces: [] }; }
   async invokeExtensionAction(name: string) {
     return `${name} 在 mock 里没有真实扩展可执行`;
   }
@@ -753,8 +766,8 @@ export class MockPort extends MockTheme implements AgentPort {
   async setPreset(preset: Preset) {
     this.state.preset = preset;
   }
-  async storage() {
-    return mockStorage();
+  async storage(query?: Parameters<typeof mockStorage>[0]) {
+    return mockStorage(query);
   }
 
   async planStorageMove(root: string, dir: string) {
@@ -769,21 +782,14 @@ export class MockPort extends MockTheme implements AgentPort {
     this.state.modelRef = ref;
     this.state.label = ref.split("/").pop() ?? ref;
   }
+  async setDefaultModel(ref: string) {
+    this.defaultRef = ref;
+  }
   async setEffort(effort: string) {
     this.state.effort = effort;
   }
+  async setModelMode(mode: string) { this.state.modes = this.state.modes?.map((m) => ({ ...m, active: m.id === mode })); }
   async setGoal(text: string) {
     this.state.goal = text;
   }
-}
-
-// Which owner answers a pending approval. The kernel decides it from the
-// approval itself — a recovery gate, the plan tool, otherwise the tool gate —
-// and the fixture reads the same fields the card does rather than inventing a
-// third rule.
-function approvalKind(ev: WireEvent): "plan_approval" | "recovery_approval" | "tool_approval" {
-  const a = ev.approval;
-  if (a?.kind === "plan" || a?.tool === "exit_plan_mode") return "plan_approval";
-  if (a?.kind === "recovery") return "recovery_approval";
-  return "tool_approval";
 }

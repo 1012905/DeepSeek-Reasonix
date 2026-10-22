@@ -20,9 +20,9 @@ type trajectorySummary struct {
 	SpanMs  int64  `json:"span_ms"`
 	ToolMs  int64  `json:"tool_ms"`
 	ModelMs int64  `json:"model_ms"` // SpanMs − tool wall clock, floored at zero
-	// Round decomposition: a round's gap runs from the turn start (or the
-	// batch's last tool_result) to the next top-level tool_dispatch; the
-	// final segment to the last record is the answer round.
+	// ModelRounds counts executor round trips: one per batch of top-level calls
+	// plus the answer segment. Calls a subagent or a running tool (run_script)
+	// makes are not top-level and cut no round; retries in a gap add none.
 	ModelRounds     int   `json:"model_rounds"`
 	ModelGapTotalMs int64 `json:"model_gap_total_ms"`
 	ModelGapP95Ms   int64 `json:"model_gap_p95_ms"`
@@ -105,6 +105,9 @@ type trajectorySummary struct {
 	PromptTokensSeen  int64 `json:"prompt_tokens_seen,omitempty"`  // Σ prompt tokens (schema share denominator)
 	PrefixResets      int   `json:"prefix_resets,omitempty"`       // usage events with prefixChanged
 	ConnectCalls      int   `json:"connect_calls,omitempty"`       // connect_tool_source dispatches
+	// NestedCalls counts results of calls a running tool made through the
+	// agent's invoker; they are outside TopLevelCalls and every round figure.
+	NestedCalls int `json:"nested_calls,omitempty"`
 
 	// Cold/warm evidence: the first top-level request's cache split. A cold
 	// session pays the whole prefix as miss; a warmed one starts near-hit.
@@ -124,6 +127,13 @@ type trajectorySummary struct {
 	CompletionGapKinds []string `json:"completion_gap_kinds,omitempty"`
 	ClaimsVerified     int      `json:"claims_verified,omitempty"`
 	ClaimsUnbacked     int      `json:"claims_unbacked,omitempty"`
+
+	// Evidence bundle (last of the run): the host-evidence outcome and how it
+	// diverged from the completion report's verdict.
+	BundleOutcome     string   `json:"bundle_outcome,omitempty"`
+	CapabilitiesHash  string   `json:"capabilities_hash,omitempty"`
+	DivergenceClass   string   `json:"divergence_class,omitempty"`
+	DivergenceReasons []string `json:"divergence_reasons,omitempty"`
 
 	// Outcome shadow: the runtime outcome scorer's per-round series condensed,
 	// or a verification-receipt backfill for recordings that predate it.
@@ -169,6 +179,14 @@ type trajectoryRecord struct {
 		ClaimsVerified int      `json:"claims_verified"`
 		ClaimsUnbacked int      `json:"claims_unbacked"`
 	} `json:"completion_report"`
+	RunHeader *struct {
+		CapabilitiesHash string `json:"capabilities_hash"`
+	} `json:"run_header"`
+	EvidenceBundle *struct {
+		Outcome           string   `json:"outcome"`
+		DivergenceClass   string   `json:"divergence_class"`
+		DivergenceReasons []string `json:"divergence_reasons"`
+	} `json:"evidence_bundle"`
 	OutcomeProgress *struct {
 		Exploration    int `json:"exploration"`
 		Verification   int `json:"verification"`
@@ -342,6 +360,14 @@ func (t *trajScan) record(rec trajectoryRecord) {
 		t.s.ClaimsVerified = cr.ClaimsVerified
 		t.s.ClaimsUnbacked = cr.ClaimsUnbacked
 	}
+	if rh := rec.RunHeader; rh != nil && rh.CapabilitiesHash != "" {
+		t.s.CapabilitiesHash = rh.CapabilitiesHash
+	}
+	if eb := rec.EvidenceBundle; eb != nil && eb.Outcome != "" {
+		t.s.BundleOutcome = eb.Outcome
+		t.s.DivergenceClass = eb.DivergenceClass
+		t.s.DivergenceReasons = eb.DivergenceReasons
+	}
 	if op := rec.OutcomeProgress; op != nil {
 		t.outcomePoints = append(t.outcomePoints, outcomePoint{
 			ts: rec.TS, exploration: op.Exploration, verification: op.Verification,
@@ -398,9 +424,21 @@ func (t *trajScan) record(rec trajectoryRecord) {
 		}
 		t.compFrom = 0
 	}
-	if rec.Event.Tool == nil || rec.Event.Tool.ParentID != "" {
-		// Subagent calls overlap the parent's wall clock; counting them
-		// would double-book the span and split the parent's rounds.
+	t.recordTool(rec)
+}
+
+// recordTool books a top-level tool event to its round and batch.
+func (t *trajScan) recordTool(rec trajectoryRecord) {
+	tl := rec.Event.Tool
+	if tl == nil {
+		return
+	}
+	if t.nesting.child(rec.Event.Kind, tl.ID, tl.ParentID) {
+		// Nested calls overlap their caller's wall clock; counting them would
+		// double-book the span and split the caller's round.
+		if tl.ParentID == "" && rec.Event.Kind == "tool_result" {
+			t.s.NestedCalls++
+		}
 		return
 	}
 	switch rec.Event.Kind {
@@ -411,9 +449,10 @@ func (t *trajScan) record(rec trajectoryRecord) {
 	}
 }
 
-// closeGap ends one model round; recovery-tainted rounds are booked apart so
-// clean latency stays comparable across providers with different flake rates.
-// The gap is queued until its batch closes and can classify the round.
+// closeGap ends one model round: the gap from the turn start or the last
+// top-level tool_result to the next top-level tool_dispatch. Recovery-tainted
+// rounds are booked apart so clean latency stays comparable across providers
+// with different flake rates. The gap is queued until its batch classifies it.
 func (t *trajScan) closeGap(gap int64) {
 	t.gaps = append(t.gaps, gap)
 	t.pendingGaps = append(t.pendingGaps, gapInfo{

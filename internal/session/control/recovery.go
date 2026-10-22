@@ -75,7 +75,7 @@ func (c *Controller) ResolveRecovery(id string, action agent.RecoveryAction, fee
 		case agent.RecoveryActionContinueTask:
 			outcome = "recovery_continue_task"
 		}
-		c.recordDecisionReceipt(pending, outcome)
+		c.recordDecisionReceipt(pending, outcome, nil)
 		switch action {
 		case agent.RecoveryActionContinue, agent.RecoveryActionContinueTask:
 			pending.reply <- approvalReply{allow: true}
@@ -109,9 +109,10 @@ func (c *Controller) initRecoveryGate(reviewer recovery.Reviewer, headless bool)
 		Mode: func() string {
 			return c.ToolApprovalMode()
 		},
-		EmitPrompt:     c.emitRecoveryPrompt,
-		Reviewer:       reviewer,
-		PersistenceKey: c.SessionPath,
+		EmitPrompt:      c.emitRecoveryPrompt,
+		WaitingOnPerson: c.yieldForRecoveryCard,
+		Reviewer:        reviewer,
+		PersistenceKey:  c.SessionPath,
 		Persist: func(path string, snap recovery.Snapshot) {
 			c.persistRecoverySnapshot(path, snap)
 		},

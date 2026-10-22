@@ -11,6 +11,15 @@ import (
 // because they are read together: a role with no line here is a setting the API
 // accepts, saves without error, and loses on the next read.
 func renderAgentDelegation(b *strings.Builder, c *Config) {
+	if c.Agent.WebSearchModel != "" {
+		fmt.Fprintf(b, "web_search_model = %q\n", c.Agent.WebSearchModel)
+	}
+	if c.Agent.TitleModel != "" {
+		fmt.Fprintf(b, "title_model = %q\n", c.Agent.TitleModel)
+	}
+	if len(c.Agent.RoleEfforts) > 0 {
+		fmt.Fprintf(b, "role_efforts = %s\n", renderStringMap(c.Agent.RoleEfforts))
+	}
 	if c.Agent.PlannerModel != "" {
 		fmt.Fprintf(b, "planner_model = %q   # low-frequency planner (two-model collaboration)\n", c.Agent.PlannerModel)
 	} else {
@@ -50,6 +59,31 @@ func renderAgentDelegation(b *strings.Builder, c *Config) {
 		fmt.Fprintf(b, "triage_model = %q   # small classifications; falls back to subagent, then main\n", c.Agent.TriageModel)
 	} else {
 		b.WriteString("# triage_model = \"deepseek-flash\"   # small classifications; point it somewhere cheap\n")
+	}
+	if c.Agent.AdvisorModel != "" {
+		fmt.Fprintf(b, "advisor_model = %q   # the stronger model the advise tool consults\n", c.Agent.AdvisorModel)
+	} else {
+		b.WriteString("# advisor_model = \"deepseek-pro\"   # optional: offers the advise tool, backed by this model\n")
+	}
+	if c.Agent.BestOfN {
+		b.WriteString("best_of_n = true   # parallel attempts in git worktrees; a judge applies the best\n")
+	} else {
+		b.WriteString("# best_of_n = true   # parallel attempts in git worktrees; a judge applies the best\n")
+	}
+	if c.Agent.WorktreeIsolation {
+		b.WriteString("worktree_isolation = true   # task can run a writer in a git worktree; changes wait for apply_isolated\n")
+	} else {
+		b.WriteString("# worktree_isolation = true   # task can run a writer in a git worktree; changes wait for apply_isolated\n")
+	}
+	if c.Agent.CodeMode {
+		b.WriteString("code_mode = true   # run_script: tool calls from a short script, one round trip\n")
+	} else {
+		b.WriteString("# code_mode = true   # run_script: tool calls from a short script, one round trip\n")
+	}
+	if c.Agent.ScreenExternalContent {
+		b.WriteString("screen_external_content = true   # triage flags external results that address the agent\n")
+	} else {
+		b.WriteString("# screen_external_content = true   # triage flags external results that address the agent\n")
 	}
 	if c.Agent.TaskCostBudget > 0 {
 		fmt.Fprintf(b, "task_cost_budget = %s   # a task lands on one summary once it spends this much\n", formatFloat(c.Agent.TaskCostBudget))

@@ -4,7 +4,11 @@ import (
 	"reasonix/internal/contract/ablation"
 	"reasonix/internal/contract/agentpreset"
 	"reasonix/internal/contract/tool"
+	"reasonix/internal/ext/plugin"
+	"reasonix/internal/runtime/bestof"
+	"reasonix/internal/tools/advisor"
 	"reasonix/internal/tools/builtin"
+	"reasonix/internal/tools/script"
 )
 
 // Canonical Agent role-setting identifiers re-exported for frontends that
@@ -69,6 +73,7 @@ func HostControlToolNames() []string {
 		"update_goal",
 		"todo_write",
 		"complete_step",
+		"setting",
 	}
 }
 
@@ -118,9 +123,10 @@ func UnifiedProviderToolNames() []string {
 }
 
 // applyUnifiedProviderToolSurface restricts Schemas/ContractEntries to the
-// shared core + host-control tools. use_capability can still Get every
-// registered tool, including those hidden from the provider schema.
-func applyUnifiedProviderToolSurface(reg *tool.Registry, goalTurnsUnreachable bool, arm ablation.Set) {
+// shared core + host-control tools, plus the tools of the MCP servers named in
+// alwaysLoad. use_capability can still Get every registered tool, including
+// those hidden from the provider schema.
+func applyUnifiedProviderToolSurface(reg *tool.Registry, goalTurnsUnreachable bool, arm ablation.Set, alwaysLoad map[string]bool) {
 	if reg == nil {
 		return
 	}
@@ -164,6 +170,14 @@ func applyUnifiedProviderToolSurface(reg *tool.Registry, goalTurnsUnreachable bo
 			allow = append(allow, name)
 		}
 	}
+	// advise, best_of_n, run_script, the peer tools and read_mcp_resource are
+	// registered only when config asks, at boot; present_files follows the same rule.
+	for _, name := range []string{advisor.Name, bestof.Name, script.Name, "list_peers", "send_peer_message", "dispatch_to_project", "view_image", "present_files", plugin.ResourceReadToolName} {
+		if _, ok := reg.Get(name); ok {
+			allow = append(allow, name)
+		}
+	}
+	allow = append(allow, alwaysLoadedMCPTools(reg, alwaysLoad)...)
 	// Always keep use_capability if somehow only that remains.
 	if len(allow) == 0 {
 		if _, ok := reg.Get("use_capability"); ok {
@@ -177,5 +191,39 @@ func applyUnifiedProviderToolSurface(reg *tool.Registry, goalTurnsUnreachable bo
 // shown, at this arm. Exported so a harness reproduces the real surface
 // instead of a second copy of this rule.
 func ApplyUnifiedProviderToolSurface(reg *tool.Registry, goalTurnsUnreachable bool, arm ablation.Set) {
-	applyUnifiedProviderToolSurface(reg, goalTurnsUnreachable, arm)
+	applyUnifiedProviderToolSurface(reg, goalTurnsUnreachable, arm, nil)
+}
+
+// pinnedMCPServers is the always-load servers whose schema was known at boot.
+// A server discovered during this session waits for the next one, whatever
+// the discovery race, so the same config and cache give the same schema.
+func pinnedMCPServers(alwaysLoad, schemaKnown map[string]bool) map[string]bool {
+	pinned := map[string]bool{}
+	for name := range alwaysLoad {
+		if schemaKnown[name] {
+			pinned[name] = true
+		}
+	}
+	return pinned
+}
+
+// alwaysLoadedMCPTools names the registered tools of the always-loaded servers.
+// Only a server whose schema is already known at boot contributes: a connect
+// stub has no tools to show, and tools arriving after boot would rewrite the
+// cached prefix mid-session. An unauthorized server stays behind
+// use_capability, which is where its approval is asked for.
+func alwaysLoadedMCPTools(reg *tool.Registry, alwaysLoad map[string]bool) []string {
+	if len(alwaysLoad) == 0 {
+		return nil
+	}
+	var names []string
+	for _, b := range reg.MCPBindings() {
+		if !alwaysLoad[b.Server] {
+			continue
+		}
+		if t, ok := reg.Get(b.CallableName); ok && tool.IsMCPServerAuthorized(t) {
+			names = append(names, b.CallableName)
+		}
+	}
+	return names
 }

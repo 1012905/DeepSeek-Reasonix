@@ -15,9 +15,10 @@ type Phase struct {
 }
 
 type phaseTimer struct {
-	start  time.Time
-	last   time.Time
-	phases []Phase
+	start   time.Time
+	last    time.Time
+	phases  []Phase
+	observe func(Phase)
 }
 
 func newPhaseTimer() *phaseTimer {
@@ -33,6 +34,9 @@ func (t *phaseTimer) mark(name string) {
 	now := time.Now()
 	t.phases = append(t.phases, Phase{Name: name, D: now.Sub(t.last)})
 	t.last = now
+	if t.observe != nil {
+		t.observe(t.phases[len(t.phases)-1])
+	}
 }
 
 // done closes the last stretch and logs the assembly as one record. Phases are
@@ -52,6 +56,6 @@ func (t *phaseTimer) done(name string) []Phase {
 		b.WriteByte('=')
 		b.WriteString(p.D.Round(time.Millisecond).String())
 	}
-	slog.Info("boot: assembly timing", "total", time.Since(t.start).Round(time.Millisecond).String(), "phases", b.String())
+	slog.Debug("boot: assembly timing", "total", time.Since(t.start).Round(time.Millisecond).String(), "phases", b.String())
 	return t.phases
 }

@@ -40,7 +40,7 @@ func TestCreateChecksOutLongRepositoryPathOnWindows(t *testing.T) {
 	git("add", "--", relativePath)
 	git("commit", "-m", "add long path")
 
-	result, err := Create(context.Background(), repo, testenv.TempDir(t))
+	result, err := Create(context.Background(), opened(t, repo), testenv.TempDir(t))
 	if err != nil {
 		t.Fatalf("Create() with a long repository path: %v", err)
 	}
@@ -54,5 +54,57 @@ func TestCreateChecksOutLongRepositoryPathOnWindows(t *testing.T) {
 	}
 	if strings.TrimSpace(string(got)) != "long path" {
 		t.Fatalf("long-path worktree file = %q", got)
+	}
+}
+
+func TestDiscardUnpublishedMatchesGitPathsOnWindows(t *testing.T) {
+	requireGit(t)
+	root := initRepo(t)
+	repo := opened(t, root)
+	managedRoot := testenv.TempDir(t)
+	result, err := Create(t.Context(), repo, managedRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.WorktreeRoot, `\`) {
+		t.Fatalf("fixture needs a native Windows path: %q", result.WorktreeRoot)
+	}
+	if err := DiscardUnpublished(t.Context(), repo, managedRoot, result); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(result.WorktreeRoot); !os.IsNotExist(err) {
+		t.Fatalf("unpublished directory retained: %v", err)
+	}
+	branches, _, err := runGit(t.Context(), repo, "for-each-ref", "--format=%(refname)", "refs/heads/reasonix/")
+	if err != nil || strings.TrimSpace(branches) != "" {
+		t.Fatalf("task branch retained: %q %v", branches, err)
+	}
+	registered, _, err := runGit(t.Context(), repo, "worktree", "list", "--porcelain", "-z")
+	if err != nil || strings.Count(registered, "worktree ") != 1 {
+		t.Fatalf("partial registration retained: %q %v", registered, err)
+	}
+	if err := DiscardUnpublished(t.Context(), repo, managedRoot, result); err != nil {
+		t.Fatalf("repeated cleanup: %v", err)
+	}
+}
+
+func TestDiscardUnpublishedRetainsChangedBranchOnWindows(t *testing.T) {
+	requireGit(t)
+	root := initRepo(t)
+	repo := opened(t, root)
+	managedRoot := testenv.TempDir(t)
+	result, err := Create(t.Context(), repo, managedRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("git", "-C", result.WorktreeRoot, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "external change")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("advance task branch: %v %s", err, out)
+	}
+	if err := DiscardUnpublished(t.Context(), repo, managedRoot, result); err == nil {
+		t.Fatal("cleanup accepted a changed task branch")
+	}
+	if _, err := os.Stat(filepath.Join(result.WorktreeRoot, "README.md")); err != nil {
+		t.Fatalf("changed workspace was removed: %v", err)
 	}
 }

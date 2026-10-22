@@ -3,9 +3,12 @@ package control
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/planmode"
 	"reasonix/internal/contract/provider"
@@ -25,6 +28,13 @@ func (c *Controller) PendingPrompt() bool {
 // also remembers a grant for the rest of the session so the same approval scope
 // is not re-prompted. Unknown/expired IDs are ignored.
 func (c *Controller) Approve(id string, allow, session, persist bool) {
+	c.ApproveFrom(id, allow, session, persist, nil)
+}
+
+// ApproveFrom is Approve for a decision made on a paired device. The device is
+// recorded on the decision's receipt and nowhere else: it names who decided
+// and changes nothing about what the decision allows.
+func (c *Controller) ApproveFrom(id string, allow, session, persist bool, via *provider.Via) {
 	// Recovery cards are strict fresh decisions. Prefer ResolveRecovery so a
 	// continue/deny from an old client that only knows Approve still maps onto
 	// the recovery state machine (allow=continue, deny=revise without feedback).
@@ -64,7 +74,7 @@ func (c *Controller) Approve(id string, allow, session, persist bool) {
 			outcome = "allow_once"
 		}
 	}
-	c.recordDecisionReceipt(pending, outcome)
+	c.recordDecisionReceipt(pending, outcome, via)
 	pending.reply <- approvalReply{allow: allow, session: session, persist: persist} // buffered, never blocks
 }
 
@@ -88,7 +98,7 @@ func (c *Controller) ResolvePlanDecision(id string, action PlanDecisionAction) e
 		return fmt.Errorf("plan approval %q is no longer pending", id)
 	}
 	pending.kind = "plan"
-	c.recordDecisionReceipt(pending, string(action))
+	c.recordDecisionReceipt(pending, string(action), nil)
 	// Move before answering, so the waiting turn sees the state the user chose.
 	// Start stays with that turn: it holds the state it submitted, so only it
 	// can tell an approval from a late one.
@@ -104,7 +114,7 @@ func (c *Controller) ResolvePlanDecision(id string, action PlanDecisionAction) e
 	return nil
 }
 
-func (c *Controller) recordDecisionReceipt(pending pendingApproval, outcome string) {
+func (c *Controller) recordDecisionReceipt(pending pendingApproval, outcome string, via *provider.Via) {
 	if c == nil || c.executor == nil || pending.reply == nil {
 		return
 	}
@@ -121,6 +131,7 @@ func (c *Controller) recordDecisionReceipt(pending pendingApproval, outcome stri
 		Tool:    strings.TrimSpace(pending.tool),
 		Subject: clipUTF8(strings.TrimSpace(pending.subject), 240),
 		Outcome: strings.TrimSpace(outcome),
+		Via:     via,
 	}
 	// Keep the receipt bounded and provider-excluded even when an older caller
 	// omits optional approval metadata.
@@ -140,9 +151,14 @@ func (c *Controller) recordDecisionReceipt(pending pendingApproval, outcome stri
 // Interactive frontends (chat, desktop) call this; the headless run keeps the
 // silent gate and a nil asker from setup.
 func (c *Controller) EnableInteractiveApproval() {
+	if c.observe != nil {
+		return
+	}
 	escapeApprover := sandboxEscapeApprover{c}
 	configApprover := managedConfigWriteApprover{c}
+	paidApprover := paidSearchApprover{c}
 	if c.executor != nil {
+		c.executor.SetPaidSearchApprover(paidApprover)
 		c.executor.SetGate(c.newInteractiveGate())
 		c.executor.SetSandboxEscapeApprover(escapeApprover)
 		c.executor.SetConfigWriteApprover(configApprover)
@@ -157,6 +173,11 @@ func (c *Controller) EnableInteractiveApproval() {
 		SetConfigWriteApprover(tool.ConfigWriteApprover)
 	}); ok {
 		setter.SetConfigWriteApprover(configApprover)
+	}
+	if setter, ok := c.runner.(interface {
+		SetPaidSearchApprover(tool.PaidSearchApprover)
+	}); ok {
+		setter.SetPaidSearchApprover(paidApprover)
 	}
 	if setter, ok := c.runner.(interface {
 		SetPlannerPlanApprover(agent.PlannerPlanApprover)
@@ -178,6 +199,8 @@ func (c *Controller) newInteractiveGate() *permission.Gate {
 		policy.Mode = permission.Allow
 	case ToolApprovalDontAsk:
 		policy.Mode = permission.Deny
+	case ToolApprovalReadOnly:
+		policy.Mode, policy.ReadOnly = permission.Deny, true
 	default:
 		policy.Mode = permission.Ask
 	}
@@ -205,8 +228,8 @@ func (c *Controller) newInteractiveGate() *permission.Gate {
 	return gate
 }
 
-func (c *Controller) newHeadlessGate(mode string) *freshHumanHeadlessGate {
-	gate := BuildHeadlessApprovalGate(c.policy, mode)
+func (c *Controller) newHeadlessGate(mode string, folder *folderRefusal) *freshHumanHeadlessGate {
+	gate := buildHeadlessGate(c.policy, mode, folder)
 	gate.allowLowRiskFreshAction = func(toolName string, args json.RawMessage) bool {
 		return toolName == memoryRememberTool && c.allowLowRiskRemember(args)
 	}
@@ -234,17 +257,27 @@ func (c *Controller) newHeadlessGate(mode string) *freshHumanHeadlessGate {
 // by the gate for every mode. The only exception is a controller-assessed,
 // create-only project/reference memory; every other memory write remains denied.
 func (c *Controller) ApplyHeadlessApprovalMode(mode string) {
+	c.applyHeadless(mode, nil)
+}
+
+func (c *Controller) applyHeadless(mode string, folder *folderRefusal) {
+	if c.observe != nil {
+		return
+	}
 	mode = normalizeToolApprovalMode(mode)
 	c.approval.setMode(mode)
 	if c.subagentGate != nil {
-		c.subagentGate.Update(mode)
+		c.subagentGate.UpdateFor(mode, folder)
 	}
 	if c.executor != nil {
-		c.executor.SetGate(c.newHeadlessGate(mode))
+		c.executor.SetGate(c.newHeadlessGate(mode, folder))
 	}
 }
 
 func (c *Controller) refreshInteractiveGate() {
+	if c.observe != nil {
+		return
+	}
 	if c.executor != nil {
 		c.executor.SetGate(c.newInteractiveGate())
 	}
@@ -257,6 +290,10 @@ func (c *Controller) refreshInteractiveGate() {
 // tool exists to get a genuine user decision, and YOLO only auto-approves
 // tool calls; it must not answer the user's questions for them.
 func (c *Controller) Ask(ctx context.Context, questions []event.AskQuestion) ([]event.AskAnswer, error) {
+	return c.ask(ctx, questions, nil)
+}
+
+func (c *Controller) ask(ctx context.Context, questions []event.AskQuestion, origin *event.AskOrigin) (_ []event.AskAnswer, err error) {
 	// Registering after the lock left a queued question invisible everywhere:
 	// no event, absent from the snapshot, unreachable by ReplayPendingPrompts.
 	// The record comes first: registration is what makes it answerable.
@@ -264,7 +301,8 @@ func (c *Controller) Ask(ctx context.Context, questions []event.AskQuestion) ([]
 	if err := c.openBarrier(id, string(DecisionAsk), barrierSummary(questions)); err != nil {
 		return nil, err
 	}
-	reply := c.approval.registerAsk(id, questions)
+	reply := c.approval.registerAsk(id, questions, origin)
+	defer c.yieldWorkspaceNow(ctx, &err)()
 
 	if !c.lockPromptFor(ctx, "question") {
 		c.approval.cancelAsk(id)
@@ -273,47 +311,54 @@ func (c *Controller) Ask(ctx context.Context, questions []event.AskQuestion) ([]
 	}
 	defer c.approval.promptMu.Unlock()
 
+	// The wait is read once, before the card is shown, so what the card says and
+	// what the host does are the same number.
+	after := c.askSkipDelay(origin)
+	shown := event.Ask{ID: id, Questions: questions, Origin: origin, SkipInMs: after.Milliseconds()}
 	c.approval.promptEmitMu.Lock()
 	c.approval.markAskEmitted(id)
-	c.sink.Emit(event.Event{Kind: event.AskRequest, Ask: event.Ask{ID: id, Questions: questions}})
-	c.approval.promptEmitMu.Unlock()
-
-	waitCtx, cancelWait := c.approval.waitContext(ctx)
-	defer cancelWait()
-
-	select {
-	case ans := <-reply:
-		c.closeBarrier(id, barrierResolved)
-		return ans, nil
-	case <-waitCtx.Done():
-		c.approval.cancelAsk(id)
-		c.closeBarrier(id, barrierCancelled)
-		return nil, waitCtx.Err()
+	if after > 0 {
+		c.approval.setAskSkipAt(id, time.Now().Add(after))
 	}
+	c.sink.Emit(event.Event{Kind: event.AskRequest, Ask: shown})
+	c.approval.promptEmitMu.Unlock()
+	// A question blocks the run on the user exactly like an approval prompt.
+	go c.hooks.Notification(ctx, askNotificationText(questions, origin), "question_prompt")
+
+	return c.waitForAsk(ctx, id, reply, after)
 }
 
 // AnswerQuestion resolves a pending AskRequest by ID with the user's selections.
-// Unknown/expired IDs are ignored.
-func (c *Controller) AnswerQuestion(id string, answers []event.AskAnswer) {
-	if pending, ok := c.approval.resolveAsk(id); ok {
-		// An answer batch with no selections is the explicit "skip and continue
-		// chat" path. End the current turn instead of feeding a prose dismissal
-		// back to the model and trusting it not to ask again (#6869).
-		if !askAnswersHaveSelection(answers) {
-			c.mu.Lock()
-			activeTurn := c.gate.cancel != nil
-			c.mu.Unlock()
-			if activeTurn {
-				c.Cancel()
-				return
-			}
-		}
-		c.recordAskDecisionReceipt(id, pending, answers)
-		pending.reply <- answers // buffered, never blocks
-	}
+// Invalid answers retain the pending prompt; expired identities are refused.
+func (c *Controller) AnswerQuestion(id string, answers []event.AskAnswer) error {
+	return c.AnswerQuestionFrom(id, answers, nil)
 }
 
-func (c *Controller) recordAskDecisionReceipt(id string, pending pendingAsk, answers []event.AskAnswer) {
+// AnswerQuestionFrom is AnswerQuestion for answers given on a paired device,
+// which the answer's receipt names and nothing else reads.
+func (c *Controller) AnswerQuestionFrom(id string, answers []event.AskAnswer, via *provider.Via) error {
+	pending, err := c.approval.resolveAskAnswer(id, answers)
+	if err != nil {
+		return err
+	}
+	// No selections is the explicit "skip" path: it ends the turn rather than
+	// feeding a prose dismissal back to the model (#6869). An external
+	// party's form is refused to that party instead, and the turn goes on.
+	if !askAnswersHaveSelection(answers) && pending.origin == nil {
+		c.mu.Lock()
+		activeTurn := c.gate.cancel != nil
+		c.mu.Unlock()
+		if activeTurn {
+			c.cancelTurn(causeAskSkipped)
+			return nil
+		}
+	}
+	c.recordAskDecisionReceipt(id, pending, answers, "answered", via)
+	pending.reply <- answers // buffered, never blocks
+	return nil
+}
+
+func (c *Controller) recordAskDecisionReceipt(id string, pending pendingAsk, answers []event.AskAnswer, outcome string, via *provider.Via) {
 	if c == nil || c.executor == nil {
 		return
 	}
@@ -336,18 +381,23 @@ func (c *Controller) recordAskDecisionReceipt(id string, pending pendingAsk, ans
 		}
 		parts = append(parts, prompt+": "+answer)
 	}
+	subject := clipUTF8(strings.Join(parts, " · "), 240)
+	if pending.origin != nil {
+		subject, outcome = formReceipt(pending.origin, pending.questions, answers)
+	}
 	receipt := &provider.DecisionReceipt{
 		ID:      id,
 		Kind:    "ask",
-		Subject: clipUTF8(strings.Join(parts, " · "), 240),
-		Outcome: "answered",
+		Subject: subject,
+		Outcome: outcome,
+		Via:     via,
 	}
 	c.executor.Session().AddDecisionReceipt(receipt)
 	c.sink.Emit(event.Event{
 		Kind:            event.Notice,
 		Code:            event.NoticeCodeDecisionReceipt,
 		Level:           event.LevelInfo,
-		Text:            "Decision recorded: answered",
+		Text:            "Decision recorded: " + outcome,
 		DecisionReceipt: receipt,
 	})
 }
@@ -384,6 +434,9 @@ func (c *Controller) ReplayPendingPromptsWith(sinkFactory func() event.Sink) {
 
 func (c *Controller) replayPendingPromptsTo(sink event.Sink) bool {
 	approvals, asks := c.approval.snapshotPrompts()
+	for i := range approvals {
+		approvals[i].AllowsPersist = c.offersPersist(approvals[i].Tool, approvals[i].AllowsPersist)
+	}
 	c.emitPendingPrompts(sink, approvals, asks)
 	return len(approvals) == 0
 }
@@ -418,9 +471,23 @@ func (c *Controller) SetToolApprovalMode(mode string) {
 // not cover — so a frontend must keep showing them instead of assuming the
 // posture switch resolved everything (#6432).
 func (c *Controller) ApplyToolApprovalMode(mode string) []string {
+	if c.observe != nil {
+		return nil
+	}
 	mode = normalizeToolApprovalMode(mode)
-	// Capture mode-change recovery dismissals before approval drain so a
-	// same-value hydrate/reconcile never rotates Episode state, while a real
+	drained, _ := c.switchApprovalMode(mode, func() ([]drainedApproval, bool) { return c.approval.setMode(mode), true })
+	return drained
+}
+
+// switchApprovalMode moves the posture through set, then carries the change to
+// the recovery cards, the sub-agent gate and the interactive gate. A set that
+// declines leaves all of them alone.
+func (c *Controller) switchApprovalMode(mode string, set func() ([]drainedApproval, bool)) ([]string, bool) {
+	pending, ok := set()
+	if !ok {
+		return nil, false
+	}
+	// A same-value hydrate/reconcile never rotates Episode state, while a real
 	// Auto↔Yolo/Ask switch clears temporary failure/reviewer locks and waiters
 	// without auto-approving the original mutation.
 	var recoveryDismissed []string
@@ -433,9 +500,8 @@ func (c *Controller) ApplyToolApprovalMode(mode string) []string {
 			recoveryDismissed = ctrl.OnModeChange(mode)
 		}
 	}
-	pending := c.approval.setMode(mode)
 	if c.subagentGate != nil {
-		c.subagentGate.Update(mode)
+		c.subagentGate.UpdateAttended(mode)
 	}
 	c.refreshInteractiveGate()
 	// Clear recovery cards dismissed by the mode switch outside the gate lock.
@@ -455,7 +521,7 @@ func (c *Controller) ApplyToolApprovalMode(mode string) []string {
 		p.reply <- approvalReply{allow: true}
 		drained = append(drained, p.id)
 	}
-	return drained
+	return drained, true
 }
 
 func (c *Controller) ToolApprovalMode() string {
@@ -503,7 +569,7 @@ func (c *Controller) requestApproval(ctx context.Context, req approvalRequest) (
 // posture) for the same scope short-circuits; the approvalManager's promptMu
 // serialises outstanding prompts. It authorises nothing on its own — that is
 // requestApproval's half.
-func (c *Controller) requestApprovalDecision(ctx context.Context, req approvalRequest) (approvalReply, error) {
+func (c *Controller) requestApprovalDecision(ctx context.Context, req approvalRequest) (_ approvalReply, err error) {
 	// YOLO/full access and the just-approved-plan execution window auto-allow
 	// approval-gated tools without prompting. Plan approval is a user decision,
 	// not a tool permission, so it deliberately stays interactive.
@@ -511,6 +577,8 @@ func (c *Controller) requestApprovalDecision(ctx context.Context, req approvalRe
 		return approvalReply{allow: true}, nil
 	}
 
+	yield, restore := c.yieldWorkspace(ctx, &err)
+	defer restore()
 	c.approval.promptMu.Lock()
 	defer c.approval.promptMu.Unlock()
 
@@ -545,6 +613,7 @@ func (c *Controller) requestApprovalDecision(ctx context.Context, req approvalRe
 		}
 	}
 
+	yield()
 	c.approval.promptEmitMu.Lock()
 	var id string
 	var reply chan approvalReply
@@ -562,7 +631,7 @@ func (c *Controller) requestApprovalDecision(ctx context.Context, req approvalRe
 	c.sink.Emit(c.approvalRequestEvent(event.Approval{
 		ID: id, Tool: req.tool, Subject: req.subject, Reason: req.reason, ReasonCode: ExplicitApprovalCode(req.tool, req.subject),
 		RawInput: append(json.RawMessage(nil), req.args...), Fresh: req.fresh,
-		AllowsSession: session, AllowsPersist: persist && c.onRemember != nil,
+		AllowsSession: session, AllowsPersist: c.offersPersist(req.tool, persist),
 	}))
 	c.approval.promptEmitMu.Unlock()
 	// The agent now needs the user's attention; a Notification hook can ping an
@@ -582,5 +651,111 @@ func (c *Controller) requestApprovalDecision(ctx context.Context, req approvalRe
 }
 
 func (c *Controller) approvalRequestEvent(approval event.Approval) event.Event {
+	approval.Scope = c.approvalScope(approval.Tool)
 	return event.Event{Kind: event.ApprovalRequest, Approval: approval}
+}
+
+// ToolApprovalReadOnly refuses every call that is not a read, whatever the
+// rules allow; no approval can talk a write past it.
+const ToolApprovalReadOnly = "readOnly"
+
+// PostureEvidence is what a terminal session's default posture is decided
+// from. WritesConfined is the bash sandbox's Integrity claim for this build,
+// as its backend reports it; Home is where the person recorded folder trust.
+type PostureEvidence struct {
+	WritesConfined bool
+	Home           string
+}
+
+// DefaultApprovalMode is the posture a session opens in when nobody named one:
+// writes inside the workspace run without asking only where an OS sandbox
+// confines them and the person trusted this folder. Everywhere else — no
+// backend, bash off, Windows, an undecided or declined folder — it asks.
+func DefaultApprovalMode(writesConfined bool, trust config.WorkspaceTrust) string {
+	if writesConfined && trust == config.WorkspaceTrusted {
+		return ToolApprovalAuto
+	}
+	return ToolApprovalAsk
+}
+
+// DefaultApprovalMode reads the trust record now, so a folder trusted after
+// this controller was built counts.
+func (c *Controller) DefaultApprovalMode() string {
+	if !TrustableFolder(c.WorkspaceRoot()) {
+		return ToolApprovalAsk
+	}
+	return DefaultApprovalMode(c.posture.WritesConfined, c.WorkspaceTrust())
+}
+
+// TrustableFolder leaves out the folders nobody should grant wholesale: a
+// filesystem root, a home directory or anything holding one, and Reasonix's own
+// storage and the directories that hold keys and credentials, whose files decide
+// what the agent may do. config.Roots.FolderGrantRefusal is the one judgement;
+// extra workspace roots read it too.
+func TrustableFolder(root string) bool {
+	_, refused := config.RootsForHome("").FolderGrantRefusal(root)
+	return !refused
+}
+
+// WorkspaceTrust is the person's recorded decision about this workspace; an
+// unreadable record is undecided, which costs a prompt and grants nothing.
+func (c *Controller) WorkspaceTrust() config.WorkspaceTrust {
+	trust, _ := config.NewProjectGrantStore(c.posture.Home).Trust(c.WorkspaceRoot())
+	return trust
+}
+
+// ApplyDefaultPosture opens the session in DefaultApprovalMode and remembers
+// that nobody named it, so a later decision about the folder may move it.
+func (c *Controller) ApplyDefaultPosture() {
+	c.applyDefaultPosture(false)
+}
+
+func (c *Controller) applyDefaultPosture(onlyIfDefaulted bool) {
+	mode := c.DefaultApprovalMode()
+	c.switchApprovalMode(mode, func() ([]drainedApproval, bool) { return c.approval.setDefaultMode(mode, onlyIfDefaulted) })
+}
+
+// ErrUntrustableFolder refuses trust for a folder TrustableFolder leaves out.
+var ErrUntrustableFolder = errors.New("a filesystem root, a folder holding a home directory, or Reasonix's own directories are not trusted as a whole")
+
+// DecideWorkspaceTrust records the person's answer about this workspace. A
+// session still on its default posture follows the answer at once; a posture
+// somebody named is theirs and stays.
+func (c *Controller) DecideWorkspaceTrust(trust config.WorkspaceTrust) error {
+	if trust == config.WorkspaceTrusted && !TrustableFolder(c.WorkspaceRoot()) {
+		return ErrUntrustableFolder
+	}
+	if err := c.SetWorkspaceTrust(trust); err != nil {
+		return err
+	}
+	c.applyDefaultPosture(true)
+	return nil
+}
+
+// PostureReport is what a frontend needs to explain the posture a session is
+// in: whether it is the default, and the two facts the default is read from.
+type PostureReport struct {
+	Defaulted      bool                  `json:"defaulted"`
+	WritesConfined bool                  `json:"writesConfined"`
+	Trust          config.WorkspaceTrust `json:"trust"`
+	Trustable      bool                  `json:"trustable"`
+}
+
+// Posture reports the session's posture origin and its evidence.
+func (c *Controller) Posture() PostureReport {
+	return PostureReport{
+		Defaulted:      c.approval.defaulted(),
+		WritesConfined: c.posture.WritesConfined,
+		Trust:          c.WorkspaceTrust(),
+		Trustable:      TrustableFolder(c.WorkspaceRoot()),
+	}
+}
+
+// WritesConfined reports this build's bash Integrity claim.
+func (c *Controller) WritesConfined() bool { return c.posture.WritesConfined }
+
+// SetWorkspaceTrust records the person's decision about this workspace under
+// the same home DefaultApprovalMode reads it from.
+func (c *Controller) SetWorkspaceTrust(trust config.WorkspaceTrust) error {
+	return config.NewProjectGrantStore(c.posture.Home).SetTrust(c.WorkspaceRoot(), trust)
 }

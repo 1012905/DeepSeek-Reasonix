@@ -15,6 +15,8 @@ type PluginEntry struct {
 	Env     map[string]string `toml:"env"`
 	URL     string            `toml:"url"`
 	Headers map[string]string `toml:"headers"`
+	// DisabledTools excludes exact raw names returned by this server in tools/list.
+	DisabledTools []string `toml:"disabled_tools"`
 	// StartupTimeoutSeconds overrides [tools].mcp_startup_timeout_seconds for
 	// initialize + tools/list. Zero keeps the global/default cap.
 	StartupTimeoutSeconds int `toml:"startup_timeout_seconds"`
@@ -34,16 +36,11 @@ type PluginEntry struct {
 	// AutoStart controls whether the server connects during session startup.
 	// Nil preserves historical behavior: configured servers start automatically.
 	AutoStart *bool `toml:"auto_start"`
-	// Tier is a legacy compatibility field. New config rendering omits it; enabled
-	// MCP servers connect automatically in the background unless auto_start=false.
-	// Historical values are accepted for old files:
-	//   "eager"      — blocks startup until the handshake completes; required for
-	//                  servers whose tools the system prompt depends on.
-	//   "lazy"       — legacy alias for background.
-	//   "background" — placeholder + spawn fired at boot but not waited on;
-	//                  swap happens once the spawn finishes.
-	// Empty defaults to "background" so enabled MCPs connect automatically
-	// without blocking chat. Unknown non-empty values fall back to "background".
+	// Load is "always" to put this server's tools in the provider schema from
+	// session start, or empty/"deferred" to reach them through use_capability.
+	// A [tools.mcp_load] entry for the server overrides it; see MCPAlwaysLoad.
+	Load string `toml:"load"`
+	// Tier is retired: loading strips it from every config file it reads.
 	Tier         string          `toml:"tier"`
 	Source       MCPConfigSource `toml:"-" json:"-"`
 	expansionEnv map[string]string

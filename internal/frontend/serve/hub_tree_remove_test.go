@@ -47,7 +47,7 @@ func TestExportSessionReadsOnlyAKnownWorkspaceTranscript(t *testing.T) {
 	root := testenv.TempDir(t)
 	h := NewHub(HubOptions{})
 	hubRuntime(t, h, root)
-	srv := httptest.NewServer(h.Handler())
+	srv := httptest.NewServer(operatorHandler(h))
 	defer srv.Close()
 
 	path := filepath.Join(SessionDirFor(root), "export-me.jsonl")
@@ -81,6 +81,15 @@ func TestExportSessionReadsOnlyAKnownWorkspaceTranscript(t *testing.T) {
 	if refused.StatusCode != http.StatusForbidden {
 		t.Errorf("outside export = %d, want 403", refused.StatusCode)
 	}
+	link := filepath.Join(SessionDirFor(root), "linked.jsonl")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatal(err)
+	}
+	linked := postExportSession(t, srv, link)
+	defer linked.Body.Close()
+	if linked.StatusCode != http.StatusForbidden {
+		t.Errorf("symlink export = %d, want 403", linked.StatusCode)
+	}
 }
 
 func postRemoveSession(t *testing.T, srv *httptest.Server, path string) *http.Response {
@@ -105,7 +114,7 @@ func TestRemoveSessionRefusesALeasedTranscript(t *testing.T) {
 	root := testenv.TempDir(t)
 	h := NewHub(HubOptions{})
 	hubRuntime(t, h, root)
-	srv := httptest.NewServer(h.Handler())
+	srv := httptest.NewServer(operatorHandler(h))
 	defer srv.Close()
 
 	path := filepath.Join(SessionDirFor(root), "held.jsonl")
@@ -151,7 +160,7 @@ func TestRemoveSessionSucceedsOnceTheLeaseIsReleased(t *testing.T) {
 	root := testenv.TempDir(t)
 	h := NewHub(HubOptions{})
 	hubRuntime(t, h, root)
-	srv := httptest.NewServer(h.Handler())
+	srv := httptest.NewServer(operatorHandler(h))
 	defer srv.Close()
 
 	path := filepath.Join(SessionDirFor(root), "free.jsonl")
@@ -184,7 +193,7 @@ func TestRemoveSessionNamesTheProcessHoldingIt(t *testing.T) {
 	root := testenv.TempDir(t)
 	h := NewHub(HubOptions{})
 	hubRuntime(t, h, root)
-	srv := httptest.NewServer(h.Handler())
+	srv := httptest.NewServer(operatorHandler(h))
 	defer srv.Close()
 
 	path := filepath.Join(SessionDirFor(root), "elsewhere.jsonl")
@@ -249,7 +258,7 @@ func TestRemoveSessionClosesAnIdlePaneShowingIt(t *testing.T) {
 	if _, err := h.Open(context.Background(), OpenRequest{Root: root, SessionPath: path}); err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(h.Handler())
+	srv := httptest.NewServer(operatorHandler(h))
 	defer srv.Close()
 
 	resp := postRemoveSession(t, srv, path)

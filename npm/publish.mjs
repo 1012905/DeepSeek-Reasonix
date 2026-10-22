@@ -34,7 +34,7 @@ function parseSemver(version) {
   };
 }
 
-function compareSemver(a, b) {
+export function compareSemver(a, b) {
   const aa = parseSemver(a);
   const bb = parseSemver(b);
   for (let i = 0; i < aa.core.length; i += 1) {
@@ -227,7 +227,7 @@ function ensurePackage(
   log(`publish ${entry.name}@${version} (${stagingTag})`);
   try {
     runner(
-      ["publish", "--access", "public", "--tag", stagingTag],
+      ["publish", "--access", "public", "--provenance", "--tag", stagingTag],
       { cwd: entry.dir, inherit: true },
     );
   } catch (error) {
@@ -298,7 +298,7 @@ export function publishPackages({
   // npm's public registry can lag a successful immutable publish by several
   // minutes. Keep this bounded, but allow enough time for normal replication
   // before recovery treats the package as missing.
-  attempts = 31,
+  attempts = 91,
   log = console.log,
 }) {
   if (!Array.isArray(packages) || packages.length === 0) {

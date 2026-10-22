@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -17,7 +18,15 @@ import (
 // header phase after the initial try (so up to MaxRetries+1 total attempts).
 const MaxRetries = 10
 
+// RetriesUntilCancelled as a retry limit keeps retrying transient failures
+// until the caller's context ends. Auth and timeout failures keep their own
+// small bounds, and a non-retryable status still returns at once.
+const RetriesUntilCancelled = -1
+
 const maxBackoff = 15 * time.Second
+
+// retryBackoffUnit is the first backoff step; a var so a test can shrink it.
+var retryBackoffUnit = 500 * time.Millisecond
 
 // maxRetryAfter bounds a server-supplied Retry-After. Rate-limit windows are
 // routinely longer than our own backoff cap, and clamping to it just spends
@@ -40,6 +49,12 @@ var errorBodyReadTimeout = 10 * time.Second
 // real config error and fails fast.
 const maxAuthRetries = 2
 
+// maxTimeoutRetries bounds how many times a transport timeout is retried. A
+// model that is still prefilling times out identically on every attempt and
+// each retry restarts that work, so the full budget would multiply one
+// StreamIdleTimeout window by MaxRetries+1 before the user heard anything.
+const maxTimeoutRetries = 1
+
 // SendOptions carries the per-request context SendWithRetry needs to label
 // errors and decide whether a 401 is worth retrying.
 type SendOptions struct {
@@ -48,29 +63,41 @@ type SendOptions struct {
 	KeySource  string // human-readable source of KeyEnv, when known
 	KeyPresent bool   // a non-empty key is being sent — separates "rejected" from "missing"
 	RetryAuth  bool   // the key has authenticated before — retry transient 401s instead of failing fast
-	// BadRequestHint names what this request left out, for the statuses that
-	// mean the body itself was refused. Only the client that built the body
-	// knows it, and it is lost by the time a reader sees the response.
-	BadRequestHint RequestHint
+	// HeaderTimeout is how long one attempt waits for response headers before
+	// the transport gives up on it; zero when the caller did not configure one.
+	HeaderTimeout time.Duration
 }
 
-// RequestHint identifies a host-side fact about a request the endpoint refused.
-// It is an identity, never a sentence: the display layer owns the wording, so a
-// reader is never left matching prose to tell one refusal from another.
-type RequestHint string
+// RetryCause says why the attempt that just failed is being retried. It is an
+// identity, never a sentence: the producer is the only layer that saw the
+// failure, and a reader must not re-derive it from error text.
+type RetryCause string
 
-// HintDroppedToolCallReasoning marks a request that left an assistant
-// tool_calls turn's reasoning behind because the endpoint's reasoning protocol
-// was never declared. Relayed thinking models refuse exactly that shape.
-const HintDroppedToolCallReasoning RequestHint = "dropped_tool_call_reasoning"
+const (
+	// RetryCauseConnectionClosed: the connection was reset or ended before an answer.
+	RetryCauseConnectionClosed RetryCause = "connection_closed"
+	// RetryCauseTimeout: the endpoint did not answer within the transport's deadline.
+	RetryCauseTimeout RetryCause = "timeout"
+	// RetryCauseUpstreamStatus: the endpoint answered with a retryable HTTP status.
+	RetryCauseUpstreamStatus RetryCause = "upstream_status"
+	// RetryCauseStreamIdle: an established stream went silent past its idle timeout.
+	RetryCauseStreamIdle RetryCause = "stream_idle"
+	// RetryCauseUpstreamError: the endpoint reported an error inside an established stream.
+	RetryCauseUpstreamError RetryCause = "upstream_error"
+)
 
 // RetryInfo describes a backoff about to happen: Attempt is the 1-based retry
-// number (of Max) and Delay is how long SendWithRetry will wait before it.
+// number (of Max; zero Max means no limit) and Delay is how long SendWithRetry will wait before it.
+// Cause and Status describe the failure being retried; Timeout is how long the
+// coming attempt waits for response headers.
 type RetryInfo struct {
 	Attempt int
 	Max     int
 	Delay   time.Duration
 	Err     error
+	Cause   RetryCause
+	Status  int
+	Timeout time.Duration
 }
 
 type RetryNotify func(RetryInfo)
@@ -100,12 +127,16 @@ func retryNotifyFromContext(ctx context.Context) RetryNotify {
 }
 
 // WithRetryLimit caps connection/header retries for a single logical request.
-// A zero limit makes an explicit diagnostic perform exactly one HTTP attempt.
+// A zero limit makes an explicit diagnostic perform exactly one HTTP attempt;
+// RetriesUntilCancelled removes the cap.
 func WithRetryLimit(ctx context.Context, retries int) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return context.WithValue(ctx, retryLimitKey{}, max(0, min(retries, MaxRetries)))
+	if retries < 0 {
+		retries = RetriesUntilCancelled
+	}
+	return context.WithValue(ctx, retryLimitKey{}, retries)
 }
 
 func retryLimitFromContext(ctx context.Context) int {
@@ -130,6 +161,10 @@ func WithRequestAttemptCounter(ctx context.Context) context.Context {
 	if counter, _ := ctx.Value(requestAttemptCounterKey{}).(*requestAttemptCounter); counter != nil {
 		return ctx
 	}
+	return context.WithValue(ctx, requestAttemptCounterKey{}, &requestAttemptCounter{})
+}
+
+func WithIndependentRequestAttemptCounter(ctx context.Context) context.Context {
 	return context.WithValue(ctx, requestAttemptCounterKey{}, &requestAttemptCounter{})
 }
 
@@ -195,9 +230,8 @@ type APIError struct {
 	Provider    string
 	Status      int
 	Body        string
-	TraceID     string      // provider trace identifier from the response headers, when present
-	ToolContext string      // resolved Reasonix/MCP identity for provider-indexed tool schema errors
-	Hint        RequestHint // what the built request left out; empty when nothing is known
+	TraceID     string // provider trace identifier from the response headers, when present
+	ToolContext string // what the host knows about the part of the request a rejection points at: a tool's identity, or the shape of the request body
 }
 
 func (e *APIError) Error() string {
@@ -220,20 +254,19 @@ func RetryableStatus(s int) bool {
 	return s == http.StatusRequestTimeout || s == http.StatusTooManyRequests || (s >= 500 && s <= 599)
 }
 
-// bodyRejected reports the statuses that mean the request body was refused, as
-// opposed to the caller's credentials, its quota, or the server's own state.
-func bodyRejected(s int) bool {
-	return s == http.StatusBadRequest || s == http.StatusUnprocessableEntity
+// transientErr asks the caller's context whether it gave up, not the error: the
+// transport's own timeouts (response headers, dial) also satisfy
+// errors.Is(err, context.DeadlineExceeded) while the caller is still waiting.
+func transientErr(ctx context.Context, err error) bool {
+	if err == nil || ctx.Err() != nil {
+		return false
+	}
+	return !errors.Is(err, context.Canceled)
 }
 
-func transientErr(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return false
-	}
-	return true
+func transportTimeout(err error) bool {
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 func backoffDelay(attempt int, retryAfter time.Duration) time.Duration {
@@ -243,7 +276,7 @@ func backoffDelay(attempt int, retryAfter time.Duration) time.Duration {
 		}
 		return retryAfter
 	}
-	d := min(time.Duration(1<<(attempt-1))*500*time.Millisecond, maxBackoff)
+	d := min(time.Duration(1<<min(attempt-1, 16))*retryBackoffUnit, maxBackoff)
 	return d + time.Duration(rand.IntN(250))*time.Millisecond
 }
 
@@ -299,13 +332,16 @@ func SendWithRetry(ctx context.Context, httpClient *http.Client, opts SendOption
 	retryLimit := retryLimitFromContext(ctx)
 	var lastErr error
 	var retryAfter time.Duration
+	var cause RetryCause
+	var status int
 	authRetries := 0
+	timeoutRetries := 0
 
-	for attempt := 0; attempt <= retryLimit; attempt++ {
+	for attempt := 0; retryLimit == RetriesUntilCancelled || attempt <= retryLimit; attempt++ {
 		if attempt > 0 {
 			delay := backoffDelay(attempt, retryAfter)
 			if notify != nil {
-				notify(RetryInfo{Attempt: attempt, Max: retryLimit, Delay: delay, Err: lastErr})
+				notify(RetryInfo{Attempt: attempt, Max: max(retryLimit, 0), Delay: delay, Err: lastErr, Cause: cause, Status: status, Timeout: opts.HeaderTimeout})
 			}
 			select {
 			case <-ctx.Done():
@@ -322,10 +358,18 @@ func SendWithRetry(ctx context.Context, httpClient *http.Client, opts SendOption
 		recordRequestAttempt(ctx)
 		resp, err := httpClient.Do(req)
 		if err != nil {
-			if !transientErr(err) {
-				return nil, fmt.Errorf("%s: request failed: %w", opts.Provider, err)
-			}
 			lastErr = fmt.Errorf("%s: request failed: %w", opts.Provider, err)
+			if !transientErr(ctx, err) || permanentTransportErr(err) {
+				return nil, lastErr
+			}
+			cause, status = RetryCauseConnectionClosed, 0
+			if transportTimeout(err) {
+				if timeoutRetries >= maxTimeoutRetries {
+					return nil, lastErr
+				}
+				timeoutRetries++
+				cause = RetryCauseTimeout
+			}
 			continue
 		}
 		if resp.StatusCode == http.StatusOK {
@@ -334,6 +378,7 @@ func SendWithRetry(ctx context.Context, httpClient *http.Client, opts SendOption
 
 		msg := readErrorBody(resp)
 		retryAfter = parseRetryAfter(resp)
+		cause, status = RetryCauseUpstreamStatus, resp.StatusCode
 
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 			authErr := &AuthError{Provider: opts.Provider, KeyEnv: opts.KeyEnv, KeySource: opts.KeySource, Status: resp.StatusCode, HasKey: opts.KeyPresent, Body: strings.TrimSpace(string(msg))}
@@ -349,9 +394,6 @@ func SendWithRetry(ctx context.Context, httpClient *http.Client, opts SendOption
 			Status:   resp.StatusCode,
 			Body:     strings.TrimSpace(string(msg)),
 			TraceID:  responseTraceID(resp.Header),
-		}
-		if bodyRejected(resp.StatusCode) {
-			apiErr.Hint = opts.BadRequestHint
 		}
 		if !RetryableStatus(resp.StatusCode) {
 			return nil, apiErr

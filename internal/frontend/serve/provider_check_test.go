@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -20,7 +21,7 @@ import (
 func TestCheckProviderReportsWhatTheEndpointSaid(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp := postProvider(t, srv.URL, "/providers/check", `{"name":"existing"}`)
@@ -36,8 +37,8 @@ func TestCheckProviderReportsWhatTheEndpointSaid(t *testing.T) {
 	if got.OK {
 		t.Fatalf("an unreachable endpoint reported ok: %+v", got)
 	}
-	if got.Error == "" {
-		t.Fatal("a failed probe must carry the endpoint's own words")
+	if got.Code != codeProbeUnreachable {
+		t.Fatalf("code = %q, want the typed identity of an unreachable endpoint", got.Code)
 	}
 	if len(got.Models) != 0 {
 		t.Fatalf("a failed probe reported models: %v", got.Models)
@@ -47,7 +48,7 @@ func TestCheckProviderReportsWhatTheEndpointSaid(t *testing.T) {
 func TestCheckProviderRefusesAnUnknownName(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp := postProvider(t, srv.URL, "/providers/check", `{"name":"nobody"}`)
@@ -61,7 +62,7 @@ func TestCheckProviderRefusesAnUnknownName(t *testing.T) {
 // it waits on the same grant every other provider edit does.
 func TestCheckProviderWaitsOnTheGrant(t *testing.T) {
 	s := newProviderEditServer(t)
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp := postProvider(t, srv.URL, "/providers/check", `{"name":"existing"}`)
@@ -104,7 +105,7 @@ func TestCheckProviderModelAcceptsAnUnlistedExactIDWithoutSavingIt(t *testing.T)
 		t.Fatal(err)
 	}
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp := postProvider(t, srv.URL, "/providers/check/model", `{"name":"existing","model":"Hidden-Preview/Exact-ID"}`)
@@ -141,7 +142,7 @@ func TestCheckProviderModelUsesUnsavedEndpointAndKeyOnlyForTheProbe(t *testing.T
 
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 	body := fmt.Sprintf(`{"name":"not-saved","model":"private-model","baseUrl":%q,"apiKey":"one-time-key","kind":"openai"}`, upstream.URL+"/v1")
 	resp := postProvider(t, srv.URL, "/providers/check/model", body)
@@ -155,6 +156,171 @@ func TestCheckProviderModelUsesUnsavedEndpointAndKeyOnlyForTheProbe(t *testing.T
 	}
 	if _, ok := config.LoadForEdit(config.UserConfigPath()).Provider("not-saved"); ok {
 		t.Fatal("an inline probe persisted its temporary provider")
+	}
+}
+
+func TestCheckProviderModelUsesSystemOneForTypeSafe(t *testing.T) {
+	calls := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/systemone" || r.Header.Get("Authorization") != "Bearer one-time-key" {
+			t.Errorf("request = %s %s auth=%q", r.Method, r.URL.Path, r.Header.Get("Authorization"))
+		}
+		var request struct {
+			State     any    `json:"state"`
+			Model     string `json:"model"`
+			Questions map[string]struct {
+				Type         string `json:"type"`
+				Instructions any    `json:"instructions"`
+			} `json:"questions"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+		}
+		if request.State == nil || request.Model != "jev-latest" || len(request.Questions) != 1 {
+			t.Errorf("decision request = %+v", request)
+		}
+		for _, question := range request.Questions {
+			if question.Type != "noul" || question.Instructions == nil {
+				t.Errorf("question = %+v", question)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"model":"jev-latest","answers":{"probe":{"type":"noul","noul":0.9}}}`))
+	}))
+	defer upstream.Close()
+
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+	body := fmt.Sprintf(`{"name":"not-saved","model":"jev-latest","baseUrl":%q,"apiKey":"one-time-key","kind":"typesafe"}`, upstream.URL)
+	resp := postProvider(t, srv.URL, "/providers/check/model", body)
+	defer resp.Body.Close()
+	var got providerModelCheck
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "available" || got.Model != "jev-latest" || calls != 1 {
+		t.Fatalf("check = %+v, upstream calls = %d; want one successful System One request", got, calls)
+	}
+}
+
+func TestCheckProviderModelUsesSavedDecisionKindAndEnvironmentKey(t *testing.T) {
+	calls := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.URL.Path != "/v1/systemone" || r.Header.Get("Authorization") != "Bearer process-key" {
+			t.Errorf("request path/auth = %q/%q", r.URL.Path, r.Header.Get("Authorization"))
+		}
+		_, _ = w.Write([]byte(`{"answers":{"probe":{"type":"noul","noul":0.5}}}`))
+	}))
+	defer upstream.Close()
+
+	s := newProviderEditServer(t)
+	t.Setenv("TYPESAFE_API_KEY", "process-key")
+	edit := config.LoadForEdit(config.UserConfigPath())
+	entry, ok := edit.Provider("existing")
+	if !ok {
+		t.Fatal("fixture provider is missing")
+	}
+	entry.Kind = "TypeSafe"
+	entry.BaseURL = upstream.URL
+	entry.APIKeyEnv = "TYPESAFE_API_KEY"
+	if err := edit.SaveTo(config.UserConfigPath()); err != nil {
+		t.Fatal(err)
+	}
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+	resp := postProvider(t, srv.URL, "/providers/check/model", `{"name":"existing","model":"jev-latest"}`)
+	defer resp.Body.Close()
+	var got providerModelCheck
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "available" || calls != 1 {
+		t.Fatalf("check = %+v, upstream calls = %d; want env-authenticated decision request", got, calls)
+	}
+}
+
+func TestCheckProviderModelRejectsMalformedTypeSafeSuccess(t *testing.T) {
+	for _, body := range []string{
+		`{}`,
+		`{"answers":{"probe":{"type":"choice","noul":0.5}}}`,
+		`{"answers":{"probe":{"type":"noul"}}}`,
+		`{"answers":{"probe":{"type":"noul","noul":1.1}}}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(body))
+			}))
+			defer upstream.Close()
+			s := newProviderEditServer(t)
+			s.AllowProviderEdit()
+			srv := httptest.NewServer(operatorHandler(s))
+			defer srv.Close()
+			request := fmt.Sprintf(`{"name":"not-saved","model":"jev-latest","baseUrl":%q,"apiKey":"one-time-key","kind":"typesafe"}`, upstream.URL)
+			resp := postProvider(t, srv.URL, "/providers/check/model", request)
+			defer resp.Body.Close()
+			var got providerModelCheck
+			if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+				t.Fatal(err)
+			}
+			if got.Status != "unknown" || got.Reason != "rejected" {
+				t.Fatalf("check = %+v for response %s; want unconfirmed rejection", got, body)
+			}
+		})
+	}
+}
+
+func TestCheckProviderModelClassifiesTypeSafeHTTPFailure(t *testing.T) {
+	tests := []struct {
+		name       string
+		httpStatus int
+		body       string
+		status     string
+		reason     string
+	}{
+		{"auth", http.StatusUnauthorized, `{"detail":"one-time-key is invalid"}`, "unknown", "auth"},
+		{"rate limit", http.StatusTooManyRequests, `{"detail":"one-time-key is limited"}`, "unknown", "rate_limited"},
+		{"missing model", http.StatusNotFound, `{"error":{"code":"model_not_found"}}`, "unavailable", "not_found"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				if r.URL.Path != "/v1/systemone" {
+					t.Errorf("path = %q", r.URL.Path)
+				}
+				w.WriteHeader(tt.httpStatus)
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer upstream.Close()
+
+			s := newProviderEditServer(t)
+			s.AllowProviderEdit()
+			srv := httptest.NewServer(operatorHandler(s))
+			defer srv.Close()
+			body := fmt.Sprintf(`{"name":"not-saved","model":"jev-latest","baseUrl":%q,"apiKey":"one-time-key","kind":"typesafe"}`, upstream.URL)
+			resp := postProvider(t, srv.URL, "/providers/check/model", body)
+			defer resp.Body.Close()
+			raw, err := readAllString(resp)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(raw, "one-time-key") {
+				t.Fatalf("response leaked the temporary key: %s", raw)
+			}
+			var got providerModelCheck
+			if err := json.Unmarshal([]byte(raw), &got); err != nil {
+				t.Fatal(err)
+			}
+			if got.Status != tt.status || got.Reason != tt.reason || got.HTTPStatus != tt.httpStatus || calls != 1 {
+				t.Fatalf("check = %+v, upstream calls = %d; want %s/%s/%d in one request", got, calls, tt.status, tt.reason, tt.httpStatus)
+			}
+		})
 	}
 }
 
@@ -179,7 +345,7 @@ func TestCheckProviderModelReportsAnEndpointThatRefusesTools(t *testing.T) {
 
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 	body := fmt.Sprintf(`{"name":"not-saved","model":"m","baseUrl":%q,"apiKey":"k","kind":"openai"}`, upstream.URL+"/v1")
 	resp := postProvider(t, srv.URL, "/providers/check/model", body)
@@ -210,7 +376,7 @@ func TestCheckProviderModelKeepsRejectionWhenRemovingToolsDoesNotHelp(t *testing
 
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 	body := fmt.Sprintf(`{"name":"not-saved","model":"m","baseUrl":%q,"apiKey":"k","kind":"openai"}`, upstream.URL+"/v1")
 	resp := postProvider(t, srv.URL, "/providers/check/model", body)
@@ -240,7 +406,7 @@ func TestCheckProviderModelRateLimitIsOneRedactedAttempt(t *testing.T) {
 
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 	body := fmt.Sprintf(`{"name":"not-saved","model":"private-model","baseUrl":%q,"apiKey":"one-time-key"}`, upstream.URL+"/v1")
 	resp := postProvider(t, srv.URL, "/providers/check/model", body)
@@ -287,5 +453,140 @@ func TestClassifyProviderModelCheckUsesTypedAndStructuredFailures(t *testing.T) 
 				t.Fatalf("classify = %q/%q/%d, want %q/%q/%d", status, reason, httpStatus, tt.status, tt.reason, tt.httpStatus)
 			}
 		})
+	}
+}
+
+// relayWithOnlyV1Models answers a model list under /v1 and nothing at the bare
+// host, the shape of a relay whose chat lives under /v1 as well.
+func relayWithOnlyV1Models(t *testing.T) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":[{"id":"model-x"}]}`))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestProbeReturnsTheBaseThatAnswered(t *testing.T) {
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+	relay := relayWithOnlyV1Models(t)
+
+	resp := postProvider(t, srv.URL, "/providers/probe", fmt.Sprintf(`{"baseUrl":%q,"apiKey":"k"}`, relay.URL))
+	defer resp.Body.Close()
+	var got struct {
+		Kind    string `json:"kind"`
+		BaseURL string `json:"baseUrl"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Kind != "openai" || got.BaseURL != relay.URL+"/v1" {
+		t.Fatalf("probe = %+v, want openai with baseUrl %s/v1", got, relay.URL)
+	}
+
+	save := postProvider(t, srv.URL, "/providers", fmt.Sprintf(`{"name":"relay","kind":"openai","baseUrl":%q,"apiKey":"k","models":["model-x"],"default":"model-x"}`, got.BaseURL))
+	defer save.Body.Close()
+	if save.StatusCode != http.StatusOK {
+		b, _ := readAllString(save)
+		t.Fatalf("save = %d: %s", save.StatusCode, b)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, ok := cfg.Provider("relay")
+	if !ok || saved.BaseURL != relay.URL+"/v1" {
+		t.Fatalf("saved base = %+v, want the completed %s/v1", saved, relay.URL)
+	}
+}
+
+func TestCheckReportsTheCompletedBaseWithoutWritingIt(t *testing.T) {
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+	relay := relayWithOnlyV1Models(t)
+	t.Setenv("EXISTING_API_KEY", "k")
+	if _, err := config.SetCredential("EXISTING_API_KEY", "k"); err != nil {
+		t.Fatal(err)
+	}
+	path := config.UserConfigPath()
+	raw, _ := os.ReadFile(path)
+	if err := os.WriteFile(path, []byte(strings.ReplaceAll(string(raw), "https://example.invalid/v1", relay.URL)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := postProvider(t, srv.URL, "/providers/check", `{"name":"existing"}`)
+	defer resp.Body.Close()
+	var got providerCheck
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.OK || got.BaseURL != relay.URL+"/v1" {
+		t.Fatalf("check = %+v, want ok with baseUrl %s/v1", got, relay.URL)
+	}
+	after, _ := os.ReadFile(path)
+	if string(after) != strings.ReplaceAll(string(raw), "https://example.invalid/v1", relay.URL) {
+		t.Fatal("a check rewrote the saved config")
+	}
+}
+
+// The connection test reads what is on the form, not only what is saved: an
+// address or key being edited has to be testable before it is written, and the
+// saved entry is the same afterwards.
+func TestCheckProviderUsesTheUnsavedAddressAndKeyAndPersistsNothing(t *testing.T) {
+	var authorization string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			http.NotFound(w, r)
+			return
+		}
+		authorization = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"data":[{"id":"draft-model"}]}`)
+	}))
+	defer upstream.Close()
+
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+	body := fmt.Sprintf(`{"name":"existing","baseUrl":%q,"apiKey":"draft-key"}`, upstream.URL+"/v1")
+	resp := postProvider(t, srv.URL, "/providers/check", body)
+	defer resp.Body.Close()
+	var got providerCheck
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.OK || len(got.Models) != 1 || got.Models[0] != "draft-model" {
+		t.Fatalf("check of the unsaved address = %+v, want ok with its model", got)
+	}
+	if authorization != "Bearer draft-key" {
+		t.Fatalf("the endpoint saw %q, want the key typed on the form", authorization)
+	}
+	saved, ok := config.LoadForEdit(config.UserConfigPath()).Provider("existing")
+	if !ok || saved.BaseURL != "https://example.invalid/v1" {
+		t.Fatalf("the saved entry changed to %+v; a check must not edit what it tests", saved)
+	}
+}
+
+func TestCheckProviderRefusesAnUnsupportedDraftKind(t *testing.T) {
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+	resp := postProvider(t, srv.URL, "/providers/check", `{"name":"existing","kind":"nonsense"}`)
+	defer resp.Body.Close()
+	var reason Reason
+	_ = json.NewDecoder(resp.Body).Decode(&reason)
+	if resp.StatusCode != http.StatusBadRequest || reason.Code != "provider.kind_unsupported" {
+		t.Fatalf("status %d code %q, want 400 provider.kind_unsupported", resp.StatusCode, reason.Code)
 	}
 }

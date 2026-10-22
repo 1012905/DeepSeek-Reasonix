@@ -76,10 +76,12 @@ func init() { tool.RegisterBuiltin(grepTool{}) }
 // sb is the OS sandbox spec for the ripgrep subprocess, making forbid-read
 // directories invisible to ripgrep instead of checking them in-process.
 type grepTool struct {
+	netRoots    []string
 	workDir     string
 	paths       *PathResolver
 	rg          string
 	forbidRoots []string
+	readRoots   []string
 	sb          sandbox.Spec
 	sessionTemp *sessiontemp.Manager
 }
@@ -99,6 +101,8 @@ func (grepTool) Schema() json.RawMessage {
 }
 
 func (grepTool) ReadOnly() bool { return true }
+
+func (grepTool) Reach() tool.Reach { return tool.ReachLocalRead }
 
 // SnipHint keeps a long head of matches and a short tail: the first matches are
 // the ones the model usually acts on, the tail just confirms scope.
@@ -141,11 +145,17 @@ func (g grepTool) Execute(ctx context.Context, args json.RawMessage) (string, er
 	}
 	rp := resolveReadablePath(g.workDir, p.Path, g.paths)
 	p.Path = rp.Path
+	if err := rp.refuseNetwork(g.netRoots); err != nil {
+		return "", err
+	}
 
 	to := toolTimeout(p.TimeoutSeconds, grepDefaultTimeout, grepMaxTimeout)
 	ctx, cancel := context.WithTimeout(ctx, to)
 	defer cancel()
 
+	if err := confineScope(g.readRoots, p.Path); err != nil {
+		return "", err
+	}
 	info, err := os.Stat(p.Path)
 	if err != nil {
 		if rp.External {
@@ -222,9 +232,6 @@ func (g grepTool) nativePass(ctx context.Context, pattern, path, glob string, in
 
 	// searchFile returns io.EOF as a sentinel once the cap is reached.
 	searchFile := func(file string) error {
-		if confineRead(g.forbidRoots, file) {
-			return nil
-		}
 		f, err := os.Open(file)
 		if err != nil {
 			return nil // skip unreadable files
@@ -244,10 +251,14 @@ func (g grepTool) nativePass(ctx context.Context, pattern, path, glob string, in
 			}
 		}
 
-		// Minus any character the fixed window cut in half: that byte alone
-		// fails utf8.Valid, and GB18030 then wins for a UTF-8 file. The rest
-		// streams through a decoder so the match cap can stop reading early.
-		enc, _ := fileenc.Detect(fileenc.TrimPartialRune(peek))
+		// A full peek is only the start of the file and can end inside a
+		// character. The rest streams through a decoder so the match cap can
+		// stop reading early.
+		detect := fileenc.Detect
+		if n == len(peekBuf) {
+			detect = fileenc.DetectFragment
+		}
+		enc, _ := detect(peek)
 
 		var src io.Reader
 		if enc == fileenc.UTF16LE || enc == fileenc.UTF16BE {
@@ -293,7 +304,7 @@ func (g grepTool) nativePass(ctx context.Context, pattern, path, glob string, in
 
 	if info.IsDir() {
 		root := path // the walk callback shadows path with each entry
-		ig := newWalkIgnorer(path, g.forbidRoots, wide)
+		ig := newWalkIgnorer(path, g.forbidRoots, g.readRoots, wide)
 		_ = filepath.WalkDir(path, func(path string, d os.DirEntry, err error) error {
 			if ctx.Err() != nil {
 				return ctx.Err() // abort promptly on cancel — a huge tree is interruptible
@@ -302,13 +313,13 @@ func (g grepTool) nativePass(ctx context.Context, pattern, path, glob string, in
 				return nil
 			}
 			if d.IsDir() {
-				if ig.skip(path, d.Name(), true) {
+				if ig.skip(path, d) {
 					return filepath.SkipDir
 				}
 				ig.enter(path)
 				return nil
 			}
-			if ig.skip(path, d.Name(), false) || !grepGlobMatches(glob, root, path) {
+			if ig.skip(path, d) || ig.confine.blocked(path, d) || !grepGlobMatches(glob, root, path) {
 				return nil
 			}
 			if errors.Is(searchFile(path), io.EOF) {
@@ -316,7 +327,7 @@ func (g grepTool) nativePass(ctx context.Context, pattern, path, glob string, in
 			}
 			return nil
 		})
-	} else {
+	} else if !confineRead(g.forbidRoots, path) {
 		_ = searchFile(path)
 	}
 
@@ -351,6 +362,8 @@ func (g grepTool) ripgrepPass(ctx context.Context, pattern, path, glob string, d
 	args := []string{
 		g.rg,
 		"--no-heading", "--line-number", "--with-filename", "--color", "never",
+		// Ripgrep does not follow links unless told to; stated so that stays true.
+		"--no-follow",
 	}
 	if wide {
 		// The ignore rules and nothing else: the VCS store is history rather
@@ -376,7 +389,11 @@ func (g grepTool) ripgrepPass(ctx context.Context, pattern, path, glob string, d
 			"--glob", "!.ssh/**",
 		)
 	}
-	args = append(args, "--regexp", pattern, "--", path)
+	target, err := ripgrepTarget(path, directory)
+	if err != nil {
+		return nil, false, false, ripgrepDisplayError(err, target, path, rp)
+	}
+	args = append(args, "--regexp", pattern, "--", target)
 
 	var lease *sessiontemp.Lease
 	sessionDir := ""
@@ -396,10 +413,9 @@ func (g grepTool) ripgrepPass(ctx context.Context, pattern, path, glob string, d
 	}
 
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	// Ripgrep anchors slash-containing globs to its process directory on Windows.
-	// Search from the requested root so both engines keep the same glob contract.
+	// Keep glob anchoring local to this subprocess, never the host process.
 	if directory {
-		cmd.Dir = path
+		cmd.Dir = target
 	}
 	cmd.Env = applyEnvOverrides(secrets.ProcessEnv(), prepared.EnvOverrides)
 	proc.HideWindow(cmd)
@@ -410,7 +426,7 @@ func (g grepTool) ripgrepPass(ctx context.Context, pattern, path, glob string, d
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
-		return nil, false, wrapped, fmt.Errorf("ripgrep: %w", err)
+		return nil, false, wrapped, ripgrepDisplayError(err, target, path, rp)
 	}
 
 	var out []string
@@ -418,7 +434,11 @@ func (g grepTool) ripgrepPass(ctx context.Context, pattern, path, glob string, d
 	sc := bufio.NewScanner(stdout)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for sc.Scan() {
-		out = append(out, displayRipgrepLine(sc.Text(), rp))
+		line := sc.Text()
+		if directory {
+			line = restoreRipgrepPath(line, target, path)
+		}
+		out = append(out, displayRipgrepLine(line, rp))
 		if len(out) >= grepMaxMatches {
 			truncated = true
 			break
@@ -434,10 +454,7 @@ func (g grepTool) ripgrepPass(ctx context.Context, pattern, path, glob string, d
 		// ripgrep exits 1 with no output for "no matches"; a real failure (bad
 		// pattern, unreadable path) writes a message to stderr.
 		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			if rp.External {
-				msg = rp.ErrorText(fmt.Errorf("%s", msg))
-			}
-			return nil, false, wrapped, fmt.Errorf("ripgrep: %s", msg)
+			return nil, false, wrapped, ripgrepDisplayError(errors.New(msg), target, path, rp)
 		}
 	}
 	return out, truncated, wrapped, nil

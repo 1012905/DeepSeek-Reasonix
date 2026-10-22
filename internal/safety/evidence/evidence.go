@@ -59,6 +59,32 @@ type DeliveryCheckpoint struct {
 	// checkpoint written before contracts existed and is never backfilled from
 	// the current declaration: that would invent an acceptance nobody made.
 	Verification *VerificationContract `json:"verification,omitempty"`
+	// OwedReview is the structured review a change in this scope still owes. It
+	// rides the checkpoint because the ledger it is derived from does not.
+	OwedReview *OwedReview `json:"owedReview,omitempty"`
+	// Proven is what a pending change had already proven when the checkpoint
+	// was written; it stands only while every path still holds that content.
+	Proven *ProvenMutation `json:"proven,omitempty"`
+	// Contract names the accepted contract revision's record in Trusted Host
+	// State. The record, not this checkpoint, is the authority.
+	Contract string `json:"contract,omitempty"`
+}
+
+// ProvenMutation pairs the proof a pending change had earned with a content
+// fingerprint of each path it changed, taken when that proof was current.
+type ProvenMutation struct {
+	Paths         map[string]string `json:"paths"`
+	Verified      bool              `json:"verified,omitempty"`
+	SignedOff     bool              `json:"signedOff,omitempty"`
+	Inspected     bool              `json:"inspected,omitempty"`
+	ProjectChecks bool              `json:"projectChecks,omitempty"`
+}
+
+// OwedReview names the review kinds a high-risk change owes and the paths a
+// review has to cover to settle them.
+type OwedReview struct {
+	Kinds []ReviewKind `json:"kinds"`
+	Paths []string     `json:"paths,omitempty"`
 }
 
 // Ledger stores the receipts available to complete_step for the current turn.
@@ -91,6 +117,11 @@ func (l *Ledger) Record(r Receipt) {
 	}
 	r.Command = strings.TrimSpace(r.Command)
 	r.Step = strings.TrimSpace(r.Step)
+	if r.MutationPaths == nil {
+		r.MutationPaths = append(append([]string{}, r.Paths...), r.Created...)
+	} else {
+		r.MutationPaths = append(append(append([]string{}, r.MutationPaths...), r.Paths...), r.Created...)
+	}
 	// Every field that names a file shares one identity. Folding only Paths made
 	// the matchers compare a folded path against an unfolded one, so on Windows
 	// output that carried a change never counted as review of it.
@@ -98,6 +129,7 @@ func (l *Ledger) Record(r Receipt) {
 	r.Showed = normalizePaths(r.Showed)
 	r.Created = normalizePaths(r.Created)
 	r.Viewed = normalizePaths(r.Viewed)
+	r.HostOwned = normalizePaths(r.HostOwned)
 	r.Todos = normalizeTodos(r.Todos)
 	if r.Args != nil {
 		cp := make(json.RawMessage, len(r.Args))
@@ -455,7 +487,7 @@ func PathsProvenInSession(msgs []provider.Message, paths []string, wantWrite boo
 			if failed[tc.ID] {
 				continue
 			}
-			r := ReceiptFromToolCall(tc.Name, json.RawMessage(tc.Arguments), true, facts(tc.Name))
+			r := ReceiptFromToolCall(tc.Name, json.RawMessage(tc.ExecutionArguments()), true, facts(tc.Name))
 			if wantWrite && !r.Write {
 				continue
 			}
@@ -486,7 +518,7 @@ func failedSessionCallIDs(msgs []provider.Message) map[string]bool {
 }
 
 func ReceiptFromToolCall(toolName string, args json.RawMessage, success bool, facts ToolFacts) Receipt {
-	class := ToolCallMutationClass(toolName, args, facts.ReadOnly)
+	class := ToolCallMutationClassWith(toolName, args, facts)
 	r := Receipt{
 		ToolName: toolName,
 		Args:     args,

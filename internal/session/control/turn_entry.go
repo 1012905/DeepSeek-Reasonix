@@ -27,6 +27,10 @@ func turnOutcome(err error) string {
 	if errors.As(err, &readinessErr) {
 		return event.TurnOutcomeFinalReadiness
 	}
+	if info, ok := agent.InspectRunPause(err); ok &&
+		(info.Kind == agent.PauseKindNoProgress || info.Kind == agent.PauseKindPerseveration) {
+		return event.TurnOutcomeNoProgress
+	}
 	return ""
 }
 
@@ -49,11 +53,17 @@ func (c *Controller) SendWithRaw(input, raw string) {
 // plan as an ordinary answer; approving it exits plan mode and continues into
 // execution, rejecting it leaves the next turn free to revise.
 func (c *Controller) runTurnLoop(ctx context.Context, turn orchestratedTurn) error {
+	if err := c.leaveForeignSession(); err != nil {
+		return err
+	}
 	return newTurnOrchestrator(c).runTurnLoop(ctx, turn)
 }
 
 // runOneTurn runs a single model turn with no Goal loop behind it.
 func (c *Controller) runOneTurn(ctx context.Context, turn orchestratedTurn) error {
+	if err := c.leaveForeignSession(); err != nil {
+		return err
+	}
 	return newTurnOrchestrator(c).runOrchestratedTurn(ctx, turn)
 }
 
@@ -62,9 +72,49 @@ func (c *Controller) runOneTurn(ctx context.Context, turn orchestratedTurn) erro
 // composition, checkpoints, hooks, and plan approval. It is for transports that
 // need a blocking request/response boundary, such as ACP session/prompt.
 func (c *Controller) RunTurn(ctx context.Context, input string) error {
+	return c.RunTurnWithRaw(ctx, input, input, "")
+}
+
+// RunTurnWithRaw runs a blocking turn with the user's text separate from the composed input.
+func (c *Controller) RunTurnWithRaw(ctx context.Context, input, raw, invokedSkill string) error {
 	return c.runSynchronousTurn(ctx, nil, func(runCtx context.Context) error {
-		return c.runTurnLoop(runCtx, orchestratedTurn{input: input, raw: input})
+		if invokedSkill != "" {
+			runCtx = withInvokedSkills(runCtx, []string{invokedSkill})
+		}
+		return c.runTurnLoop(runCtx, orchestratedTurn{input: input, raw: raw})
 	})
+}
+
+// turnTags are what one submission carries into the turn it becomes: its
+// output format and the paired device it came from. They ride the turn's
+// context, never a controller slot, so two requests cannot trade them.
+type turnTags struct {
+	format string
+	via    *provider.Via
+	// refuseUnknownSlash answers a slash command nothing resolves with a notice
+	// instead of sending the line to the model as prose.
+	refuseUnknownSlash bool
+}
+
+type turnViaKey struct{}
+
+// withTurnTags binds a submission's tags to the turn context.
+func (c *Controller) withTurnTags(ctx context.Context, tags turnTags) context.Context {
+	return withTurnVia(c.withTurnFormat(ctx, tags.format), tags.via)
+}
+
+func withTurnVia(ctx context.Context, via *provider.Via) context.Context {
+	if via == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, turnViaKey{}, via)
+}
+
+// turnVia is the paired device the turn's message came from, nil for the
+// window.
+func turnVia(ctx context.Context) *provider.Via {
+	via, _ := ctx.Value(turnViaKey{}).(*provider.Via)
+	return via
 }
 
 // withTurnFormat binds a structured-output format to the turn context
@@ -77,9 +127,9 @@ func (c *Controller) withTurnFormat(ctx context.Context, format string) context.
 	return agent.WithResponseFormat(ctx, format)
 }
 
-func (c *Controller) runSubagentSkillSlash(sk skill.Skill, task, raw, display string) {
+func (c *Controller) runSubagentSkillSlash(sk skill.Skill, task, raw, display string) admissionResult {
 	sk = c.skills.prepare(sk)
-	c.runGuarded(func(ctx context.Context) error {
+	return c.runGuarded(func(ctx context.Context) error {
 		planMode := c.PlanMode()
 		runner := c.skillRunner
 		if runner == nil {
@@ -137,14 +187,14 @@ func isNonTurnHTTPInput(input string) bool {
 // runRefTurn resolves the turn's @references into a context block and starts a
 // turn with it prepended (or the raw line when nothing resolved), under turn
 // admission.
-func (c *Controller) runRefTurn(r refTurn) {
-	c.runGuarded(func(ctx context.Context) error { return c.runRefTurnSync(ctx, r) })
+func (c *Controller) runRefTurn(r refTurn) admissionResult {
+	return c.runGuarded(func(ctx context.Context) error { return c.runRefTurnSync(ctx, r) })
 }
 
 // runRefTurnSync is runRefTurn on the caller's goroutine, for a caller that
 // already holds turn admission.
 func (c *Controller) runRefTurnSync(ctx context.Context, r refTurn) error {
-	ctx = c.withTurnFormat(ctx, r.format)
+	ctx = c.withTurnTags(ctx, r.tags)
 	resolve := r.resolve
 	if resolve == nil {
 		resolve = c.ResolveRefs
@@ -166,16 +216,15 @@ func (c *Controller) runRefTurnSync(ctx context.Context, r refTurn) error {
 	})
 }
 
-// Run executes a turn synchronously, returning the agent's error. Used by the
-// headless `reasonix run` path, where the Sink renders to stdout and the caller
-// just needs the exit status — no TurnDone event, no cancel bookkeeping.
+// runReady is the body of the headless `reasonix run` turn, where the Sink
+// renders to stdout and the caller just needs the exit status — no TurnDone
+// event. Run admits it through runSynchronousTurn.
 func (c *Controller) runReady(ctx context.Context, input string) (err error) {
 	ctx = extension.ContextWithRuntimeOwner(ctx, c.RuntimeOwner())
 	if c.RuntimePhase() == RuntimePhaseDraining {
 		c.emitDrainingNotice()
 		return ErrRuntimeDraining
 	}
-	defer event.RecordTurnCompletion(c.sink)
 	c.maybeSessionStart(ctx)
 	parentSession := c.parentSessionID()
 	ctx = agent.WithParentSession(ctx, parentSession)
@@ -197,7 +246,9 @@ func (c *Controller) runReady(ctx context.Context, input string) (err error) {
 	startMessages := c.messageCount()
 	var marker sessionstore.InFlightTurnMeta
 	defer func() { c.finishInFlightTurn(startMessages, marker) }()
-	c.beginCheckpoint(ctx, input)
+	if err := c.beginCheckpoint(ctx, input); err != nil {
+		return err
+	}
 	if c.hooks.Enabled() {
 		c.mu.Lock()
 		c.turn++

@@ -21,11 +21,26 @@ contextBridge.exposeInMainWorld("reasonixHost", {
   shell: "electron",
   platform: process.platform,
   titleBar,
+  setUnreadBadge: (unread) => ipcRenderer.invoke("window:unread-badge", unread),
   minimiseWindow: () => ipcRenderer.invoke("window:minimise"),
   toggleMaximiseWindow: () => ipcRenderer.invoke("window:toggle-maximise"),
   isWindowMaximised: () => ipcRenderer.invoke("window:is-maximised"),
   closeWindow: () => ipcRenderer.invoke("window:close"),
+  // A PNG of this window's own page, taking nothing: there is no way to name another.
+  captureWindow: () => ipcRenderer.invoke("window:capture"),
+  // What the shell's graphics are running as this launch.
+  graphics: () => ipcRenderer.invoke("shell:graphics"),
+  // The window's processes as type and two sizes, for the memory a report may carry.
+  processMemory: () => ipcRenderer.invoke("shell:process-memory"),
   openExternal: (url) => ipcRenderer.invoke("shell:open-external", String(url)),
+  // A pane and a path inside its workspace; main asks the kernel where that is.
+  revealPath: (base, rel) => ipcRenderer.invoke("shell:reveal", String(base), String(rel)),
+  openFile: (base, rel) => ipcRenderer.invoke("shell:open-file", String(base), String(rel)),
+  // A project the sidebar lists, which may have no pane at all.
+  revealWorkspace: (root) => ipcRenderer.invoke("shell:reveal-workspace", String(root)),
+  revealLogs: () => ipcRenderer.invoke("shell:reveal-logs"),
+  // The same project, entered rather than selected in its parent folder.
+  openWorkspace: (root) => ipcRenderer.invoke("shell:open-workspace", String(root)),
   // Where a dropped file lives. Resolved here rather than in the page: the
   // renderer is handed a File and never a path, and a turn that has to work on
   // the file itself cannot do it on a copy of the bytes.
@@ -43,6 +58,7 @@ contextBridge.exposeInMainWorld("reasonixHost", {
   // page, and the few controls a person has over a page they are watching.
   showBrowserView: (targetId, rect) => ipcRenderer.invoke("browser:show", String(targetId), rectOf(rect)),
   hideBrowserView: () => ipcRenderer.invoke("browser:hide"),
+  freezeBrowserView: () => ipcRenderer.invoke("browser:freeze"),
   controlBrowserView: (targetId, action) => ipcRenderer.invoke("browser:control", String(targetId), String(action)),
   navigateBrowserView: (targetId, address) => ipcRenderer.invoke("browser:navigate", String(targetId), String(address)),
   // Why a page did not load, and a login a page or proxy asks for. The password

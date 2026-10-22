@@ -3,8 +3,9 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"path/filepath"
+	"reasonix/internal/base/fileutil"
 	"reasonix/internal/runtime/writeclaim"
 	"strings"
 
@@ -46,8 +47,8 @@ func (p pathBoundCapabilityProxy) ResolveCall(ctx context.Context, args json.Raw
 	if resolved.ProxyAction != "call" || resolved.SkipExecute {
 		return resolved, nil
 	}
-	if resolved.Target == nil || !resolved.ReadOnly || mcpDestructiveHint(resolved.Target) {
-		return tool.ResolvedCall{}, fmt.Errorf("use_capability target %q is not proven read-only; explicit write_paths sub-agents cannot execute unscoped MCP writers", resolved.TargetName)
+	if resolved.Target == nil || !resolved.ReadOnly || tool.HasMCPDestructiveHint(resolved.Target) {
+		return tool.ResolvedCall{}, fmt.Errorf("use_capability target %q is not proven read-only, and a sub-agent with explicit write_paths may only run read-only, non-destructive targets (bash never qualifies). Do not retry it: use the file tools inside your write_paths, or finish and report what needs a writer or a shell", resolved.TargetName)
 	}
 	return resolved, nil
 }
@@ -75,6 +76,7 @@ func (w pathBoundWriter) Name() string            { return w.inner.Name() }
 func (w pathBoundWriter) Description() string     { return w.inner.Description() }
 func (w pathBoundWriter) Schema() json.RawMessage { return w.inner.Schema() }
 func (w pathBoundWriter) ReadOnly() bool          { return w.inner.ReadOnly() }
+func (w pathBoundWriter) WritesNamedPaths() bool  { return tool.WritesNamedPaths(w.inner) }
 func (w pathBoundWriter) PlanModeSafe() bool {
 	if p, ok := w.inner.(interface{ PlanModeSafe() bool }); ok {
 		return p.PlanModeSafe()
@@ -88,8 +90,8 @@ func (w pathBoundWriter) PlanModeSafe() bool {
 // parent: a model approving its own reach is not a fence. Paths are the
 // resolved ones, so a symlink names the file the write would really land on.
 func (w pathBoundWriter) Execute(ctx context.Context, args json.RawMessage) (string, error) {
-	paths, err := extractWritePathsFromArgs(w.inner.Name(), w.workDir, args)
-	if err != nil {
+	paths, err := w.WritePaths(args)
+	if err != nil && (!errors.Is(err, fileutil.ErrAmbiguousPath) || len(paths) == 0) {
 		return "", err
 	}
 	declared := w.grant.Declared()
@@ -102,7 +104,7 @@ func (w pathBoundWriter) Execute(ctx context.Context, args json.RawMessage) (str
 	for _, p := range paths {
 		// Inside what was declared: the scheduler proved non-overlap before
 		// anything started, and there is nothing left to ask or to reserve.
-		if declared.AllowsPath(p) {
+		if declared.AllowsPath(p) && !declared.Optimistic {
 			continue
 		}
 		if !w.grant.Allows(p) {
@@ -114,11 +116,25 @@ func (w pathBoundWriter) Execute(ctx context.Context, args json.RawMessage) (str
 		// grant says this run may be here, never that another may not.
 		release, err := w.sched.ReserveWrite(writeclaim.WritePathSet{Paths: []string{p}})
 		if err != nil {
-			return "", fmt.Errorf("%w: %s", writeclaim.ErrWritePathBusy, p)
+			return "", fmt.Errorf("%w: %s", err, p)
 		}
 		held = append(held, release)
 	}
 	return w.inner.Execute(ctx, args)
+}
+
+func (w pathBoundWriter) WritePaths(args json.RawMessage) ([]string, error) {
+	if writer, ok := w.inner.(tool.WritePathResolver); ok {
+		return writer.WritePaths(args)
+	}
+	return extractWritePathsFromArgs(w.inner.Name(), w.workDir, args)
+}
+
+func (w pathBoundWriter) ReadPaths(ctx context.Context, args json.RawMessage) ([]string, error) {
+	if reader, ok := w.inner.(tool.ReadPathResolver); ok {
+		return reader.ReadPaths(ctx, args)
+	}
+	return w.WritePaths(args)
 }
 
 // askToWiden puts one path to the user and records the answer. With no gate
@@ -168,6 +184,7 @@ func BindWritePaths(reg *tool.Registry, grant *writeclaim.WriteGrant, gate Gate,
 	if reg == nil {
 		return bound, nil
 	}
+	bound.CopyDisabledMCPFrom(reg)
 	claims := grant.Declared()
 	if claims.Empty() {
 		for _, name := range reg.Names() {
@@ -178,6 +195,7 @@ func BindWritePaths(reg *tool.Registry, grant *writeclaim.WriteGrant, gate Gate,
 		return bound, nil
 	}
 	roots := claims.Roots()
+	optimistic := claims.Optimistic
 	for _, name := range reg.Names() {
 		tl, ok := reg.Get(name)
 		if !ok {
@@ -194,6 +212,13 @@ func BindWritePaths(reg *tool.Registry, grant *writeclaim.WriteGrant, gate Gate,
 				continue
 			}
 			bound.Add(rebound)
+			continue
+		}
+		if optimistic && !pathBoundWriterNames[name] {
+			// An optimistic run is the user's choice to trade the fence for
+			// concurrency: MCP, custom and capability writers stay available and
+			// are observed after the fact, never reserved.
+			bound.Add(tl)
 			continue
 		}
 		if name == "use_capability" {
@@ -255,70 +280,30 @@ func parentWriteReservation(workDir, toolName string, args json.RawMessage) (wri
 		if err != nil {
 			return writeclaim.WritePathSet{}, fmt.Errorf("could not parse %s path for write reservation: %w", toolName, err)
 		}
-		// NormalizeWritePaths accepts relative paths against the workspace.
-		// Absolute paths already inside the workspace also work.
-		raw := make([]string, 0, len(paths))
-		for _, p := range paths {
-			raw = append(raw, resolveMaybeRelative(workDir, p))
-		}
-		set, err := writeclaim.NormalizeWritePaths(workDir, raw)
-		if err != nil {
-			// Outside workspace: still take a whole-workspace reservation so we
-			// cannot race background writers while writing managed paths outside
-			// roots (config write approval path).
-			whole, werr := writeclaim.WholeWorkspaceWriteClaim(workDir)
-			if werr != nil {
-				return writeclaim.WritePathSet{}, err
-			}
-			return whole, nil
-		}
-		return set, nil
+		return parentResolvedWriteReservation(workDir, paths)
 	}
 	// Bash and MCP/custom writers.
 	return writeclaim.WholeWorkspaceWriteClaim(workDir)
 }
 
 func extractWritePathsFromArgs(toolName, workDir string, args json.RawMessage) ([]string, error) {
-	switch toolName {
-	case "move_file":
-		var p struct {
-			SourcePath      string `json:"source_path"`
-			DestinationPath string `json:"destination_path"`
-		}
-		if err := json.Unmarshal(args, &p); err != nil {
-			return nil, fmt.Errorf("invalid args: %w", err)
-		}
-		if strings.TrimSpace(p.SourcePath) == "" || strings.TrimSpace(p.DestinationPath) == "" {
-			return nil, fmt.Errorf("source_path and destination_path are required")
-		}
-		return []string{
-			resolveMaybeRelative(workDir, p.SourcePath),
-			resolveMaybeRelative(workDir, p.DestinationPath),
-		}, nil
-	default:
-		var p struct {
-			Path string `json:"path"`
-		}
-		if err := json.Unmarshal(args, &p); err != nil {
-			return nil, fmt.Errorf("invalid args: %w", err)
-		}
-		if strings.TrimSpace(p.Path) == "" {
-			return nil, fmt.Errorf("path is required")
-		}
-		return []string{resolveMaybeRelative(workDir, p.Path)}, nil
-	}
+	return builtin.ResolveWritePaths(workDir, nil, []string{workDir}, args, toolName == "move_file")
 }
 
-func resolveMaybeRelative(workDir, path string) string {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return path
+func parentResolvedWriteReservation(workDir string, paths []string) (writeclaim.WritePathSet, error) {
+	if len(paths) == 0 {
+		return writeclaim.WholeWorkspaceWriteClaim(workDir)
 	}
-	if filepath.IsAbs(path) {
-		return path
+	set, err := writeclaim.NormalizeWritePaths(workDir, paths)
+	if err != nil {
+		return writeclaim.WholeWorkspaceWriteClaim(workDir)
 	}
-	if strings.TrimSpace(workDir) == "" {
-		return path
+	return set, nil
+}
+
+func (w pathBoundWriter) FormatReadRefusal(err error) error {
+	if formatter, ok := w.inner.(tool.ReadRefusalFormatter); ok {
+		return formatter.FormatReadRefusal(err)
 	}
-	return filepath.Join(workDir, path)
+	return err
 }

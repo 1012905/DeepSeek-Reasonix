@@ -1,3 +1,6 @@
+import type { ModelMode } from "./model";
+import type { CompositionSummary } from "./composition";
+import type { ArgumentNormalization, StoredAttachment, Via } from "./wire";
 // A conversation and the states it passes through: what is running, what it
 // cost, and the points it can be wound back to.
 // GET /history: the event stream is live-only, so a reload rebuilds from these.
@@ -14,18 +17,29 @@ export interface HistoryMessage {
   // Guidance sent into a turn that was already running, rather than a turn of
   // its own. There is no checkpoint behind it, so nothing rewinds to it.
   steer?: boolean;
+  // The paired device a user message was sent from; absent is the window.
+  via?: Via;
   // Which model wrote this assistant turn. A rebuild has no turn_started to
   // read it off, and the composer's current setting is a different fact.
   modelRef?: string;
   reasoning?: string;
+  thoughtMs?: number; // kernel-measured; absent on turns recorded before it was
+  workDurationMs?: number; // only on the answer that closed a turn
+  createdAt?: number; // user turn: unix ms it landed, which opens the turn
   images?: number; // attachments on a user turn; an image-only one has no text
+  // The stored files a user message references, resolved by the kernel.
+  attachments?: StoredAttachment[];
   toolCalls?: HistoryToolCall[];
   toolCallId?: string;
   toolName?: string;
   // The host's own account of a result that did not succeed. Without it a
   // rebuilt card has only the words, which a tool's own output can imitate.
   toolFailed?: boolean;
+  deliveries?: import("./workspace").DeliveredFile[];
   toolRefusalCode?: string;
+  // outputDiff marks a rebuilt shell result whose whole output is a unified
+  // diff, re-derived by the host so a reopened transcript renders it as one.
+  outputDiff?: boolean;
 }
 
 // One call inside a history message. resolvedName/capabilityId say what a
@@ -35,6 +49,7 @@ export interface HistoryToolCall {
   id: string;
   name: string;
   arguments?: string;
+  argumentNormalization?: ArgumentNormalization;
   resolvedName?: string;
   capabilityId?: string;
 }
@@ -63,8 +78,11 @@ export interface HostTodo {
 // before each turn's first write. prompt is the user's own text, with the
 // compose prefixes already stripped kernel-side.
 export interface Checkpoint {
+  // Copied conversation metadata without parent file-recovery payloads.
+  forkCopied?: boolean;
   turn: number;
   prompt: string;
+  // Distinct files in this checkpoint and every later checkpoint.
   files: number;
   // The session index of the user message this snapshot was taken for, and the
   // point a conversation rewind truncates at. turn numbers the snapshots, not
@@ -88,6 +106,12 @@ export interface RewindFileStage {
   error?: string;
   compensated?: boolean;
   compensateError?: string;
+}
+
+export interface RewindUndo {
+  transactionId: string;
+  turn: number;
+  files: number;
 }
 
 export interface RewindResult {
@@ -129,6 +153,17 @@ export interface RewindConflict {
 }
 
 export type ApprovalMode = "ask" | "auto" | "dontAsk" | "yolo";
+
+export type WorkspaceTrust = "" | "trusted" | "declined";
+
+/** Where the session's posture came from. A defaulted session opens in auto
+ *  only when the OS sandbox confines writes and the folder is trusted. */
+export interface ApprovalDefault {
+  defaulted: boolean;
+  writesConfined: boolean;
+  trust: WorkspaceTrust;
+  trustable: boolean;
+}
 
 // "light" was retired into balanced: its only enforced differences were two
 // sub-agent switches, and a setting that costs a choice without changing what
@@ -190,7 +225,17 @@ export interface Decision {
   questions?: DecisionQuestion[];
 }
 
+// The vendor's billing window for the model's rate, sent only where the vendor's
+// own schedule applies. changesAt is absent when no flip is ahead.
+export interface Tariff {
+  peak: boolean;
+  changesAt?: string;
+}
+
 export interface SessionStatus {
+  agentComposition?:CompositionSummary|null;
+  agentCompositionLocked?:boolean;
+  tariff?: Tariff;
   // Whether the current model reads images at all, and whether that answer was
   // ever given: a relay forwards models nothing here has a label for, and an
   // undeclared one is not the same claim as a text-only one.
@@ -206,12 +251,20 @@ export interface SessionStatus {
   decisions?: Decision[];
   preset: Preset;
   effort?: string;
+  // Absent unless the session's model declares a mode: its switch is not drawn.
+  modes?: ModelMode[];
   modelRef?: string;
+  // The label the user gave modelRef's provider; absent when none is set.
+  providerDisplayName?: string;
   toolApprovalMode: ApprovalMode;
+  // Absent from a kernel that predates it; drawn only where it is present.
+  approvalDefault?: ApprovalDefault;
   autoApproveTools: boolean;
   bypass: boolean;
   goal: string;
   goalStatus: string;
+  // Present while there is a goal; absent from a kernel that predates it.
+  goalRuntime?: GoalRuntime;
   cwd: string;
   workspaceRoot?: string;
   sessionPath?: string;
@@ -220,7 +273,19 @@ export interface SessionStatus {
   cacheHit: number;
   cacheMiss: number;
   sessionCostQuote?: import("./wire").CostQuote;
+  sessionUsage?: SessionUsage;
   jobs?: JobEntry[];
+}
+
+/** What a goal has used so far. work time counts active work, not pauses. */
+export interface GoalRuntime {
+  turnsUsed: number;
+  tokensUsed: number;
+  requestsUsed: number;
+  workDurationMs: number;
+  noProgressTurns: number;
+  lastReason?: string;
+  stopCause?: string;
 }
 
 /** One currency of a wallet, rendered where the symbol rules live. Two
@@ -247,8 +312,31 @@ export interface JobEntry {
   id: string;
   kind: string;
   label: string;
+  // The name the model gave the call for a person, and the full command or task
+  // behind it; label stays the short preview.
+  description?: string;
+  detail?: string;
   status: string;
   startedAt: number;
+}
+
+// The end of a running job's output, for a person looking at it: how much the
+// job has written in all, and whether the text is only the last part.
+export interface JobOutput {
+  text: string;
+  status: string;
+  bytes: number;
+  truncated: boolean;
+}
+
+// One window onto the output of one tool call as the history carries it: where
+// Text starts, the whole length, and whether more follows.
+export interface ToolOutputPage {
+  callId: string;
+  text: string;
+  bytes: number;
+  offset: number;
+  truncated: boolean;
 }
 
 // The UI depends on this and nothing else. SsePort talks to internal/frontend/serve;
@@ -260,4 +348,30 @@ export interface SessionEntry {
   title?: string;
   turns?: number;
   current?: boolean;
+}
+
+// What one usage source has spent since this session was opened in this run.
+// cacheUnknown is prompt the endpoint did not split into cached and uncached.
+export interface SourceUsage {
+  source: string;
+  requests: number;
+  promptTokens: number;
+  completionTokens: number;
+  cacheHit: number;
+  cacheMiss: number;
+  cacheUnknown?: number;
+  cost: import("./wire").CostQuote;
+}
+
+// The session's usage grouped by source, read from the ledger the cost total is.
+// workMs is the answered work time of turns that gave a final answer.
+export interface SessionUsage {
+  requests: number;
+  promptTokens: number;
+  completionTokens: number;
+  cacheHit: number;
+  cacheMiss: number;
+  cacheUnknown?: number;
+  workMs: number;
+  sources: SourceUsage[];
 }

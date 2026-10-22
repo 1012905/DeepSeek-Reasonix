@@ -6,14 +6,26 @@ import { nextId } from "./ids";
 // what the card renders, and putting it there would make every append rewrite it.
 const thoughtSince = new Map<string, number>();
 
+/** When this window saw the card start thinking; undefined for a card it did
+ *  not watch begin, which then has no clock to run. */
+export function thoughtStartedAt(id: string): number | undefined {
+  return thoughtSince.get(id);
+}
+
+const isWaitingLine = (item: Item) => item.t === "user" && !!item.pending;
+
 export function appendText(items: Item[], text: string, field: "text" | "reasoning", source?: string, model?: string): Item[] {
-  const last = items[items.length - 1];
+  // A line typed while the model is still writing waits in the transcript after
+  // the open message without being part of it, so the message continues past it.
+  let at = items.length - 1;
+  while (at >= 0 && isWaitingLine(items[at])) at--;
+  const last = items[at];
   if (last && last.t === "say" && !last.done) {
     const next = items.slice();
     // Thinking runs until the first answer token, so the clock is the gap
     // between the two streams, not the length of either.
     const stop = field === "text" && last.thoughtMs === undefined && last.reasoning;
-    next[next.length - 1] = {
+    next[at] = {
       ...last,
       [field]: (last[field] ?? "") + text,
       ...(stop ? { thoughtMs: Date.now() - (thoughtSince.get(last.id) ?? Date.now()) } : null),
@@ -62,13 +74,16 @@ export function foldMessage(items: Item[], ev: WireEvent): Item[] {
       break;
     }
   }
+  // The kernel's measure wins over this window's: it is the one the transcript
+  // keeps, so a reopened turn says the same thing.
+  const measured = ev.thoughtMs || undefined;
   if (at < 0) {
     if (!ev.text && !ev.reasoning) return items;
-    return [...items, { t: "say", id: nextId(), text: ev.text ?? "", reasoning: ev.reasoning, done: true, source: ev.source }];
+    return [...items, { t: "say", id: nextId(), text: ev.text ?? "", reasoning: ev.reasoning, done: true, source: ev.source, thoughtMs: measured }];
   }
   const open = items[at] as Extract<Item, { t: "say" }>;
   const next = items.slice();
-  const ran = open.thoughtMs ?? (open.reasoning ? Date.now() - (thoughtSince.get(open.id) ?? Date.now()) : undefined);
+  const ran = measured ?? open.thoughtMs ?? (open.reasoning ? Date.now() - (thoughtSince.get(open.id) ?? Date.now()) : undefined);
   thoughtSince.delete(open.id);
   next[at] = {
     ...open,

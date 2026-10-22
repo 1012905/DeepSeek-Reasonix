@@ -19,8 +19,10 @@ reasonix --preset delivery --effort high
 reasonix --dir /path/to/project
 ```
 
-Running `reasonix` without a subcommand starts the interactive terminal UI. Use
-`reasonix setup` first when no provider is configured.
+Running `reasonix` without a subcommand starts the interactive terminal UI;
+`reasonix tui` is the same command. Without a terminal, for example in a script
+or a pipe, it prints usage instead. Use `reasonix setup` first when no provider
+is configured.
 
 | Flag | Purpose |
 | --- | --- |
@@ -31,12 +33,13 @@ Running `reasonix` without a subcommand starts the interactive terminal UI. Use
 | `--max-steps N` | Set a one-off maximum tool-call round budget; `0` uses automatic execution. |
 | `--dir PATH` | Change the workspace root before loading config and tools. |
 | `--add-dir PATH` | Add another writable tool directory; repeat for multiple directories. |
-| `-c`, `--continue` | Resume the most recent session. |
+| `-c`, `--continue` | Resume the most recent session, or start a fresh one when none exists. |
 | `-r`, `--resume [QUERY]` | Open the session picker, or resume a matching session. |
 | `--copy` | Continue in a writable copy of the resumed session. |
 | `--allowed-tools RULES` | Add session-only permission allow rules. Repeatable; `--allowedTools` is an alias. |
-| `--permission-mode MODE` | Start with a specific permission posture. |
-| `--yolo` | Start in YOLO mode; alias for `--dangerously-skip-permissions`. |
+| `--permission-mode MODE` | Start with a specific permission posture: `read-only`, `ask`, `auto`, `acceptEdits`, `dontAsk`, `plan` or `bypassPermissions`. 1.x's `workspace-write` and `danger-full-access` also work, as Auto and Yolo. Without it, see [Default posture](#default-posture). |
+| `--yolo` | Start in YOLO mode; alias for `--dangerously-skip-permissions`. It skips approval prompts only: the sandbox, network policy and deny rules still apply. The first interactive use asks once. |
+| `--inline` | Write the conversation into the terminal's scrollback instead of taking the full screen. Only `reasonix tui --inline` takes it; a bare `reasonix --inline` is an unknown command and exits `2`. |
 
 Flags may appear before or after the prompt where applicable.
 
@@ -62,6 +65,11 @@ reasonix setup                    # manage the user-global config
 reasonix setup --local            # manage ./reasonix.toml
 reasonix setup /path/to/config.toml
 ```
+
+Local commands use `./reasonix.toml` when present, otherwise an existing
+`.reasonix/reasonix.toml`. New project files are created at the root. This applies
+to `setup --local`, `config compact-ratio --local`, and
+`config reasoning-language --local`.
 
 In an interactive terminal, `reasonix setup` is a staged provider manager. It
 lists configured providers and lets you:
@@ -118,11 +126,62 @@ reasonix config compact-ratio 75           # set the user-global default
 reasonix config compact-ratio --local 75   # override in ./reasonix.toml
 ```
 
-The editable range is 65–85%, with 85% as the built-in default. Lower values
-compact earlier and may reduce prompt-prefix cache reuse; higher values retain
-more context before compaction. Project `reasonix.toml` takes precedence over
+The CLI accepts a percentage above 0 and below 100 (exclusive), with 85% as the
+built-in default. These bounds follow `CompactRatioMin` and `CompactRatioMax` in
+`internal/contract/config`; TOML stores the corresponding fraction.
+
+Lower values compact earlier and may reduce prompt-prefix cache reuse; higher
+values retain more context before compaction.
+
+Project `reasonix.toml` takes precedence over
 the user config. Changes apply to new CLI sessions; an already-running session
 keeps the threshold it loaded at startup.
+
+## Diff rendering
+
+`[cli].diff_fences = true` renders a fenced ` ```diff ` / ` ```patch ` block
+through the colourised diff renderer (add/remove backgrounds, `+`/`-` gutter,
+line numbers) instead of the plain code rail.
+
+It is **off by default**: a model writes headerless diff fences often, and the
+plain rail is the lossless default.
+
+A streaming fence colours in hunk by hunk: each `@@` header settles the rows
+before it, which are drawn coloured while the in-progress hunk stays on the plain
+rail.
+
+A fence section with no `--- `/`+++ ` file header keeps its diff content on the
+plain rail; one that is only a preamble — a `git show` commit header, say —
+carries no diff and is omitted. Like `[cli].diff_formatter` it is user/global
+only — a project-local `reasonix.toml` cannot set it.
+
+`[cli].diff_formatter` names an optional external command that formats a diff
+for the CLI/TUI to render — a fenced ` ```diff ` / ` ```patch ` block, a writer
+tool's diff card, and a shell result whose whole output is a diff (see
+`[agent].embedded_diff_detection` below).
+
+It is an argv line run without a shell, e.g. `delta --color-only --paging=never`.
+
+The whole diff is written to the command's stdin; its stdout is re-emitted with
+non-SGR control sequences stripped, so the formatter's colours survive but a
+cursor or clipboard escape cannot.
+
+In the full-screen TUI it runs off the render path: a part of the fence whose run
+is still pending is drawn on the plain rail and replaced once the output is ready
+— a hunk an earlier run already formatted stays coloured — so a slow formatter
+cannot freeze the UI.
+
+On any failure, timeout, empty output, or a diff larger than 1 MiB, the
+built-in renderer is kept. Like `[cli].update_channel` it is user/global only —
+a project-local `reasonix.toml` cannot set it.
+
+`[agent].embedded_diff_detection = true` marks a shell result whose whole output
+is a unified diff — e.g. `bash` running `git diff` — so the CLI/TUI and desktop
+render it as a coloured diff instead of flat text.
+
+Detection is whole-text: `git show` and `git log -p` are recognised by their
+`commit …` header, while mixed output and `--stat` stay prose. The default is
+`false`.
 
 ## One-shot and automation
 
@@ -142,11 +201,28 @@ structured output format is selected. It also accepts `--model`, `--preset`
 `--continue`, `--resume QUERY`, `--copy`, `--allowed-tools`, `--permission-mode`,
 and `--auto` / `-y` (an alias for `--permission-mode auto`).
 
+`--yolo` / `--dangerously-skip-permissions` also work there, as an alias for
+`--permission-mode bypassPermissions`. Where flags go on a `run` command line:
+
+- Flags may sit anywhere among the task's words: `reasonix run fix --yolo bug`
+  runs the task `fix bug` in bypassPermissions.
+- Flags written before `run` move after it only when both the terminal UI
+  (plus `-y` and `-p`) and `run` take every one of them the same way:
+  `reasonix -y run "task"` is `reasonix run -y "task"`.
+- A terminal-UI-only leading flag (`-r`, `--resume` with no value)
+  sends the whole command line to the terminal UI instead.
+- So does a run-only leading flag (`--output-format`, `--metrics`): the
+  terminal UI then reports it. Write such flags after `run`.
+- A leading `-p` counts only before the verb; a `-p` after `run` is its own.
+- The first word after the leading flags is the verb, as it is with no flags:
+  `reasonix --yolo run the tests` runs `the tests` headless. Quote a prompt that
+  begins with "run" to open the terminal UI with it.
+
 ### Benchmark arms
 
 `--ablate` switches whole subsystems off so a benchmark can attribute a change
 in success rate to one of them. It accepts a comma-separated list of `evidence`,
-`planner`, `subagent`, `retrieval`, `compaction`, `full-fold` and `upstream`,
+`planner`, `subagent`, `retrieval`, `compaction`, `upstream` and `recall-search`,
 plus `none` (the default, everything on) and `all`. Sub-agents inherit the
 parent's arm, and the arm name is written to the `--metrics` file so a recorded
 run is self-describing. `upstream` off leaves a fleet's `depends_on` edges
@@ -176,6 +252,10 @@ same care as a session transcript.
 reasonix run --metrics run.json --trajectory run.trajectory.jsonl "fix the failing test"
 ```
 
+A clean `run` or `-p` writes nothing to stderr except warnings the user has to
+act on. `--debug` adds diagnostic logs such as assembly timing and the resumed
+session's cache state.
+
 ### Output formats
 
 | Format | Behavior |
@@ -189,6 +269,16 @@ reasonix -p "list the risky changes" --output-format text
 reasonix -p "summarize the diff" --output-format json
 reasonix run "run the tests" --output-format stream-json
 ```
+
+`stream-json` lines before the result follow the 1.x contract:
+
+- Each carries `sessionId`, `turnId`, `seq` (from 1) and `status`.
+- The turn opens with `turn_status` (`status: "queued"`) and `user_message`.
+- A call that cleared every gate and ran reports `tool_started` before its
+  `tool_result`.
+- The turn closes with `turn_done`: `completed`, `failed` or `interrupted`.
+- Only kinds 1.x emitted appear; host-internal state such as workspace leases
+  stays off the stream.
 
 The final structured object has this shape:
 
@@ -209,9 +299,28 @@ The final structured object has this shape:
     "output_tokens": 0,
     "cache_read_input_tokens": 0,
     "cache_creation_input_tokens": 0
-  }
+  },
+  "permission_denials": [
+    {"tool_name": "write_file", "tool_use_id": "call_1", "code": "permission.unattended"}
+  ],
+  "permission_mode": "ask"
 }
 ```
+
+`permission_denials` lists the calls the run's permission gate refused; it is
+empty when nothing was, and a refusal never changes the exit code. The same
+`code` rides the refused tool result: `refusalCode` in `stream-json`,
+`refusal_code` in `--events-jsonl`.
+
+`permission_mode` is the posture the run settled on, named or defaulted.
+
+| `code` | Cause |
+| --- | --- |
+| `permission.unattended` | It needed an approval and nobody could give one. |
+| `permission.untrusted_folder` | The folder is not trusted, so it needed an approval nobody could give. The denial's `remedy` names `reasonix trust --dir <folder>`, which shows what the folder would run before approving; the run exits `4` (`3` under `--fail-on-unverified`) and the result's `unverified_by` carries the code. |
+| `permission.read_only` | The session is in `read-only`. |
+| `permission.deny_rule` | A deny rule matched. |
+| `permission.declined` | A person answered no. |
 
 `total_cost` is present only when a single `selected` display amount exists (ISO
 code in `currency`). Prefer the structured `cost_quote` field when present: it
@@ -235,6 +344,26 @@ Execution failures use `subtype: "error_during_execution"` and
 `is_error: true`. Structured modes keep runtime errors in JSON instead of also
 printing a duplicate human-readable error.
 
+What the host decided about the answer rides beside it and does not change the
+exit status:
+
+- `-p` names the calls listed in `permission_denials` on stderr.
+- `readiness` (`attempts`, `missing`) appears when the model finished but the
+  host's final-readiness check stayed unmet, for example no check ran after
+  the last write. The run still counts as a success.
+- `completion` repeats the turn's `completion_summary` when there was one.
+- `--events-jsonl`'s `run_done` carries the denial count and `readiness`.
+
+Exit statuses of `reasonix run`:
+
+| Status | Meaning |
+| --- | --- |
+| `0` | The model finished, including with other refused calls or unmet readiness. |
+| `1` | The run failed: provider, configuration, limit, or cancellation. |
+| `2` | The command line was invalid. |
+| `3` | `--fail-on-unverified` was given and final readiness stayed unmet or the folder's edits were refused for lack of trust. |
+| `4` | The folder is not trusted and its edits or commands were refused, so the work was not done. Trust it with `reasonix trust --dir <folder>` or pass `--permission-mode` knowingly. |
+
 ### Redacted machine interfaces
 
 Use the dedicated event flag when an automation needs lifecycle telemetry but
@@ -249,6 +378,9 @@ Every line has `schema_version`, `sequence`, and `kind`; the final line is
 `kind: "run_done"`. `--events-jsonl` is intentionally separate from the richer
 `--output-format stream-json` contract and cannot be combined with
 `--output-format`.
+
+Its lifecycle records match `stream-json`'s (`turn_status`, `user_message`,
+`tool_started`, `turn_done`) without their content.
 
 The following read-only commands expose persisted state without transcript,
 label, command, output, path, PID, or host-name content. Here, read-only means
@@ -307,7 +439,8 @@ reasonix --resume <session-id>
 reasonix --resume provider-config --copy
 ```
 
-- `--continue` resumes the newest saved session immediately.
+- `--continue` resumes the newest saved session immediately. When no saved
+  session exists it reports this and starts a fresh session instead of failing.
 - Bare `--resume` opens the searchable picker in an interactive terminal.
 - `--resume QUERY` accepts an exact session ID or path, or a unique title or
   preview substring. Missing and ambiguous matches fail with a descriptive
@@ -334,16 +467,52 @@ reasonix --allowed-tools "Bash(go test ./...)" --allowed-tools read_file
 
 | Mode | Behavior |
 | --- | --- |
+| `read-only` | Refuse every call that is not a read — file writes, shell commands not known to be reads, tools not declared read-only — whatever allow rules say. Nothing is asked. An installed extension's permission hook can still overrule it. |
 | `manual`, `ask` | Ask for ordinary approval decisions. |
 | `auto` | Automatically approve normal fallback operations while preserving explicit ask and deny rules. |
 | `acceptEdits` | Allow file-editing tools; this is not full Auto mode. |
 | `dontAsk` | Deny unapproved requests without opening an approval prompt. |
 | `plan` | Start the plan-first workflow; tool calls still use the active permissions and sandbox. |
-| `bypassPermissions` | Bypass approval prompts; equivalent to YOLO. |
+| `bypassPermissions` | Bypass approval prompts; equivalent to YOLO. The sandbox, network policy and deny rules still apply, and a project file cannot select it. |
+
+Shell commands that read — `git status`, `ls`, `grep`, `git -C dir log` and the
+like, decided from the parsed command rather than its wording — run without a
+prompt in every mode.
+
+### Default posture
+
+With no mode named, a session opens in `auto` only when both hold:
+
+- the OS sandbox confines shell writes on this host (Seatbelt on macOS,
+  bubblewrap on Linux) and `[sandbox] bash` is not `off`;
+- you trusted the workspace folder.
+
+Otherwise it opens in `ask`; on Windows, which has no OS sandbox, always.
+
+What `auto` then allows without asking is bounded by that sandbox, not by the
+folder alone:
+
+- shell commands may also write your `allow_write` and `--add-dir`
+  directories, temp, and toolchain caches (`~/go`, `~/.cargo`, `~/.cache` and
+  the like), and what lands in `~/.cargo/bin` or `~/go/bin` runs later outside
+  the sandbox;
+- they reach the network unless `[sandbox] network = false`.
+
+- The terminal UI asks once per folder whether to trust it, never for a home
+  directory or a filesystem root, and keeps the answer in your Reasonix home.
+- `reasonix trust` trusts the current folder; `reasonix trust --revoke`
+  forgets it. A project's own files cannot record trust.
+- Trust belongs to the folder's path, not its contents: whatever is checked out
+  there later is trusted too.
+- Headless runs never ask. In `ask` they refuse writes and list them in
+  `permission_denials`.
+
+In the terminal UI, Shift+Tab cycles read-only → ask → auto → YOLO → plan
+Ctrl+Y toggles YOLO at once and returns to the posture it left.
 
 For unattended execution with ordinary writer fallback enabled, use
-`reasonix run --auto ...` (or `-y`). The alias cannot be combined with an
-explicit `--permission-mode` value.
+`reasonix run --auto ...` (or `-y`). Neither it nor `--yolo` can be combined
+with an explicit `--permission-mode` value, or with each other.
 
 `[permissions] allow_dynamic_bash = true` is an advanced opt-in that lets an
 Allow fallback, including Auto, cover command/process substitution, dynamic
@@ -355,8 +524,8 @@ filter. Rules may be comma- or space-separated, and the flag is repeatable.
 Configured deny rules always win over command-line allow rules.
 
 In non-interactive runs (`reasonix run` / `-p`) there is no prompt to answer, so
-approval modes resolve without blocking. The default `ask` / `manual` posture
-fails closed for explicit Ask decisions and ordinary writer fallback; readers
+approval modes resolve without blocking. The `ask` / `manual` posture fails
+closed for explicit Ask decisions and ordinary writer fallback; readers
 still run. `acceptEdits` allows its named file-edit tools, while other Ask
 decisions fail closed. `auto` allows ordinary writer fallback but still denies
 an explicit ask rule; select it with `--permission-mode auto`, `--auto`, or
@@ -409,7 +578,12 @@ groups instead of cutting labels in half. Visible labels and execution-setting v
 follow `/language`.
 
 Use `/theme auto|light|dark` to select the terminal background mode, or choose a
-named accent from `/theme`. Both composer borders, the insertion cursor,
+named accent from `/theme`.
+
+- `/theme` alone opens a picker that previews each row as the cursor reaches it.
+- Enter keeps the row, Esc restores the original, and `/theme list` prints the names.
+
+Both composer borders, the insertion cursor,
 selection, scrollbar, and footer use the active CLI theme. See
 [Keyboard shortcuts](./GUIDE.md#keyboard-shortcuts) for transcript navigation,
 multiline input, rewind, and clipboard controls.
@@ -437,7 +611,7 @@ the displayed list matches the commands the TUI accepts.
 | --- | --- |
 | `/model` | Search configured models and switch the active model. |
 | `/provider` | Choose a provider, then choose one of its configured models. |
-| `/resume` | Search recent sessions and switch to one. |
+| `/resume [n]` | Search recent sessions and switch to one; `/resume <n>` switches to the nth session of that list directly. |
 | `/status` | Show model, effort, cache, Git, background jobs, and execution setting or balance details. |
 | `/preset [balanced\|delivery]` | View or change the agent execution setting without rebuilding the controller. `/work-mode` and `/profile` remain compatibility aliases; `economy` and `light` resolve to `balanced`. |
 | `/theme [auto\|light\|dark\|style]` | View or change the CLI background mode and accent palette. |

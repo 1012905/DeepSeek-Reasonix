@@ -5,6 +5,8 @@
 package pluginspec
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -25,11 +27,15 @@ type Options struct {
 	LaunchManager         *mcplaunch.Manager
 	ConfigSource          string
 	StateHome             string
+	ProcessScope          string
+	SessionPackageRoots   map[string]SessionPackageRoot
 	WriterRoots           []string
-	ForbidReadRoots       []string
-	Network               bool
-	PackageOwners         map[string]string
-	OAuthHTTPClient       *http.Client
+	// WritableRoots are what the session lets tools write; a local server is told them.
+	WritableRoots   []string
+	ForbidReadRoots []string
+	Network         bool
+	PackageOwners   map[string]string
+	OAuthHTTPClient *http.Client
 }
 
 // ForRoot maps entries against a workspace root without runtime policy.
@@ -49,7 +55,8 @@ func ForRootWithOptions(entries []config.PluginEntry, workspaceRoot string, opts
 
 // FromEntry maps one configured entry, including MCP isolation.
 func FromEntry(e config.PluginEntry, workspaceRoot string, opts Options) plugin.Spec {
-	e = e.ExpandedPlugin() // resolve ${VAR} / ${VAR:-default} from the environment
+	launchCheck := config.DeclaredLaunchCheck(e, workspaceRoot)
+	e = e.ExpandedPluginForRoot(workspaceRoot)
 	configSource := strings.TrimSpace(string(e.Source))
 	if configSource == "" {
 		configSource = opts.ConfigSource
@@ -63,21 +70,24 @@ func FromEntry(e config.PluginEntry, workspaceRoot string, opts Options) plugin.
 		Env:                           e.Env,
 		URL:                           e.URL,
 		Headers:                       e.Headers,
+		DisabledTools:                 append([]string(nil), e.DisabledTools...),
 		DefaultStartupTimeout:         opts.DefaultStartupTimeout,
 		StartupTimeout:                secondsDuration(e.StartupTimeoutSeconds),
 		DefaultCallTimeout:            opts.DefaultCallTimeout,
 		CallTimeout:                   secondsDuration(e.CallTimeoutSeconds),
 		ToolTimeouts:                  toolTimeoutDurations(e.ToolTimeoutSeconds),
 		WorkspaceRoot:                 strings.TrimSpace(workspaceRoot),
+		WritableRoots:                 append([]string(nil), opts.WritableRoots...),
 		LaunchManager:                 opts.LaunchManager,
 		ConfigSource:                  configSource,
 		Authorized:                    e.Source.UserAuthorized(),
 		OAuthHTTPClient:               opts.OAuthHTTPClient,
-		OAuthAllowMissingPKCEMetadata: e.OAuthAllowMissingPKCEMetadata && userOwnedSource(e.Source),
+		OAuthAllowMissingPKCEMetadata: e.OAuthAllowMissingPKCEMetadata && e.Source.UserOwned(),
 	}, workspaceRoot)
 	if e.Source.ProjectScoped() && strings.TrimSpace(spec.Dir) == "" {
 		spec.Dir = workspaceRoot
 	}
+	spec.LaunchCheck = launchCheck
 	ApplyIsolation(&spec, workspaceRoot, opts)
 	return spec
 }
@@ -88,6 +98,7 @@ func ApplyIsolation(spec *plugin.Spec, workspaceRoot string, opts Options) {
 	if spec == nil {
 		return
 	}
+	ApplySessionPackageRoot(spec, opts.SessionPackageRoots)
 	// Authorized user MCP defaults to trusted host process mode. Confined mode
 	// is opt-in for internal managed deployments/tests and is never selected by
 	// ordinary install paths.
@@ -99,18 +110,24 @@ func ApplyIsolation(spec *plugin.Spec, workspaceRoot string, opts Options) {
 	}
 	stateDir := plugin.MCPStateDir(opts.StateHome, workspaceRoot, spec.Name)
 	spec.StateDir = stateDir
+	processDir := stateDir
+	if opts.ProcessScope != "" {
+		digest := sha256.Sum256([]byte(opts.ProcessScope))
+		processDir = filepath.Join(stateDir, "sessions", hex.EncodeToString(digest[:12]))
+		spec.ProcessStateDir = processDir
+	}
 	if spec.ResolvedProcessMode() != plugin.MCPProcessConfined {
 		// Host mode still gets a private state/cache/temp tree; only the OS
 		// command sandbox is omitted so local app integrations keep working.
 		return
 	}
-	writerRoots := appendUniquePaths([]string{stateDir}, opts.WriterRoots...)
+	writerRoots := appendUniquePaths([]string{processDir}, opts.WriterRoots...)
 	readerRoots := []string{workspaceRoot}
 	if home, err := os.UserHomeDir(); err == nil {
 		readerRoots = appendUniquePaths(readerRoots, home)
 	}
 	spec.Sandbox = sandbox.Spec{
-		Mode: "enforce", WriteRoots: writerRoots,
+		Mode: "enforce", WriteRoots: writerRoots, Pins: sandbox.PinWriteRoots(writerRoots),
 		ReadRoots:              readerRoots,
 		AppContainerWriteRoots: append([]string(nil), writerRoots...),
 		ForbidReadRoots:        append([]string(nil), opts.ForbidReadRoots...),
@@ -198,7 +215,7 @@ func toolTimeoutDurations(seconds map[string]int) map[string]time.Duration {
 
 func appendUniquePaths(base []string, extra ...string) []string {
 	out := append([]string(nil), base...)
-	seen := make(map[string]struct{}, len(out)+len(extra))
+	seen := make(map[string]struct{}, len(out))
 	for _, path := range out {
 		seen[pathComparisonKey(path)] = struct{}{}
 	}
@@ -226,16 +243,4 @@ func pathComparisonKey(path string) string {
 		return strings.ToLower(path)
 	}
 	return path
-}
-
-// userOwnedSource is a config the user keeps in their own home. A project's
-// config, its .mcp.json and an installed package are someone else's, and none
-// of them may relax an OAuth check for whoever opens or installs them.
-func userOwnedSource(s config.MCPConfigSource) bool {
-	switch s {
-	case config.MCPSourceUserConfig, config.MCPSourceLegacyUser, config.MCPSourceClaudeUser, config.MCPSourceClaudeLocal:
-		return true
-	default:
-		return false
-	}
 }

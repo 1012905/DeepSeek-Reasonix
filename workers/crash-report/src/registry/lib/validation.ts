@@ -20,19 +20,41 @@ const httpUrl = z.string().trim().url().max(500);
 // (isURL || git: shorthand || looksLikePackage); a bare local path is refused
 // because it resolves on the publisher's machine, never the installer's.
 const pkgSegment = /^[a-zA-Z0-9._-]+$/;
+// Permissive character filter, not npm's full rule set (it admits uppercase).
+// isPackageSegment/isPackageName add the checks that keep a name from resolving
+// as a path, tag or tarball. Keep in sync with internal/ext/installsource/names.go.
+function isPackageSegment(segment: string): boolean {
+  return pkgSegment.test(segment) && !segment.startsWith(".");
+}
+function isPackageName(name: string): boolean {
+  return isPackageSegment(name) && !name.startsWith("_") && !/\.(tgz|tar|tar\.gz)$/i.test(name);
+}
 const unsafeSourceCharacter = /[\s\u0000-\u001f\u007f-\u009f]/u;
 
 function hasUnsafeSourceCharacters(source: string): boolean {
   return unsafeSourceCharacter.test(source);
 }
 
+// Exact semver only: no ranges, no dist-tags, no "v" prefix.
+const exactVersion =
+  /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/;
+
 function looksLikePackage(source: string): boolean {
-  if (/[\s\\]/.test(source) || source.startsWith(".") || source.startsWith("/")) return false;
-  if (source.startsWith("@")) {
-    const parts = source.split("/");
-    return parts.length === 2 && pkgSegment.test(parts[0].slice(1)) && pkgSegment.test(parts[1]);
+  if (/[\s\\]/.test(source) || source.startsWith(".") || source.startsWith("/") || source.startsWith("-")) {
+    return false;
   }
-  return pkgSegment.test(source);
+  let name = source;
+  // An "@" past the first byte starts the version; a second one lands inside it and fails.
+  const at = source.indexOf("@", 1);
+  if (at >= 0) {
+    name = source.slice(0, at);
+    if (!exactVersion.test(source.slice(at + 1))) return false;
+  }
+  if (name.startsWith("@")) {
+    const parts = name.split("/");
+    return parts.length === 2 && isPackageSegment(parts[0].slice(1)) && isPackageSegment(parts[1]);
+  }
+  return isPackageName(name);
 }
 
 function isHttpUrl(source: string): boolean {

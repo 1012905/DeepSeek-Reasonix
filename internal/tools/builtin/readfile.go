@@ -32,13 +32,16 @@ func init() { tool.RegisterBuiltin(readFile{}) }
 // schema. forbidRoots lists directories the tool may not read from (resolved,
 // absolute paths).
 type readFile struct {
+	netRoots    []string
 	workDir     string
 	paths       *PathResolver
 	forbidRoots []string
+	readRoots   []string
 	// overlay, when non-nil, serves content from the host transport (unsaved
 	// editor buffers) before falling back to disk. Consulted only after path
 	// resolution and read confinement, and never for external alias paths.
 	overlay FileOverlay
+	views   *FileViews
 }
 
 const (
@@ -65,6 +68,8 @@ func (readFile) Schema() json.RawMessage {
 
 func (readFile) ReadOnly() bool { return true }
 
+func (readFile) Reach() tool.Reach { return tool.ReachLocalRead }
+
 // SnipHint front-loads file content: the most relevant lines are near the top,
 // so keep a generous head and a short tail when an old read is shortened.
 func (readFile) SnipHint() tool.SnipHint {
@@ -88,6 +93,38 @@ func (r readFile) ReadTarget(args json.RawMessage) string {
 }
 
 func (r readFile) Execute(ctx context.Context, args json.RawMessage) (string, error) {
+	out, err := r.read(ctx, args)
+	if err == nil && r.views != nil {
+		var p struct {
+			Path string `json:"path"`
+		}
+		if json.Unmarshal(args, &p) == nil {
+			r.views.sawFile(ctx, r.overlay, resolveReadablePath(r.workDir, p.Path, r.paths).Path)
+		}
+	}
+	return out, err
+}
+
+// refuse is the read boundary: outside the read roots, or a forbidden path that
+// is answered as if it did not exist.
+func (r readFile) refuse(rp ResolvedPath) error {
+	if err := rp.refuseNetwork(r.netRoots); err != nil {
+		return err
+	}
+	if err := confineScope(r.readRoots, rp.Path); err != nil {
+		return err
+	}
+	if !confineRead(r.forbidRoots, rp.Path) {
+		return nil
+	}
+	err := &os.PathError{Op: "open", Path: rp.Path, Err: os.ErrNotExist}
+	if rp.External {
+		return fmt.Errorf("read %s: %s", rp.DisplayPath, rp.ErrorText(err))
+	}
+	return err
+}
+
+func (r readFile) read(ctx context.Context, args json.RawMessage) (string, error) {
 	var p struct {
 		Path   string `json:"path"`
 		Offset int    `json:"offset,omitempty"`
@@ -102,26 +139,21 @@ func (r readFile) Execute(ctx context.Context, args json.RawMessage) (string, er
 	rp := resolveReadablePath(r.workDir, p.Path, r.paths)
 	p.Path = rp.Path
 	displayPath := rp.DisplayPath
-	if confineRead(r.forbidRoots, p.Path) {
-		err := &os.PathError{Op: "open", Path: p.Path, Err: os.ErrNotExist}
-		if rp.External {
-			return "", fmt.Errorf("read %s: %s", displayPath, rp.ErrorText(err))
-		}
+	if err := r.refuse(rp); err != nil {
 		return "", err
 	}
 	if p.Offset < 0 {
 		p.Offset = 0
 	}
-	if p.Limit <= 0 {
-		p.Limit = readFileDefaultLimit
-	}
+	emit, limit := r.render(ctx, p.Limit)
+	p.Limit = limit
 
 	// The host overlay (unsaved editor buffers) wins over the disk when it can
 	// serve the path. Content arrives already decoded as text, so the encoding
 	// and binary-detection pipeline below applies to the disk fallback only.
 	if r.overlay != nil && !rp.External && filepath.IsAbs(p.Path) {
 		if content, ok := r.overlay.ReadTextFile(ctx, p.Path); ok {
-			return r.scan(strings.NewReader(content), p.Offset, p.Limit)
+			return emit(strings.NewReader(content), p.Offset, p.Limit)
 		}
 	}
 
@@ -140,6 +172,9 @@ func (r readFile) Execute(ctx context.Context, args json.RawMessage) (string, er
 		return "", fmt.Errorf("read %s: %w", displayPath, err)
 	}
 	defer f.Close()
+	if err := confineOpened(r.readRoots, f); err != nil {
+		return "", err
+	}
 
 	// Peek the first 8 KiB to reject binary files cheaply (a NUL byte) before
 	// reading further — keeps a multi-GB archive from being slurped just to be
@@ -164,14 +199,14 @@ func (r readFile) Execute(ctx context.Context, args json.RawMessage) (string, er
 		}
 		all := append(peek, rest...)
 		bom := fileenc.DetectQuick(all)
-		return r.scan(bytes.NewReader(fileenc.Decode(all, bom)), p.Offset, p.Limit)
+		return emit(bytes.NewReader(fileenc.Decode(all, bom)), p.Offset, p.Limit)
 	case fileenc.UTF8BOM:
 		// Strip the 3-byte BOM; the content is valid UTF-8 and streams directly.
 		body := peek
 		if len(body) >= 3 {
 			body = body[3:]
 		}
-		return r.scan(io.MultiReader(bytes.NewReader(body), f), p.Offset, p.Limit)
+		return emit(io.MultiReader(bytes.NewReader(body), f), p.Offset, p.Limit)
 	}
 
 	// BOM-less UTF-16 (Windows source files) has a NUL for every ASCII char but
@@ -186,7 +221,7 @@ func (r readFile) Execute(ctx context.Context, args json.RawMessage) (string, er
 			return "", fmt.Errorf("read %s: %w", displayPath, rerr)
 		}
 		all := append(peek, rest...)
-		return r.scan(bytes.NewReader(fileenc.Decode(all, k)), p.Offset, p.Limit)
+		return emit(bytes.NewReader(fileenc.Decode(all, k)), p.Offset, p.Limit)
 	}
 
 	if bytes.IndexByte(peek, 0) >= 0 {
@@ -203,22 +238,18 @@ func (r readFile) Execute(ctx context.Context, args json.RawMessage) (string, er
 		peekEOF = merr != nil
 	}
 
-	// Detect from a char-safe slice: when more file follows, trim to the last
-	// newline so the sample never ends mid multi-byte sequence (UTF-8 and GB18030
-	// are ASCII-transparent, so '\n' is always a clean boundary).
-	sample := head
+	// When more file follows, the sample can end inside a character.
+	detect := fileenc.Detect
 	if !peekEOF {
-		if i := bytes.LastIndexByte(head, '\n'); i >= 0 {
-			sample = head[:i+1]
-		}
+		detect = fileenc.DetectFragment
 	}
-	enc, _ := fileenc.Detect(sample)
+	enc, _ := detect(head)
 
 	src := io.MultiReader(bytes.NewReader(head), f)
 	if dec := fileenc.Decoder(enc); dec != nil {
-		return r.scan(transform.NewReader(src, dec), p.Offset, p.Limit)
+		return emit(transform.NewReader(src, dec), p.Offset, p.Limit)
 	}
-	return r.scan(src, p.Offset, p.Limit)
+	return emit(src, p.Offset, p.Limit)
 }
 
 // scan reads lines from src and returns the formatted output with line numbers.
@@ -267,12 +298,52 @@ func (r readFile) scan(src io.Reader, offset, limit int) (string, error) {
 	return b.String(), nil
 }
 
+// render picks what read_file returns: numbered lines paged at the default
+// limit for the model, or the text itself for a call another tool made.
+func (r readFile) render(ctx context.Context, limit int) (func(io.Reader, int, int) (string, error), int) {
+	if tool.IsNested(ctx) {
+		return verbatim, limit
+	}
+	if limit <= 0 {
+		limit = readFileDefaultLimit
+	}
+	return r.scan, limit
+}
+
+// verbatim is read_file for a call another tool made: the text itself, line
+// endings and final newline included, so a script can edit it and write it
+// back. offset and limit select whole lines; no limit means the rest of the file.
+func verbatim(src io.Reader, offset, limit int) (string, error) {
+	data, err := io.ReadAll(src)
+	if err != nil {
+		return "", fmt.Errorf("read: %w", err)
+	}
+	if offset == 0 && limit <= 0 {
+		return string(data), nil
+	}
+	lines := strings.SplitAfter(string(data), "\n")
+	if lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if offset >= len(lines) {
+		return "", nil
+	}
+	end := len(lines)
+	if limit > 0 && offset+limit < end {
+		end = offset + limit
+	}
+	return strings.Join(lines[offset:end], ""), nil
+}
+
 // binaryRefusal says why the bytes are not shown. An image is sent to the path
 // images actually travel: told to hexdump instead, a model spends a megabyte of
 // context on hex that answers nothing.
 func binaryRefusal(displayPath string, head []byte, external bool) error {
 	if kind := imageKind(head); kind != "" {
-		return fmt.Errorf("%s is a %s image; read_file reads text. Reference it as @%s — a model that reads images receives the picture itself, and one that cannot delegates with read_only_task", displayPath, kind, displayPath)
+		// view_image is offered only to a model that reads images; a reference in
+		// the user's own message also shows one, but the model writing @path
+		// attaches nothing.
+		return fmt.Errorf("%s is a %s image; read_file reads text. If view_image is among your tools, use it to see the picture; otherwise it is viewable only when the user's message references it as @%s — writing that yourself attaches nothing, so ask them to", displayPath, kind, displayPath)
 	}
 	if external {
 		return fmt.Errorf("binary file %s (NUL byte detected); not shown by read_file", displayPath)

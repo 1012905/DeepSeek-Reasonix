@@ -39,6 +39,51 @@ export interface PluginRuntime {
   tools?: string[];
 }
 
+// What the install preview shows about a Claude Code mod's hooks module, read
+// from its syntax tree. A listing, not a guarantee.
+export interface ModPreviewEvent {
+  name: string;
+  // Not a literal: the name cannot be listed.
+  dynamic?: boolean;
+}
+
+export interface ModPreviewCall {
+  namespace: string;
+  method?: string;
+  dynamic?: boolean;
+}
+
+// Code the module pulls in that the listing cannot see.
+export interface ModPreviewImport {
+  spec: string;
+  kind: "static" | "require" | "dynamic";
+}
+
+// eval, new Function, a computed member of the API: parts of the module are unlistable.
+export interface ModPreviewFinding {
+  kind: string;
+}
+
+export interface ModPreview {
+  plugin: string;
+  // The module's path inside the package, and the hash of the bytes previewed.
+  module: string;
+  sha256: string;
+  // False when the module could not be read (typescript | too_large | unparseable | timeout |
+  // unsupported_module): say "not previewed", never "clean".
+  listed: boolean;
+  reason?: string;
+  events: ModPreviewEvent[];
+  api: ModPreviewCall[];
+  imports: ModPreviewImport[];
+  findings: ModPreviewFinding[];
+  // What the module takes from the session or queues into it, by literal call:
+  // "messages" and "usage" read it, "submit" queues a prompt.
+  session: string[];
+  // Literal events this host never raises.
+  unserved: string[];
+}
+
 export interface PluginSkipped {
   capability: string;
   path?: string;
@@ -83,6 +128,7 @@ export interface PluginAction {
   riskReasons?: string[];
   name?: string;
   source?: string;
+  commit?: string;
   target?: string;
   version?: string;
   manifestKind?: string;
@@ -105,9 +151,13 @@ export interface PluginAction {
   env?: Record<string, string>;
   headers?: Record<string, string>;
   runtime?: PluginRuntime & { fullTrust: boolean };
+  mod?: ModPreview;
   warnings?: string[];
   error?: string;
   next?: string;
+  errorCode?: string;
+  // The kernel shortened a field or list of this step; what is shown is not all of it.
+  previewTruncated?: boolean;
 }
 
 // The same object answers a preview and an apply; status says which happened —
@@ -122,6 +172,11 @@ export interface PluginPlan {
   warnings?: string[];
   error?: string;
   next?: string;
+  previewTruncated?: boolean;
+  // Steps the plan holds beyond the ones listed; none of them is high risk.
+  hiddenActions?: number;
+  // The plan's real tally per kind, whatever the list shows.
+  kinds?: { skill: number; mcp: number; plugin: number };
   // The package landed but the running session could not be rebuilt — almost
   // always because a turn is in flight. Not a failed install.
   reloadError?: string;

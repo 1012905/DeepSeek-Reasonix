@@ -14,7 +14,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"reasonix/internal/state/sessionstore"
@@ -24,7 +23,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"reasonix/internal/base/i18n"
 	"reasonix/internal/base/nilutil"
 	"reasonix/internal/contract/ablation"
 	"reasonix/internal/contract/config"
@@ -41,6 +39,7 @@ import (
 	"reasonix/internal/ext/skill"
 	"reasonix/internal/model/billing"
 	"reasonix/internal/platform/browser"
+	"reasonix/internal/platform/gitcmd"
 	"reasonix/internal/runtime/agent"
 	"reasonix/internal/runtime/capability"
 	"reasonix/internal/runtime/goaleval"
@@ -48,6 +47,7 @@ import (
 	"reasonix/internal/runtime/promptrefine"
 	"reasonix/internal/runtime/recovery"
 	"reasonix/internal/runtime/taskmonitor"
+	"reasonix/internal/runtime/usecap"
 	"reasonix/internal/safety/evidence"
 	"reasonix/internal/safety/permission"
 	"reasonix/internal/safety/sandbox"
@@ -56,7 +56,6 @@ import (
 	"reasonix/internal/state/sessiontemp"
 	"reasonix/internal/state/workspacelease"
 	"reasonix/internal/tools/jobs"
-	"reasonix/internal/tools/shellrun"
 )
 
 // ErrTurnRunning reports that a caller tried to start a second foreground turn
@@ -84,6 +83,10 @@ var errNoSessionPath = errors.New("session has content but no session path; conv
 // Controller drives one chat session. Construct with New; drive with the command
 // methods; observe through the Sink passed in Options.
 type Controller struct {
+	composition           *compositionControl
+	compositionMutationMu sync.Mutex
+	idleObserver          func()
+	surfacePublications   liveSurfacePublications
 	controllerDeps
 
 	guardianPath string // persisted guardian session file ("" when disabled)
@@ -194,6 +197,10 @@ type Controller struct {
 	// inbox is the durable session-level instruction queue. Disk I/O never
 	// runs under c.mu; the store owns its own lock.
 	inbox inboxState
+	// peers is this controller's side of messages between sessions; nil-safe off.
+	peers *peerMail
+	// settings counts the setting proposals of the current turn.
+	settings settingsState
 }
 
 type approvalReply struct {
@@ -214,15 +221,6 @@ type pendingApproval struct {
 	kind         string // tool | plan | recovery; empty = tool
 	recovery     *event.RecoveryApproval
 	reply        chan approvalReply
-}
-
-// pendingAsk is an in-flight ask question batch. questions is retained so the
-// AskRequest can be re-emitted to a frontend that reconnected after the original
-// event (see ReplayPendingPrompts).
-type pendingAsk struct {
-	questions []event.AskQuestion
-	reply     chan []event.AskAnswer
-	queued    bool // registered but not yet shown; replay must skip it
 }
 
 type plannerSessionResetter interface {
@@ -281,11 +279,11 @@ type externalFolderToolRefs interface {
 }
 
 // Options carries the already-built pieces setup assembles. Lifecycle metadata
-// lets the controller mint and rotate session files; Host/Commands are surfaced
-// to frontends that resolve MCP prompts and slash commands.
+// lets it mint/rotate session files; Host/Commands surface MCP prompts and slash commands.
 type Options struct {
 	Runner   agent.Runner
 	Executor *agent.Agent
+	Observe  *ObserveRun
 	Guardian *guardian.Session
 	// RecoveryReviewer is the optional independent recovery reviewer (nil =
 	// rule-only path with fail-closed human confirmation for ambiguous cases).
@@ -300,29 +298,40 @@ type Options struct {
 	// GoalEvaluator is the optional bounded Goal completion evaluator consulted
 	// when the working model submits no update_goal report. nil fails closed:
 	// the goal pauses instead of defaulting to continue.
-	GoalEvaluator goaleval.Evaluator
-	// PromptRefiner rewrites a draft before it is sent; nil refuses the ask.
-	PromptRefiner *promptrefine.Refiner
-	Sink          event.Sink
-	Policy        permission.Policy
-	// SubagentGate is the shared, mutable gate every headless-only sub-agent
-	// surface (task, writer-capable skill sub-agents, planner) reads from. Nil
-	// disables gating for those surfaces same as before this field existed.
-	// SetToolApprovalMode and ApplyHeadlessApprovalMode call Update on it so a
-	// runtime approval-mode switch reaches sub-agents, not just the parent
-	// executor's own gate.
-	SubagentGate  *SharedHeadlessGate
-	Label         string
-	ModelRef      string
-	SystemPrompt  string
-	SessionDir    string
-	SessionPath   string
+	GoalEvaluator   goaleval.Evaluator
+	PromptRefiner   *promptrefine.Refiner // rewrites a draft before it is sent; nil refuses the ask
+	CommitMessenger CommitDrafter         // drafts commit messages; nil refuses the ask
+	Sink            event.Sink
+	// QuoteContext is the same live pricing projection used by the assembled sink.
+	QuoteContext *event.QuoteContext
+	Policy       permission.Policy
+	// SubagentGate is the shared gate every headless-only sub-agent surface
+	// reads; nil disables gating there. The approval-mode setters Update it so
+	// a runtime switch reaches sub-agents, not only the executor's own gate.
+	SubagentGate *SharedHeadlessGate
+	Label        string
+	ModelRef     string
+	Effort       string                // resolved effective provider effort; not a request-scoped override
+	ModelModes   []config.ModelMode    // optional modes the session's model declares
+	ModelEntry   *config.ProviderEntry // the resolved entry the session was built on; nil leaves ModelFace unanswered
+	// ProviderFingerprint identifies resolved provider build inputs; empty fails closed.
+	ProviderFingerprint string
+	SystemPrompt        string
+	SessionDir          string
+	SessionPath         string
+	// Peers opens this session to messages from other sessions; zero is off.
+	Peers PeersOptions
+	// Settings, when set, is bound to this controller so the setting tool can reach it.
+	Settings      *tool.SettingsLink
 	Host          *plugin.Host
 	Commands      []command.Command
 	Skills        []skill.Skill
 	AllSkills     []skill.Skill
 	SkillStore    *skill.Store
 	AllSkillStore *skill.Store
+	// Clock is the host's wall clock for the date the model is told; nil means
+	// the model is told none.
+	Clock func() time.Time
 	// DisableImplicitSkillInvocation controls model-facing discovery only;
 	// explicit /skill commands and management remain host-side capabilities.
 	DisableImplicitSkillInvocation bool
@@ -331,18 +340,22 @@ type Options struct {
 	// Plan itself is a workflow instruction and uses SkillRunner with the shared
 	// Permissions/Sandbox gate. SkillProfile supplies model/effort display
 	// metadata for the synthetic top-level run_skill event.
+	SideFactory         SideFactory // opens a read-only side conversation; nil = none
 	SkillRunner         skill.SubagentRunner
 	ReadOnlySkillRunner skill.SubagentRunner
 	SkillProfile        skill.ProfileResolver
 	Hooks               *hook.Runner
 	Memory              *memory.Set
 	Cleanup             func()
-	// Balance reads the active provider's optional wallet endpoint. Nil, or a
-	// cache built on an empty URL, means the provider declares none. Hosts that
-	// build several runtimes hand every pane the same cache.
-	Balance *billing.Cache
+	// Balance reads the active provider's optional wallet endpoint; nil or an empty
+	// URL means none. Hosts that build several runtimes share one cache across panes.
+	Balance  *billing.Cache
+	Tariff   TariffSource
+	Feedback FeedbackOptions // nil service refuses every feedback call
 	// Jobs is the session-scoped background-job manager (nil disables background jobs).
 	Jobs *jobs.Manager
+	// Subagents reads the runs the delegation tools persist; nil lists none.
+	Subagents SubagentReader
 	// TaskStore remains a FileStore-compatible authority. Desktop injects one
 	// observed instance so recorder and task-control APIs share post-commit
 	// projection hints; nil preserves the ordinary FileStore.
@@ -362,27 +375,30 @@ type Options struct {
 	// CapabilityRuntime is the controller-local authoritative MCP inventory used
 	// by stable use_capability frontends. It shares Host processes with sibling
 	// tabs but never shares their enabled/disabled state.
-	CapabilityRuntime *agent.MCPCapabilityRuntime
+	CapabilityRuntime *usecap.MCPCapabilityRuntime
 	RuntimeGeneration uint64 // PublishGate generation for admission
 	// RuntimeOwner isolates publish/drain gates and receipts to one
 	// controller/session rebuild lineage. Nil preserves compatibility behavior.
 	RuntimeOwner *extension.RuntimeOwner
-	// WorkspaceRoot is the project root checkpoint restores are confined to ("" =
-	// no confinement). Frontends pass the cwd they launched the session in.
+	// WorkspaceRoot confines checkpoint restores ("" = none); frontends pass the launch cwd.
 	WorkspaceRoot          string
+	WorkspaceRepo          gitcmd.Repo     // WorkspaceRoot's identity, resolved when the session opened
+	Posture                PostureEvidence // what DefaultApprovalMode decides from
 	ExternalFolderToolRefs externalFolderToolRefs
 	ShowTurnReceipt        bool // attach the end-of-turn verification report; see display_prefs.go
 	// ResponseLanguage controls final-answer language preference. Empty/auto
 	// means no transient injection because the stable language policy follows the
 	// current user turn.
 	ResponseLanguage string
-	// ReasoningLanguage controls visible reasoning language preference. Empty/auto
-	// means no transient injection because the stable language policy already
-	// follows the conversation language.
+	// ReasoningLanguage controls the visible reasoning language; empty/auto follows the conversation.
 	ReasoningLanguage string
+	// TurnNarration is brief (default) or detailed; see config.TurnNarration.
+	TurnNarration string
 	// DisableColdResumePrune suppresses the cold-resume cache-state notice.
 	// Resume never rewrites history regardless of this flag.
 	DisableColdResumePrune bool
+	// EmbeddedDiffDetection marks a shell result whose whole output is a unified diff.
+	EmbeddedDiffDetection bool
 	// Shell is the interpreter user-invoked "!" commands run under, so /shell
 	// matches the agent's configured [tools.shell] choice. Zero value = auto.
 	Shell sandbox.Shell
@@ -466,7 +482,6 @@ func New(opts Options) *Controller {
 		runtimeGeneration:  opts.RuntimeGeneration,
 	}
 	c.adoptSessionResources(opts)
-
 	c.publishPerProjectContext(opts)
 	if opts.Extensions != nil {
 		c.extensions = opts.Extensions
@@ -478,7 +493,10 @@ func New(opts Options) *Controller {
 	// Checkpoints: bind a store to the session and route writer pre-edits into it.
 	c.rebindCheckpoints(opts.SessionPath)
 	c.setActiveJobSession(opts.SessionPath)
+	c.peers = newPeerMail(opts.Peers)
 	c.rebindInbox()
+	c.startPeers()
+	c.startSettings(opts.Settings)
 	// Observe Steer / unapplied-steer for durable inbox state transitions.
 	// Must wrap both the controller sink and the executor sink: agent.Steer
 	// emits on the executor path, TurnDone on the controller path.
@@ -486,18 +504,20 @@ func New(opts Options) *Controller {
 	if c.executor != nil {
 		c.executor.SetSink(c.sink)
 		c.executor.SetHostContext(c)
+		c.executor.SetAdmissionSaver(c)
 	}
 	cmdsInit := opts.Commands
 	c.commands.Store(&cmdsInit)
 	if c.executor != nil {
 		c.wireMutationObserver()
 		c.executor.SetMemoryQueue(c)
+		c.executor.SetPathObserver(c.skills.pathHits)
 	}
 	// Auto Guard is built into Auto. Ask and YOLO bypass it through the mode
 	// provider, so no separate enablement state is needed.
 	c.initRecoveryGate(opts.RecoveryReviewer, opts.RecoveryHeadless)
-
 	c.observeJobs(opts.TaskStore)
+	c.bindObserve()
 	return c
 }
 
@@ -633,6 +653,15 @@ const (
 // to rerun a shell command without the OS sandbox after the sandbox failed.
 const SandboxEscapeApprovalTool = "sandbox_escape"
 
+// NetworkEgressApprovalTool is the internal Tool name used to ask whether bash
+// may reach a host outside [sandbox] allowed_domains; the subject is the host.
+const NetworkEgressApprovalTool = permission.NetworkEgress
+
+// PaidSearchApprovalTool is the internal Tool name used to ask whether
+// web_search may use a backend the vendor charges for; the subject is the
+// backend.
+const PaidSearchApprovalTool = permission.PaidSearch
+
 // ManagedConfigWriteApprovalTool is the internal Tool name used for per-write
 // approval when a file tool targets a Reasonix-managed config file outside the
 // workspace write roots. It is a fresh human decision: config files control
@@ -645,30 +674,12 @@ const ManagedConfigWriteApprovalTool = "config_write"
 const planApprovedMessage = "Plan approved — plan mode is off. Implement the plan now. The ordinary writer fallback is approved for this execution turn; explicit ask/deny rules and forced fresh reviews still apply. Use this serial workflow: 1) mark the first sub-step in_progress with todo_write (this establishes the task list); 2) execute the sub-step; 3) call complete_step with evidence — the host then marks that sub-step completed and moves the next one to in_progress for you. Repeat 2–3 for each remaining sub-step. You don’t need another todo_write to mark steps completed; each complete_step advances the list. Sign off one sub-step at a time — never batch multiple completions."
 
 type preparedInvocationTurn struct {
-	composed  string
-	subagents []skill.Skill
-}
-
-// compactAndReport folds the context and says what happened. A fold the kernel
-// declined is an answer about this transcript — nothing left worth folding —
-// and reporting it as a failure sent people looking for a broken kernel.
-func (c *Controller) compactAndReport(focus string) {
-	verdict, err := c.Compact(context.Background(), agent.CompactRequest{Instructions: focus})
-	switch {
-	case err == nil && verdict.Compacted():
-		c.notice("compacted")
-		if err := c.SnapshotRewrite(); err != nil {
-			slog.Warn("controller: snapshot after compact", "err", err)
-		}
-	case err == nil:
-		// The host settled which economics declined; saying it in the kernel's
-		// own words beats a frontend inferring one from an empty result.
-		c.notice("nothing to compact — " + agent.CompactDeclineText(verdict.Reason))
-	case agent.IsCompactionDeclined(err):
-		c.notice("nothing to compact — " + agent.CompactionDeclineReason(err))
-	default:
-		c.notice("compaction failed: " + err.Error())
-	}
+	composed         string
+	subagents        []skill.Skill
+	inlineSkillNames []string
+	// task stands in for the typed text when none was given and every subagent
+	// chosen has a default scope of its own.
+	task string
 }
 
 // prometheusPrompt is the strategic planner system prompt.
@@ -699,133 +710,6 @@ func (c *Controller) applyPrometheus(input, display string) {
 	}
 }
 
-// shellTimeout is the maximum time a user-invoked "!command" may run. Matches
-// the bash tool's timeout so behaviour is consistent across invocation paths.
-const shellTimeout = 120 * time.Second
-
-// shellWaitDelay bounds how long cmd.Run() waits after context cancellation for
-// the child's pipes to drain, matching the bash tool's WaitDelay.
-const shellWaitDelay = 5 * time.Second
-
-func shellCommandPreview(command string) string {
-	command = strings.TrimSpace(strings.ReplaceAll(command, "\n", " "))
-	const max = 48
-	r := []rune(command)
-	if len(r) > max {
-		return string(r[:max]) + "…"
-	}
-	return command
-}
-
-// RunShell executes a shell command directly (bypassing the model) and streams
-// the output as ToolDispatch/ToolProgress/ToolResult events. It uses the same
-// bash-tool infrastructure (shell resolution, timeout) and shares the runGuarded
-// lock with model turns — only one can run at a time. User-invoked "!" commands
-// run without the OS sandbox (the user typed the command explicitly).
-func (c *Controller) RunShell(command string) {
-	command = strings.TrimSpace(command)
-	if command == "" {
-		c.notice(i18n.M.ShellExecEmpty)
-		return
-	}
-	c.runGuarded(func(ctx context.Context) error {
-		sh := c.shell
-		if sh.Path == "" {
-			sh = sandbox.ResolveShell("", "", nil)
-		}
-		argv, _ := sandbox.Command(sandbox.Spec{}, sh, command) // false = unsandboxed (user invoked)
-
-		preview := []rune(command)
-		if len(preview) > 32 {
-			preview = preview[:32]
-		}
-		id := "shell-" + string(preview)
-		diagnosticPreview := shellCommandPreview(command)
-		desc := shellrun.DescriptorFromShell(sh)
-
-		c.sink.Emit(event.Event{
-			Kind: event.ToolDispatch,
-			Tool: event.Tool{
-				ID:     id,
-				Name:   "bash",
-				Args:   fmt.Sprintf(`{"command":%q}`, command),
-				Issuer: event.IssuedByUser,
-				Execution: &event.ShellExecution{
-					Kind: desc.Kind, Shell: desc.Shell, ShellVersion: desc.ShellVersion,
-					Platform: desc.Platform, SupportsAndAnd: desc.SupportsAndAnd,
-					State: tool.ShellStateRunning,
-				},
-			},
-		})
-
-		start := time.Now()
-		res := shellrun.RunForeground(ctx, shellrun.Request{
-			Argv:           argv,
-			Dir:            c.workspaceRoot,
-			Timeout:        shellTimeout,
-			WaitDelay:      shellWaitDelay,
-			CommandPreview: diagnosticPreview,
-			ShellKind:      sh.Kind.String(),
-			ShellPath:      sh.Path,
-			Source:         "user_shell",
-			Track:          true,
-			Progress: func(chunk string) {
-				c.sink.Emit(event.Event{
-					Kind: event.ToolProgress,
-					Tool: event.Tool{ID: id, Output: chunk},
-				})
-			},
-		})
-		durationMs := time.Since(start).Milliseconds()
-		ex := &event.ShellExecution{
-			Kind: desc.Kind, Shell: desc.Shell, ShellVersion: desc.ShellVersion,
-			Platform: desc.Platform, SupportsAndAnd: desc.SupportsAndAnd,
-			State: res.State, FailurePhase: res.FailurePhase,
-			OutputTail: res.OutputTail, DurationMs: durationMs,
-			MutationRisk: tool.ShellMutationNone,
-			Verification: tool.ShellVerificationNotVerification,
-		}
-		if res.ExitCode != nil {
-			code := *res.ExitCode
-			ex.ExitCode = &code
-		}
-		switch res.State {
-		case tool.ShellStateCompleted:
-			ex.MutationRisk = tool.ShellMutationNone
-		case tool.ShellStateNotRun:
-			ex.MutationRisk = tool.ShellMutationNotStarted
-		case tool.ShellStateFailed:
-			if res.FailurePhase == tool.ShellPhaseLaunch {
-				ex.MutationRisk = tool.ShellMutationNotStarted
-			} else {
-				ex.MutationRisk = tool.ShellMutationMayBePartial
-			}
-		case tool.ShellStateTimedOut, tool.ShellStateCancelled:
-			ex.MutationRisk = tool.ShellMutationMayBePartial
-		}
-
-		errText := ""
-		switch res.State {
-		case tool.ShellStateCancelled:
-			errText = i18n.M.TurnCancelled
-		case tool.ShellStateTimedOut:
-			errText = fmt.Sprintf(i18n.M.ShellExecTimeoutFmt, shellTimeout)
-		case tool.ShellStateFailed, tool.ShellStateNotRun:
-			if res.Err != nil {
-				errText = fmt.Sprintf(i18n.M.ShellExecFailedFmt, res.Err)
-			}
-		}
-		c.sink.Emit(event.Event{
-			Kind: event.ToolResult,
-			Tool: event.Tool{
-				ID: id, Name: "bash", Output: res.Combined, Err: errText,
-				DurationMs: durationMs, Execution: ex, Issuer: event.IssuedByUser,
-			},
-		})
-		return nil
-	})
-}
-
 // refTurn is one @-ref-resolving turn: what to send, which line carries the
 // refs, what the transcript shows, and how the refs resolve. The zero value
 // resolves input against the workspace with no structured-output format.
@@ -839,7 +723,7 @@ type refTurn struct {
 	// original is a resubmitted turn's pre-edit text; non-empty routes it
 	// through the edited-goal loop.
 	original string
-	format   string
+	tags     turnTags
 	// resolve reads the refs out of refLine. nil resolves against the whole
 	// workspace; a frontend that must not widen a ref to an arbitrary absolute
 	// path passes ResolveScopedRefs.
@@ -855,7 +739,8 @@ func (c *Controller) noticeDetail(text, detail string) {
 	c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: text, Detail: detail})
 }
 
-// Running reports whether a turn is currently in flight.
+// Running reports whether admission is closed by a turn, including the delivery
+// of its TurnDone. Guards read this; a window shows TurnInFlight.
 func (c *Controller) Running() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -866,7 +751,9 @@ func (c *Controller) Running() bool {
 func (c *Controller) RuntimeStatus() RuntimeStatus {
 	c.mu.Lock()
 	running := c.gate.running
-	active := running || c.gate.finishing
+	// A rotation (compact, rewind, new session) is rewriting the history a
+	// rebuild would carry over, so it is active work to every busy guard.
+	active := running || c.gate.finishing || c.gate.rotating
 	canceling := c.gate.canceling
 	c.mu.Unlock()
 	pending := c.approval.hasPending()
@@ -878,13 +765,6 @@ func (c *Controller) RuntimeStatus() RuntimeStatus {
 		CancelRequested: canceling,
 		Cancellable:     running || pending,
 	}
-}
-
-// Turn returns the current turn number (0 before the first submit).
-func (c *Controller) Turn() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.turn
 }
 
 type plannerPlanApprover struct {
@@ -996,8 +876,8 @@ func (c *Controller) Compact(ctx context.Context, req agent.CompactRequest) (age
 	// The rotation gate keeps a turn from starting while a manual compaction is
 	// building and installing a new model-visible projection.
 	if err := c.beginRotation(); err != nil {
-		if errors.Is(err, errTurnRunningRotation) {
-			return agent.CompactVerdict{}, fmt.Errorf("cannot compact while a turn is running")
+		if errors.Is(err, errTurnRunningRotation) || errors.Is(err, errRotationInProgress) {
+			return agent.CompactVerdict{}, errors.Join(errCompactBusy, err)
 		}
 		return agent.CompactVerdict{}, err
 	}
@@ -1027,17 +907,6 @@ func (c *Controller) loadGuardianSession() {
 	}
 	if err := c.guardianSess.Load(path); err != nil && !os.IsNotExist(err) {
 		slog.Warn("controller: load guardian session", "err", err)
-	}
-}
-
-// ResetPlannerSession clears the planner's conversation history so the next
-// plan starts fresh. In dual-model (Plan+Execute) mode, this prevents stale
-// planner output from a previous session or tab from contaminating the current
-// executor's handoff. Safe to call on a single-model controller (no-op).
-func (c *Controller) ResetPlannerSession() {
-	runner, ok := c.runner.(plannerSessionResetter)
-	if ok {
-		runner.ResetPlannerSession()
 	}
 }
 
@@ -1180,7 +1049,7 @@ func (c *Controller) ToolResult(toolID string) *ToolResultData {
 			}
 			for _, tc := range msgs[j].ToolCalls {
 				if tc.ID == toolID {
-					out.Args = tc.Arguments
+					out.Args = tc.ExecutionArguments()
 					return out
 				}
 			}
@@ -1190,75 +1059,9 @@ func (c *Controller) ToolResult(toolID string) *ToolResultData {
 	return nil
 }
 
-// Balance reads the active provider's wallet. One declaring no balance_url
-// reads back unconfigured rather than failed: "there is no wallet here" and
-// "the wallet did not answer" are opposite answers to why there is no number.
-func (c *Controller) Balance(ctx context.Context) billing.Reading {
-	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
-	defer cancel()
-	return c.balance.Read(ctx)
-}
-
 // Host returns the running MCP host (nil when no plugins), for frontends that
 // list servers / resolve MCP prompts.
 func (c *Controller) Host() *plugin.Host { return c.mcp.hostRef() }
-
-// Commands returns the loaded custom slash commands.
-func (c *Controller) Commands() []command.Command {
-	if p := c.commands.Load(); p != nil {
-		return *p
-	}
-	return nil
-}
-
-// ReloadCommands rescans all command directories and hot-swaps the slash_command
-// tool and the internal command slice — no MCP restart, no hook rerun.
-func (c *Controller) ReloadCommands(ctx context.Context) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-	}
-	cmds, loadErr := command.LoadRoots(config.CommandRootsForRoot(c.workspaceRoot)...)
-	var cmdSkills []skill.Skill
-	if !c.skills.noImplicitInvocation {
-		cmdSkills = c.SlashSkills()
-	}
-
-	entries := make([]command.SlashEntry, 0, len(cmdSkills)+len(cmds))
-	for _, sk := range cmdSkills {
-
-		entries = append(entries, command.SlashEntry{
-			Name:        sk.SlashName(),
-			Description: sk.Description,
-			Render:      func(args []string) string { return c.skills.render(sk, strings.Join(args, " ")) },
-		})
-	}
-	for _, cmd := range cmds {
-		if cmd.Hidden {
-			continue
-		}
-
-		entries = append(entries, command.SlashEntry{
-			Name:        cmd.Name,
-			Description: cmd.Description,
-			ArgHint:     cmd.ArgHint,
-			Render:      func(args []string) string { return cmd.Render(args) },
-		})
-	}
-	c.mcp.registerTool(command.NewSlashCommandTool(entries))
-	cmdSlice := cmds
-	c.commands.Store(&cmdSlice)
-	return loadErr
-}
-
-// Executor returns the underlying agent when present (nil for pure runners).
-func (c *Controller) Executor() *agent.Agent {
-	if c == nil {
-		return nil
-	}
-	return c.executor
-}
 
 // HookRunner returns the session's hook runner (nil-safe; may hold zero hooks),
 // so a frontend can list the active hooks via `/hooks`.
@@ -1298,9 +1101,12 @@ func (c *Controller) ModelRef() string { return c.modelRef }
 // Empty means no scoping is in effect.
 func (c *Controller) WorkspaceRoot() string { return c.workspaceRoot }
 
+// loadConfigForRoot is the turn-time config read; tests count it.
+var loadConfigForRoot = config.LoadForRoot
+
 func (c *Controller) imageInputEnabled() bool {
 	ref := c.modelRef
-	cfg, err := config.LoadForRoot(c.workspaceRoot)
+	cfg, err := loadConfigForRoot(c.workspaceRoot)
 	if err == nil && ref == "" {
 		ref = cfg.DefaultModel
 	}
@@ -1355,6 +1161,12 @@ type closeJobsMode int
 const (
 	closeJobsWithGrace closeJobsMode = iota
 	closeJobsAsync
+	// closeJobsHandedOff leaves the manager to a replacement controller, so
+	// the jobs run on; cleanup waits for those jobs, which still use what it
+	// would release.
+	closeJobsHandedOff
+	// closeJobsShared closes a controller that only borrowed the manager.
+	closeJobsShared
 )
 
 // SetBypass is the legacy name for SetAutoApproveTools. Keep it for existing

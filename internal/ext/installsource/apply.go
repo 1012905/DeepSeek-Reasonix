@@ -7,28 +7,40 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"strings"
 
 	"reasonix/internal/contract/config"
 	"reasonix/internal/ext/skill"
+	"reasonix/internal/ext/skilllock"
 )
 
 // apply dispatches to the per-action implementation. Each branch is
 // responsible for setting act.Status / act.Error / act.Next and for
 // cleaning up any partial side effects it left behind.
-func (t *installSourceTool) apply(ctx context.Context, req request, act *action) error {
+func (t *Tool) apply(ctx context.Context, req request, act *action) error {
 	switch act.Kind {
 	case "skill":
 		switch act.Action {
 		case "register_skill_root":
 			return t.applySkillRoot(req, act)
 		case "copy_skill":
-			return t.applyCopySkill(req, act)
+			err := t.applyCopySkill(req, act)
+			if err == nil {
+				t.recordSkillSource(act)
+			}
+			return err
 		case "link_skill":
-			return t.applyLinkSkill(req, act)
+			err := t.applyLinkSkill(req, act)
+			if err == nil {
+				t.recordSkillSource(act)
+			}
+			return err
 		case "remove_skill":
-			return t.applyRemoveSkill(req, act)
+			err := t.applyRemoveSkill(req, act)
+			if err == nil && act.Scope == "global" && t.reasonixHome != "" {
+				_ = skilllock.Forget(t.reasonixHome, act.Name, act.Scope)
+			}
+			return err
 		case "remove_skill_root":
 			return t.applyRemoveSkillRoot(req, act)
 		default:
@@ -59,7 +71,7 @@ func (t *installSourceTool) apply(ctx context.Context, req request, act *action)
 
 // applySkillRoot appends the path to the active config's [skills].paths and
 // re-builds the Store to confirm the listed skills are discoverable.
-func (t *installSourceTool) applySkillRoot(req request, act *action) error {
+func (t *Tool) applySkillRoot(req request, act *action) error {
 	var cfg *config.Config
 	if err := config.EditConfigFile(act.ConfigPath, func(fresh *config.Config) error {
 		if err := fresh.AddSkillPath(act.Source); err != nil {
@@ -76,17 +88,31 @@ func (t *installSourceTool) applySkillRoot(req request, act *action) error {
 		if !ok {
 			return newErr(ErrSourceUnreadable, "skill %q was registered but is not discoverable", name)
 		}
+		var registeredPath string
+		for _, file := range act.skillFiles[name] {
+			if config.CanonicalSkillPath(file) == config.CanonicalSkillPath(sk.Path) {
+				registeredPath = file
+				break
+			}
+		}
+		if registeredPath == "" {
+			act.Warnings = append(act.Warnings, unselectedSkillWarning(name, act.Source, sk.Path))
+			continue
+		}
 		act.Discoverable = true
-		if act.CanonicalPath == "" && sk.Path != "" {
-			act.CanonicalPath = sk.Path
+		if act.CanonicalPath == "" {
+			act.CanonicalPath = registeredPath
 		}
 		if strings.TrimSpace(sk.Description) == "" {
 			act.Warnings = append(act.Warnings, fmt.Sprintf("skill %q has no description frontmatter; it is installed but the skills index will use a placeholder", name))
 		}
 	}
 	for _, listed := range store.List() {
-		if slices.Contains(act.Skills, listed.Name) {
-			act.Indexed = true
+		for _, file := range act.skillFiles[listed.Name] {
+			if config.CanonicalSkillPath(file) == config.CanonicalSkillPath(listed.Path) {
+				act.Indexed = true
+				break
+			}
 		}
 	}
 	act.Target = act.Source
@@ -97,7 +123,7 @@ func (t *installSourceTool) applySkillRoot(req request, act *action) error {
 // We refuse to overwrite any existing canonical directory or legacy flat file.
 // copyDir uses O_EXCL so any race that slips through the Lstat check still
 // loses atomically.
-func (t *installSourceTool) applyCopySkill(req request, act *action) error {
+func (t *Tool) applyCopySkill(req request, act *action) error {
 	canonical, err := t.skillCanonicalPath(act.skill.Name, act.Scope)
 	if err != nil {
 		return err
@@ -113,7 +139,11 @@ func (t *installSourceTool) applyCopySkill(req request, act *action) error {
 		}
 	}
 	if act.skill.IsDir {
-		if err := copyDir(act.skill.SourcePath, targetDir); err != nil {
+		source, err := act.copySource(act.skill.SourcePath)
+		if err != nil {
+			return err
+		}
+		if err := copyDir(source, targetDir, maxSkillCopyBytes, act.resolvedSource); err != nil {
 			return err
 		}
 	} else {
@@ -133,7 +163,7 @@ func (t *installSourceTool) applyCopySkill(req request, act *action) error {
 // Absolute sources outside the project or home root are blocked even when the
 // plan was approved: a link-mode skill should not become a backdoor to arbitrary
 // host files.
-func (t *installSourceTool) applyLinkSkill(req request, act *action) error {
+func (t *Tool) applyLinkSkill(req request, act *action) error {
 	canonical, err := t.skillCanonicalPath(act.skill.Name, act.Scope)
 	if err != nil {
 		return err
@@ -151,7 +181,11 @@ func (t *installSourceTool) applyLinkSkill(req request, act *action) error {
 			return newErr(ErrAlreadyExists, "skill %q already exists at %s", act.skill.Name, conflict)
 		}
 	}
-	if !isLinkTargetSafe(act.skill.SourcePath, t.home, t.root) {
+	source, err := filepath.EvalSymlinks(act.skill.SourcePath)
+	if err != nil {
+		return newErr(ErrSourceUnreadable, "%v", err)
+	}
+	if !isLinkTargetSafe(source, t.home, t.root) {
 		act.RiskLevel = RiskHigh
 		act.RiskReasons = append(act.RiskReasons, "link target is an absolute path outside the project or home root")
 		return newErr(ErrUnsafeLinkTarget, "skill %q source %s is outside %s and %s", act.skill.Name, act.skill.SourcePath, t.root, t.home)
@@ -159,7 +193,7 @@ func (t *installSourceTool) applyLinkSkill(req request, act *action) error {
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return err
 	}
-	if err := os.Symlink(act.skill.SourcePath, target); err != nil {
+	if err := os.Symlink(source, target); err != nil {
 		return err
 	}
 	act.Target = target
@@ -167,14 +201,9 @@ func (t *installSourceTool) applyLinkSkill(req request, act *action) error {
 	return t.verifySkill(act.Scope, act.skill.Name, act)
 }
 
-// isLinkTargetSafe reports whether a symlink source is allowed. The link
-// target is safe when:
-//   - it is a relative path (we never follow the parent of a relative link),
-//   - or its absolute form is contained within the user's home or the
-//     project root.
-//
-// Absolute paths outside both scopes are rejected with ErrUnsafeLinkTarget
-// so a SKILL.md that points at /etc/passwd does not silently succeed.
+// isLinkTargetSafe allows relative sources or sources within home/project roots.
+// Existing directory aliases are resolved on both sides of the comparison;
+// unresolved sources retain the lexical comparison used for planning.
 func isLinkTargetSafe(source, home, projectRoot string) bool {
 	if source == "" {
 		return false
@@ -183,11 +212,18 @@ func isLinkTargetSafe(source, home, projectRoot string) bool {
 		return true
 	}
 	clean := filepath.Clean(source)
+	resolved, resolveErr := filepath.EvalSymlinks(clean)
+	if resolveErr == nil {
+		clean = resolved
+	}
 	for _, root := range []string{home, projectRoot} {
 		if root == "" {
 			continue
 		}
 		base := filepath.Clean(root)
+		if resolved, err := filepath.EvalSymlinks(base); resolveErr == nil && err == nil {
+			base = resolved
+		}
 		if clean == base {
 			return true
 		}
@@ -203,7 +239,7 @@ func isLinkTargetSafe(source, home, projectRoot string) bool {
 // then SaveTo (so a persistence failure is detectable). If SaveTo fails, we
 // roll back the connection and any tools the caller already registered, so
 // the live session is not out of sync with the on-disk config.
-func (t *installSourceTool) applyInstallMCP(ctx context.Context, req request, act *action) error {
+func (t *Tool) applyInstallMCP(ctx context.Context, req request, act *action) error {
 	if act.entry.Name == "" {
 		return newErr(ErrInvalidManifest, "MCP action has no server entry")
 	}
@@ -294,7 +330,7 @@ func pluginEntryNamed(entries []config.PluginEntry, name, scope string) (config.
 	return config.PluginEntry{}, false
 }
 
-func (t *installSourceTool) rollbackMCPReplace(act *action, previous config.PluginEntry, oldDisconnected, connected bool) error {
+func (t *Tool) rollbackMCPReplace(act *action, previous config.PluginEntry, oldDisconnected, connected bool) error {
 	if connected && act.disconnect != nil {
 		act.disconnect()
 		act.disconnect = nil
@@ -305,7 +341,7 @@ func (t *installSourceTool) rollbackMCPReplace(act *action, previous config.Plug
 	return nil
 }
 
-func (t *installSourceTool) restoreMCP(previous config.PluginEntry) error {
+func (t *Tool) restoreMCP(previous config.PluginEntry) error {
 	if t.connectMCP == nil || previous.Name == "" {
 		return nil
 	}
@@ -316,7 +352,7 @@ func (t *installSourceTool) restoreMCP(previous config.PluginEntry) error {
 // applyRemoveSkill deletes a previously installed skill file or directory.
 // We only touch the project/global skills dir directly; the .mcp.json /
 // config file is not modified.
-func (t *installSourceTool) applyRemoveSkill(_ request, act *action) error {
+func (t *Tool) applyRemoveSkill(_ request, act *action) error {
 	target := act.Target
 	if target == "" {
 		return newErr(ErrInvalidManifest, "remove_skill action is missing target")
@@ -335,7 +371,7 @@ func (t *installSourceTool) applyRemoveSkill(_ request, act *action) error {
 	return nil
 }
 
-func (t *installSourceTool) applyRemoveSkillRoot(_ request, act *action) error {
+func (t *Tool) applyRemoveSkillRoot(_ request, act *action) error {
 	target := act.Target
 	if target == "" {
 		return newErr(ErrInvalidManifest, "remove_skill_root action is missing target")
@@ -364,7 +400,7 @@ func (t *installSourceTool) applyRemoveSkillRoot(_ request, act *action) error {
 
 // applyRemoveMCP removes an MCP server entry from the active config and
 // asks the host to disconnect it (if a connector is wired).
-func (t *installSourceTool) applyRemoveMCP(_ request, act *action) error {
+func (t *Tool) applyRemoveMCP(_ request, act *action) error {
 	unlock, err := config.LockConfigFileEdits(act.ConfigPath)
 	if err != nil {
 		return err

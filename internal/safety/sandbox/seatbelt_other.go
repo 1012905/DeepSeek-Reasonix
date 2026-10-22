@@ -4,36 +4,94 @@ package sandbox
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"reasonix/internal/base/fileutil"
+	"reasonix/internal/base/hostwrite"
 )
 
-var bwrapUsability sync.Map // resolved executable path -> bool
+type bwrapProbe struct {
+	path    string
+	denyNet bool
+}
+
+var bwrapUsability sync.Map // bwrapProbe -> error (nil when usable)
 
 // usableBwrap distinguishes an installed binary from a usable sandbox backend.
 // Hardened Linux hosts (including some CI runners) may expose bwrap on PATH but
 // deny the user namespace it needs; treating that as available makes enforce
 // fail later with a misleading launch error and overstates MCP isolation.
-func usableBwrap() (string, bool) {
+// spec decides whether the probe must also unshare the network, as its launch will.
+func usableBwrap(spec Spec) (string, bool) {
+	bwrap, err := probeBwrap(unsharesNet(spec))
+	return bwrap, err == nil
+}
+
+// unsharesNet is whether a launch for spec gives the command a network
+// namespace of its own: always, unless the spec leaves the host network open.
+func unsharesNet(spec Spec) bool { return !spec.Network || spec.Egress != nil }
+
+// probeBwrap is usableBwrap with its reason: ErrBwrapMissing when there is no
+// bwrap on PATH, ErrBwrapNamespaceDenied (wrapping the probe's own error) when
+// there is one that ran and cannot enter a namespace here, ErrBwrapNetworkDenied
+// when it enters one but not a network namespace, ErrBwrapUnrunnable when it
+// could not be started or did not finish.
+func probeBwrap(denyNet bool) (string, error) {
 	bwrap, err := exec.LookPath("bwrap")
 	if err != nil {
-		return "", false
+		return "", ErrBwrapMissing
 	}
-	if cached, ok := bwrapUsability.Load(bwrap); ok {
-		return bwrap, cached.(bool)
+	if base := runBwrapProbe(bwrap, false); base != nil || !denyNet {
+		return bwrap, base
+	}
+	return bwrap, runBwrapProbe(bwrap, true)
+}
+
+func runBwrapProbe(bwrap string, denyNet bool) error {
+	key := bwrapProbe{bwrap, denyNet}
+	if cached, ok := bwrapUsability.Load(key); ok {
+		err, _ := cached.(error)
+		return err
+	}
+	args := []string{"--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--", "true"}
+	if denyNet {
+		args = append([]string{"--unshare-net"}, args...)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	err = exec.CommandContext(ctx, bwrap, "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--", "true").Run()
-	usable := err == nil
-	actual, _ := bwrapUsability.LoadOrStore(bwrap, usable)
-	return bwrap, actual.(bool)
+	err := exec.CommandContext(ctx, bwrap, args...).Run()
+	if err != nil {
+		// Only a bwrap that ran and exited non-zero got as far as asking for a
+		// namespace; one that never started, or was stopped at the deadline, did not.
+		var exited *exec.ExitError
+		switch {
+		case !errors.As(err, &exited) || ctx.Err() != nil:
+			err = fmt.Errorf("%w: %w", ErrBwrapUnrunnable, err)
+		case denyNet:
+			err = fmt.Errorf("%w: %w", ErrBwrapNetworkDenied, err)
+		default:
+			err = fmt.Errorf("%w: %w", ErrBwrapNamespaceDenied, err)
+		}
+	}
+	actual, _ := bwrapUsability.LoadOrStore(key, err)
+	got, _ := actual.(error)
+	return got
+}
+
+// bwrapFaultFor is why bubblewrap cannot confine a command launched for spec on
+// this platform, nil when it can.
+func bwrapFaultFor(spec Spec) error {
+	_, err := probeBwrap(unsharesNet(spec))
+	return err
 }
 
 // When spec.Mode is "enforce" and bubblewrap (bwrap) is available on PATH,
@@ -45,7 +103,7 @@ func Command(spec Spec, sh Shell, command string) ([]string, bool) {
 	if !spec.Enforce() {
 		return sh.argv(command), false
 	}
-	if bwrap, ok := usableBwrap(); ok {
+	if bwrap, ok := usableBwrap(spec); ok {
 		argv := append([]string{bwrap}, bwrapArgs(spec, sh, command)...)
 		return argv, true
 	}
@@ -62,7 +120,7 @@ func CommandArgs(spec Spec, args []string) ([]string, bool) {
 	if !spec.Enforce() {
 		return args, false
 	}
-	if bwrap, ok := usableBwrap(); ok {
+	if bwrap, ok := usableBwrap(spec); ok {
 		argv := append([]string{bwrap}, bwrapArgsForArgs(spec, args)...)
 		return argv, true
 	}
@@ -73,7 +131,7 @@ func CommandArgs(spec Spec, args []string) ([]string, bool) {
 // On Linux, this verifies that bubblewrap can actually enter its namespace;
 // binary presence alone is insufficient on hardened hosts.
 func Available() bool {
-	_, ok := usableBwrap()
+	_, ok := usableBwrap(Spec{Network: true})
 	return ok
 }
 
@@ -83,6 +141,9 @@ func Available() bool {
 // rest of the filesystem is mounted read-only (matching macOS Seatbelt).
 func bwrapArgs(spec Spec, sh Shell, command string) []string {
 	args := bwrapBaseArgs(spec)
+	if egressBridged(spec) {
+		args = append(args, egressBridgeArgs(spec)...)
+	}
 	return append(args, sh.argv(command)...)
 }
 
@@ -99,6 +160,9 @@ func bwrapArgsForArgs(spec Spec, args []string) []string {
 	// siblings. Session-private binds already contain the generation's files,
 	// so only host-/tmp executables need this re-mount.
 	out = append(out, bwrapExecutableMountArgs(args)...)
+	if egressBridged(spec) {
+		out = append(out, egressBridgeArgs(spec)...)
+	}
 	return append(out, args...)
 }
 
@@ -114,19 +178,16 @@ func bwrapBaseArgs(spec Spec) []string {
 		"--dev", "/dev",
 		"--proc", "/proc",
 	}
+	args = append(args, bwrapDeviceArgs(spec.AllowDevices)...)
 	args = append(args, bwrapTmpMountArgs(spec)...)
-	if spec.Network {
+	if spec.Network && !egressBridged(spec) {
 		// Re-allow network by removing the network namespace.
 		args = args[1:] // drop --unshare-net
 	}
-	for _, root := range spec.WriteRoots {
+	for _, root := range bwrapWriteBinds(spec) {
 		args = append(args, "--bind", root, root)
 	}
-	if !spec.MinimalWrites {
-		for _, root := range linuxWriteDirs() {
-			args = append(args, "--bind", root, root)
-		}
-	}
+	args = append(args, bwrapGitMetadataArgs(spec)...)
 	args = append(args, bwrapForbidReadArgs(spec.ForbidReadRoots)...)
 	// Masks last so no later mount re-exposes an endpoint. A pathname socket
 	// lives in the mount namespace, so --unshare-net misses it and
@@ -135,6 +196,43 @@ func bwrapBaseArgs(spec Spec) []string {
 		args = append(args, "--ro-bind", "/dev/null", p)
 	}
 	return args
+}
+
+// bwrapGitMetadataArgs pins existing protected directories as mount points, which
+// rename and rmdir refuse, and binds protected files and trees read-only; paths
+// beneath a tree are left to it, so an over-budget group costs one mount. A dir
+// holding a writable root is skipped (rebinding hides the mounts beneath), and
+// only existing non-symlinks are mount targets: binding a link exposes its target.
+func bwrapGitMetadataArgs(spec Spec) []string {
+	meta := gitMetadataForSpec(spec)
+	paths := meta.Paths
+	for _, common := range meta.Commons {
+		paths = append(paths, gitGroupPaths(common, gitGroupMaxMounts)...)
+	}
+	var trees []string
+	for _, p := range paths {
+		if p.Tree {
+			trees = append(trees, p.Path)
+		}
+	}
+	writable := writableDirsForSpec(spec)
+	var out []string
+	for _, p := range paths {
+		if slices.ContainsFunc(trees, func(t string) bool { return strings.HasPrefix(p.Path, t+string(filepath.Separator)) }) {
+			continue
+		}
+		info, err := os.Lstat(p.Path)
+		if err != nil {
+			continue
+		}
+		switch {
+		case (p.Tree && info.IsDir()) || (!p.Tree && !p.Pin && info.Mode().IsRegular()):
+			out = append(out, "--ro-bind", p.Path, p.Path)
+		case p.Pin && info.IsDir() && !slices.ContainsFunc(writable, func(w string) bool { return pathWithin(p.Path, w) }):
+			out = append(out, "--bind", p.Path, p.Path)
+		}
+	}
+	return out
 }
 
 func bwrapTmpMountArgs(spec Spec) []string {
@@ -226,31 +324,54 @@ func bwrapExecutableMountArgs(args []string) []string {
 	return append(out, "--ro-bind", source, destination)
 }
 
-func linuxWriteDirs() []string {
-	dirs := []string{}
-	if td := os.TempDir(); td != "" && td != "/tmp" {
-		dirs = append(dirs, td)
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		for _, sub := range []string{".cache", ".cargo", ".npm", "go"} {
-			dirs = append(dirs, filepath.Join(home, sub))
+// bwrapWriteBinds are the resolved directories bound writable. Only outermost
+// ones are bound, and only ones that exist: bwrap refuses a missing source, and
+// host /tmp is replaced by the tmp mount rather than re-exposed.
+func bwrapWriteBinds(spec Spec) []string {
+	var dirs []string
+	for _, d := range planWriteRoots(spec, backendWriteDirs(spec)).dirs {
+		if d != "/tmp" && dirExists(d) {
+			dirs = append(dirs, d)
 		}
 	}
-	seen := map[string]bool{}
+	return collapseNested(dirs)
+}
+
+// collapseNested drops every directory inside another one in dirs, keeping
+// the order of the rest. A bind of a nested root adds nothing its ancestor
+// does not grant, and its path runs through a directory a confined command
+// can rewrite between the check and the mount.
+func collapseNested(dirs []string) []string {
 	out := make([]string, 0, len(dirs))
-	for _, d := range dirs {
-		abs, err := filepath.Abs(d)
-		if err != nil {
-			continue
+	for i, d := range dirs {
+		nested := false
+		for j, other := range dirs {
+			if i != j && fold(other) != fold(d) && pathWithin(fold(other), fold(d)) {
+				nested = true
+				break
+			}
 		}
-		if real, err := filepath.EvalSymlinks(abs); err == nil {
-			abs = real
+		if !nested {
+			out = append(out, d)
 		}
-		if abs == "/tmp" || seen[abs] || !dirExists(abs) {
-			continue
+	}
+	return out
+}
+
+// backendWriteDirs are the toolchain caches bound beside the caller's roots.
+func backendWriteDirs(spec Spec) []string {
+	if spec.MinimalWrites {
+		return nil
+	}
+	return linuxWriteDirs()
+}
+
+func linuxWriteDirs() []string {
+	var out []string
+	for _, d := range hostwrite.Dirs() {
+		if dirExists(d) {
+			out = append(out, d)
 		}
-		seen[abs] = true
-		out = append(out, abs)
 	}
 	return out
 }
@@ -258,4 +379,43 @@ func linuxWriteDirs() []string {
 func dirExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()
+}
+
+// EgressSupported reports whether this platform can confine egress to the
+// egress proxy: the command keeps its own network namespace, and this binary,
+// run inside it as the egress bridge, is its one way out.
+func EgressSupported() bool { return egressBridgeExe() != "" }
+
+// EgressNeedsSocket reports whether the proxy must also listen on a Unix
+// socket: a separate network namespace cannot reach the host's loopback.
+func EgressNeedsSocket() bool { return true }
+
+var egressBridgeExe = sync.OnceValue(func() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	return exe
+})
+
+// egressBridged reports whether this launch reaches the network only through
+// the bridge. A route with no socket is not bridged and keeps the namespace
+// without one: egress stays shut rather than falling back to open.
+func egressBridged(spec Spec) bool {
+	return spec.Network && spec.Egress != nil
+}
+
+// egressBridgeArgs mounts the proxy socket read-only, hands the bridge its
+// orders, and puts this binary in front of the command.
+func egressBridgeArgs(spec Spec) []string {
+	socket, exe := spec.Egress.SocketPath(), egressBridgeExe()
+	if socket == "" || exe == "" {
+		return nil
+	}
+	args := []string{"--ro-bind", socket, socket, "--setenv", egressBridgeEnv, strconv.Itoa(spec.Egress.Port()) + " " + socket}
+	args = append(args, bwrapExecutableMountArgs([]string{exe})...)
+	return append(args, exe)
 }

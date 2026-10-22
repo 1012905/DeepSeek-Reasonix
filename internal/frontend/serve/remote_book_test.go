@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,12 +12,13 @@ import (
 
 	"reasonix/internal/base/testenv"
 	"reasonix/internal/contract/config"
+	"reasonix/internal/platform/wsl"
 )
 
 func bookServer(t *testing.T, attacher RemoteAttacher) *httptest.Server {
 	t.Helper()
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
-	front := httptest.NewServer(NewHub(HubOptions{Remote: attacher}).Handler())
+	front := httptest.NewServer(operatorHandler(NewHub(HubOptions{Remote: attacher})))
 	t.Cleanup(front.Close)
 	return front
 }
@@ -29,6 +31,100 @@ func bookPost(t *testing.T, front *httptest.Server, path, body string) *http.Res
 	}
 	t.Cleanup(func() { resp.Body.Close() })
 	return resp
+}
+
+// Turning a machine off says nothing about what this window shows, so the row
+// keeps reporting it and the rail keeps listing it.
+func TestADisabledHostIsStillListed(t *testing.T) {
+	front := bookServer(t, &stubAttacher{})
+	bookPost(t, front, "/remotes", `{"name":"gpu-box","host":"10.0.0.4","disabled":true}`)
+
+	resp, err := http.Get(front.URL + "/remotes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var listed []struct {
+		Name     string `json:"name"`
+		Disabled bool   `json:"disabled"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].Name != "gpu-box" || !listed[0].Disabled {
+		t.Fatalf("listed = %+v, want the disabled machine reported", listed)
+	}
+}
+
+// A machine the book has turned off is not dialed at all: the refusal is typed,
+// and the link layer never hears about it.
+func TestOpeningADisabledHostIsRefusedWithoutDialing(t *testing.T) {
+	dialed := false
+	front := bookServer(t, &stubAttacher{attach: func(host, workspace string) (RemoteEndpoint, func(), error) {
+		dialed = true
+		return RemoteEndpoint{Host: host, Workspace: workspace}, func() {}, nil
+	}})
+	bookPost(t, front, "/remotes", `{"name":"gpu-box","host":"10.0.0.4","disabled":true}`)
+
+	resp := bookPost(t, front, "/remotes/open", `{"host":"gpu-box"}`)
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("opening a disabled machine = %d, want 409", resp.StatusCode)
+	}
+	if dialed {
+		t.Fatal("a disabled machine was dialed")
+	}
+}
+
+// A question about a disabled machine is refused too, because answering it would
+// take the same link the switch exists to avoid.
+func TestAskingAboutADisabledMachineIsRefused(t *testing.T) {
+	front := bookServer(t, &stubAttacher{})
+	bookPost(t, front, "/remotes", `{"name":"gpu-box","host":"10.0.0.4","disabled":true}`)
+
+	resp, err := http.Get(front.URL + "/remotes/gpu-box/tree")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("tree read of a disabled machine = %d, want 409", resp.StatusCode)
+	}
+	var refused map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&refused); err != nil {
+		t.Fatal(err)
+	}
+	if refused["code"] != "remote.disabled" {
+		t.Fatalf("refusal = %v, want code remote.disabled", refused)
+	}
+}
+
+// The flag is the book's, so it round-trips and the fields the page cannot see
+// come back with it; turning it off again is an ordinary save.
+func TestDisabledSurvivesASaveAndKeepsTheRest(t *testing.T) {
+	front := bookServer(t, &stubAttacher{})
+	bookPost(t, front, "/remotes",
+		`{"name":"gpu-box","host":"10.0.0.4","workspaces":["/srv/training"],"disabled":true}`)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := cfg.RemoteHost("gpu-box")
+	if !ok {
+		t.Fatal("the host never reached the book")
+	}
+	if !entry.Disabled {
+		t.Fatalf("entry = %+v, want disabled", entry)
+	}
+	if got := entry.WorkspaceList(); len(got) != 1 || got[0] != "/srv/training" {
+		t.Fatalf("workspaces = %v, want the one the row carried", got)
+	}
+
+	resp := bookPost(t, front, "/remotes",
+		`{"name":"gpu-box","host":"10.0.0.4","workspaces":["/srv/training"],"disabled":false}`)
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("turning it back on = %d, want 204", resp.StatusCode)
+	}
 }
 
 // A machine is reachable from every project on this computer, so its entry
@@ -97,7 +193,7 @@ func TestRemovingAHostClosesItsIdlePanes(t *testing.T) {
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
-	front := httptest.NewServer(h.Handler())
+	front := httptest.NewServer(operatorHandler(h))
 	defer front.Close()
 
 	resp := bookPost(t, front, "/remotes/remove", `{"name":"gpu-box"}`)
@@ -125,7 +221,7 @@ func TestRemovingAHostIsRefusedWhileItsPaneRuns(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	front := httptest.NewServer(h.Handler())
+	front := httptest.NewServer(operatorHandler(h))
 	defer front.Close()
 
 	resp := bookPost(t, front, "/remotes/remove", `{"name":"gpu-box"}`)
@@ -199,9 +295,10 @@ func TestEditingAHostKeepsForwardsThePageCannotSee(t *testing.T) {
 // can still be listed, and listing it opens nothing.
 func TestRemoteTreeIsReadWithOrWithoutAnOpenPane(t *testing.T) {
 	writeOpenableConfig(t)
+	saveTestRemoteHosts(t, "gpu-box")
 	far := NewHub(HubOptions{})
 	defer far.Shutdown()
-	farSide := httptest.NewServer(far.Handler())
+	farSide := httptest.NewServer(operatorHandler(far))
 	defer farSide.Close()
 
 	var attached, released int
@@ -214,7 +311,7 @@ func TestRemoteTreeIsReadWithOrWithoutAnOpenPane(t *testing.T) {
 			}, func() { released++ }, nil
 		},
 	}})
-	nearSide := httptest.NewServer(near.Handler())
+	nearSide := httptest.NewServer(operatorHandler(near))
 	defer nearSide.Close()
 
 	panes := len(near.Runtimes())
@@ -371,8 +468,8 @@ func TestRemovingTheDefaultFolderPromotesTheNext(t *testing.T) {
 
 func TestWritingAFolderOntoAMachineTheBookDoesNotHaveIsRefused(t *testing.T) {
 	front := bookServer(t, &stubAttacher{})
-	if got := bookPost(t, front, "/remotes/absent/workspaces", `{"path":"/srv/x"}`).StatusCode; got != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", got)
+	if got := bookPost(t, front, "/remotes/absent/workspaces", `{"path":"/srv/x"}`).StatusCode; got != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", got)
 	}
 }
 
@@ -391,7 +488,7 @@ func TestOpeningARemoteFolderWritesItIntoTheBook(t *testing.T) {
 	writeOpenableConfig(t)
 	far := NewHub(HubOptions{})
 	defer far.Shutdown()
-	farSide := httptest.NewServer(far.Handler())
+	farSide := httptest.NewServer(operatorHandler(far))
 	defer farSide.Close()
 
 	workspace := testenv.TempDir(t)
@@ -406,7 +503,7 @@ func TestOpeningARemoteFolderWritesItIntoTheBook(t *testing.T) {
 		},
 	}})
 	defer near.Shutdown()
-	nearSide := httptest.NewServer(near.Handler())
+	nearSide := httptest.NewServer(operatorHandler(near))
 	defer nearSide.Close()
 	if got := bookPost(t, nearSide, "/remotes", `{"name":"gpu-box","host":"10.0.0.4"}`).StatusCode; got != http.StatusNoContent {
 		t.Fatalf("save host = %d", got)
@@ -444,7 +541,7 @@ func TestAFolderWithAnIdlePaneOnItIsDroppedWithThePane(t *testing.T) {
 	writeOpenableConfig(t)
 	far := NewHub(HubOptions{})
 	defer far.Shutdown()
-	farSide := httptest.NewServer(far.Handler())
+	farSide := httptest.NewServer(operatorHandler(far))
 	defer farSide.Close()
 
 	workspace := testenv.TempDir(t)
@@ -457,7 +554,7 @@ func TestAFolderWithAnIdlePaneOnItIsDroppedWithThePane(t *testing.T) {
 		},
 	}})
 	defer near.Shutdown()
-	nearSide := httptest.NewServer(near.Handler())
+	nearSide := httptest.NewServer(operatorHandler(near))
 	defer nearSide.Close()
 	bookPost(t, nearSide, "/remotes", `{"name":"gpu-box","host":"10.0.0.4"}`)
 
@@ -491,7 +588,7 @@ func TestReopeningAKnownFolderLeavesTheConfigAlone(t *testing.T) {
 	writeOpenableConfig(t)
 	far := NewHub(HubOptions{})
 	defer far.Shutdown()
-	farSide := httptest.NewServer(far.Handler())
+	farSide := httptest.NewServer(operatorHandler(far))
 	defer farSide.Close()
 
 	workspace := testenv.TempDir(t)
@@ -504,7 +601,7 @@ func TestReopeningAKnownFolderLeavesTheConfigAlone(t *testing.T) {
 		},
 	}})
 	defer near.Shutdown()
-	nearSide := httptest.NewServer(near.Handler())
+	nearSide := httptest.NewServer(operatorHandler(near))
 	defer nearSide.Close()
 	bookPost(t, nearSide, "/remotes", `{"name":"gpu-box","host":"10.0.0.4"}`)
 
@@ -539,6 +636,8 @@ func TestReopeningAKnownFolderLeavesTheConfigAlone(t *testing.T) {
 // a link taken for the call, and a refusal comes back under that kernel's own
 // code: it knows the conversation is open there, the window does not.
 func TestRemoteSessionIsRemovedByTheFarKernel(t *testing.T) {
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	saveTestRemoteHosts(t, "gpu-box")
 	var got []string
 	refuseWith := ""
 	far := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -562,7 +661,7 @@ func TestRemoteSessionIsRemovedByTheFarKernel(t *testing.T) {
 		},
 	}})
 	defer near.Shutdown()
-	nearSide := httptest.NewServer(near.Handler())
+	nearSide := httptest.NewServer(operatorHandler(near))
 	defer nearSide.Close()
 
 	remove := func() *http.Response {
@@ -594,5 +693,201 @@ func TestRemoteSessionIsRemovedByTheFarKernel(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusConflict || reason.Code != "session.has_open_pane" {
 		t.Fatalf("refusal = %d %q, want the far kernel's own 409 session.has_open_pane", resp.StatusCode, reason.Code)
+	}
+}
+
+// The SSH form has no control for a WSL machine's fields, so saving through it
+// would rebuild the row as an ssh host; it is refused with a typed code and the
+// row stays as it was.
+func TestTheSSHFormCannotRewriteAWSLMachine(t *testing.T) {
+	front := bookServer(t, &stubAttacher{})
+	if err := config.EditUserConfigWithCredentials(func(c *config.Config) ([]config.CredentialChange, error) {
+		return nil, c.UpsertRemoteHost(config.RemoteHostEntry{Name: "dev", Kind: "wsl", Distro: "Ubuntu", Workspace: "/home/dev/app"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	resp := bookPost(t, front, "/remotes", `{"name":"dev","host":"10.0.0.9"}`)
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", resp.StatusCode)
+	}
+	var body struct {
+		Code string `json:"code"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	if body.Code != "remote.kind_unsupported" {
+		t.Fatalf("code = %q", body.Code)
+	}
+	cfg, _ := config.Load()
+	entry, _ := cfg.RemoteHost("dev")
+	if entry.HostKind() != config.RemoteKindWSL || entry.Distro != "Ubuntu" || entry.Host != "" {
+		t.Fatalf("the refused save changed the row: %+v", entry)
+	}
+	list, err := http.Get(front.URL + "/remotes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer list.Body.Close()
+	var rows []struct {
+		Target string `json:"target"`
+	}
+	if err := json.NewDecoder(list.Body).Decode(&rows); err != nil || len(rows) != 1 || rows[0].Target != "wsl:Ubuntu" {
+		t.Fatalf("rows = %+v, %v", rows, err)
+	}
+}
+
+func bookServerWSL(t *testing.T, run func(context.Context, ...string) ([]byte, error)) *httptest.Server {
+	t.Helper()
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	front := httptest.NewServer(operatorHandler(NewHub(HubOptions{Remote: &stubAttacher{}, WSL: run})))
+	t.Cleanup(front.Close)
+	return front
+}
+
+func TestAWSLMachineIsSavedListedAndAlwaysReadsItsOwnCredentials(t *testing.T) {
+	front := bookServerWSL(t, nil)
+	resp := bookPost(t, front, "/remotes", `{"name":"dev","kind":"wsl","distro":"Ubuntu-24.04","workspaces":["/home/me/app"],"provider":"local","host":"ignored"}`)
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("save = %d", resp.StatusCode)
+	}
+	cfg, _ := config.Load()
+	entry, ok := cfg.RemoteHost("dev")
+	if !ok || entry.HostKind() != config.RemoteKindWSL || entry.Distro != "Ubuntu-24.04" || entry.Host != "" || entry.Provider != "" || entry.Workspace != "/home/me/app" {
+		t.Fatalf("saved = %+v, %v", entry, ok)
+	}
+	list, err := http.Get(front.URL + "/remotes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer list.Body.Close()
+	var rows []struct {
+		Kind, Distro, Target, Provider string
+	}
+	if err := json.NewDecoder(list.Body).Decode(&rows); err != nil || len(rows) != 1 {
+		t.Fatalf("rows = %+v, %v", rows, err)
+	}
+	if rows[0].Kind != "wsl" || rows[0].Distro != "Ubuntu-24.04" || rows[0].Target != "wsl:Ubuntu-24.04" || rows[0].Provider != "remote" {
+		t.Fatalf("row = %+v", rows[0])
+	}
+}
+
+func TestAWSLSaveRefusesANameWSLWouldReadAsAnOptionAndAKindChange(t *testing.T) {
+	front := bookServerWSL(t, nil)
+	for _, distro := range []string{"", "-d", "--exec", "a b", `a"b`, strings.Repeat("a", 65)} {
+		body, _ := json.Marshal(map[string]any{"name": "dev", "kind": "wsl", "distro": distro})
+		resp := bookPost(t, front, "/remotes", string(body))
+		var got struct{ Code string }
+		_ = json.NewDecoder(resp.Body).Decode(&got)
+		if resp.StatusCode != http.StatusBadRequest || got.Code != "remote.distro_invalid" {
+			t.Errorf("distro %q: %d %q", distro, resp.StatusCode, got.Code)
+		}
+	}
+	bookPost(t, front, "/remotes", `{"name":"box","host":"10.0.0.4"}`)
+	if got := bookPost(t, front, "/remotes", `{"name":"box","kind":"wsl","distro":"Ubuntu"}`).StatusCode; got != http.StatusConflict {
+		t.Fatalf("turning an ssh row into a wsl one = %d, want 409", got)
+	}
+	bookPost(t, front, "/remotes", `{"name":"dev","kind":"wsl","distro":"Ubuntu"}`)
+	if got := bookPost(t, front, "/remotes", `{"name":"dev","host":"10.0.0.9"}`).StatusCode; got != http.StatusConflict {
+		t.Fatalf("turning a wsl row into an ssh one = %d, want 409", got)
+	}
+	cfg, _ := config.Load()
+	if e, _ := cfg.RemoteHost("box"); e.HostKind() != config.RemoteKindSSH || e.Host != "10.0.0.4" {
+		t.Fatalf("a refused save changed the ssh row: %+v", e)
+	}
+}
+
+func TestTheWSLChoiceListsTheDistributionsOrSaysThereIsNone(t *testing.T) {
+	front := bookServerWSL(t, func(context.Context, ...string) ([]byte, error) {
+		return []byte("  NAME      STATE   VERSION\n* Ubuntu    Running 2\n  Old       Stopped 1\n"), nil
+	})
+	resp, err := http.Get(front.URL + "/remotes/wsl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var got WSLDistros
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil || !got.Available || len(got.Distros) != 2 ||
+		got.Distros[0] != (WSLDistro{Name: "Ubuntu", Version: 2, Default: true}) || got.Distros[1].Version != 1 {
+		t.Fatalf("answer = %+v, %v", got, err)
+	}
+
+	none := bookServerWSL(t, func(context.Context, ...string) ([]byte, error) { return nil, wsl.ErrUnavailable })
+	resp, err = http.Get(none.URL + "/remotes/wsl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var empty WSLDistros
+	if err := json.NewDecoder(resp.Body).Decode(&empty); err != nil || empty.Available || empty.Distros == nil || len(empty.Distros) != 0 {
+		t.Fatalf("no WSL = %+v, %v (a missing WSL is an empty answer, not a failure)", empty, err)
+	}
+
+	broken := bookServerWSL(t, func(context.Context, ...string) ([]byte, error) {
+		return []byte("NAME STATE VERSION\nUbuntu Running x\n"), nil
+	})
+	resp, err = http.Get(broken.URL + "/remotes/wsl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var refusal struct{ Code string }
+	_ = json.NewDecoder(resp.Body).Decode(&refusal)
+	if resp.StatusCode != http.StatusBadGateway || refusal.Code != "remote.wsl_unreadable" {
+		t.Fatalf("an unreadable listing = %d %q", resp.StatusCode, refusal.Code)
+	}
+}
+
+func hostNames(t *testing.T, front *httptest.Server) []string {
+	t.Helper()
+	resp, err := http.Get(front.URL + "/remotes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var listed []struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+		t.Fatal(err)
+	}
+	names := make([]string, 0, len(listed))
+	for _, h := range listed {
+		names = append(names, h.Name)
+	}
+	return names
+}
+
+// The rail lists machines in the book's order, so placing one is placing it in
+// the book: it survives a restart and every window sees the same order.
+func TestAMachineIsPlacedBeforeAnotherOrLast(t *testing.T) {
+	front := bookServer(t, &stubAttacher{})
+	for _, name := range []string{"one", "two", "three"} {
+		bookPost(t, front, "/remotes", `{"name":"`+name+`","host":"10.0.0.4"}`)
+	}
+	for _, step := range []struct{ host, before, want string }{
+		{"three", "two", "one,three,two"},
+		{"one", "", "three,two,one"},
+		{"one", "one", "three,two,one"},
+		{"three", "", "two,one,three"},
+	} {
+		body := `{"before":"` + step.before + `"}`
+		if resp := bookPost(t, front, "/remotes/"+step.host+"/place", body); resp.StatusCode != http.StatusNoContent {
+			t.Fatalf("place %s before %q = %d, want 204", step.host, step.before, resp.StatusCode)
+		}
+		if got := strings.Join(hostNames(t, front), ","); got != step.want {
+			t.Fatalf("after placing %s before %q: %s, want %s", step.host, step.before, got, step.want)
+		}
+	}
+}
+
+func TestPlacingAMachineRefusesAnUnknownName(t *testing.T) {
+	front := bookServer(t, &stubAttacher{})
+	bookPost(t, front, "/remotes", `{"name":"one","host":"10.0.0.4"}`)
+	for _, c := range []struct{ host, body string }{
+		{"nowhere", `{"before":"one"}`},
+		{"one", `{"before":"nowhere"}`},
+	} {
+		if resp := bookPost(t, front, "/remotes/"+c.host+"/place", c.body); resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("place %s with %s = %d, want 404", c.host, c.body, resp.StatusCode)
+		}
 	}
 }

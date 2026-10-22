@@ -10,6 +10,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"reasonix/internal/contract/provider"
+	"reasonix/internal/safety/redirectguard"
 )
 
 type modelFetchStatusError struct {
@@ -55,6 +58,16 @@ func ModelFetchStatus(err error) (int, bool) {
 	return statusErr.status, true
 }
 
+// ModelFetchBody is what the endpoint said alongside a refused model-list
+// request, for a reader to see and never for a caller to classify by.
+func ModelFetchBody(err error) (string, bool) {
+	var statusErr modelFetchStatusError
+	if !errors.As(err, &statusErr) {
+		return "", false
+	}
+	return strings.TrimSpace(statusErr.body), true
+}
+
 // IsModelFetchEndpointMiss reports whether a model-list request reached a
 // plausible endpoint path that the provider does not implement.
 func IsModelFetchEndpointMiss(err error) bool {
@@ -95,7 +108,7 @@ type ListedModel struct {
 func FetchModelListing(ctx context.Context, baseURL, apiKey string, opts FetchModelsOptions) ([]ListedModel, error) {
 	cli := opts.Client
 	if cli == nil {
-		cli = &http.Client{Timeout: 10 * time.Second}
+		cli = &http.Client{Timeout: 10 * time.Second, CheckRedirect: redirectguard.StayOnOrigin()}
 	}
 	url := strings.TrimRight(baseURL, "/")
 	if !strings.HasSuffix(url, "/models") {
@@ -109,6 +122,7 @@ func FetchModelListing(ctx context.Context, baseURL, apiKey string, opts FetchMo
 	applyModelFetchAPIKeyHeader(req.Header, baseURL, apiKey, opts.AuthMode)
 	req.Header.Set("Accept", "application/json")
 	applyCustomHeaders(req.Header, opts.Headers)
+	provider.ApplyClientIdentity(req)
 
 	resp, err := cli.Do(req)
 	if err != nil {

@@ -3,19 +3,24 @@ package control
 import (
 	"context"
 	"reasonix/internal/state/sessionstore"
+	"sync"
 
 	"reasonix/internal/contract/ablation"
+	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/ext/extension"
 	"reasonix/internal/ext/hook"
 	"reasonix/internal/ext/plugin"
 	"reasonix/internal/ext/skill"
 	"reasonix/internal/model/billing"
+	"reasonix/internal/platform/gitrepos"
 	"reasonix/internal/runtime/agent"
 	"reasonix/internal/runtime/goaleval"
 	"reasonix/internal/runtime/guardian"
 	"reasonix/internal/runtime/promptrefine"
 	"reasonix/internal/runtime/recovery"
+	"reasonix/internal/runtime/taskmonitor"
+	"reasonix/internal/runtime/usecap"
 	"reasonix/internal/safety/permission"
 	"reasonix/internal/safety/sandbox"
 	"reasonix/internal/state/workspacelease"
@@ -42,24 +47,43 @@ type controllerDeps struct {
 	// pauses instead of defaulting to continue.
 	evaluator goaleval.Evaluator
 	refiner   *promptrefine.Refiner
+	committer CommitDrafter
+	// commitMu serialises commits so two confirmations cannot interleave.
+	commitMu sync.Mutex
+	// repos keeps the workspace's repositories until its structure changes.
+	repos gitrepos.Finder
 	// goalUsageTee accounts billable usage events into the active goal turn's
 	// observational token total. It wraps the public sink when the caller didn't provide one.
 	goalUsageTee *goalUsageTee
-	sink         event.Sink
-	policy       permission.Policy
+	// extPrompts counts the prompts extensions queued since the user last wrote.
+	extPrompts extensionPrompts
+	sink       event.Sink
+	policy     permission.Policy
 	// subagentGate is the shared gate every headless-only sub-agent surface
 	// reads from (see Options.SubagentGate). Nil when the caller didn't build
 	// one — sub-agents then keep whatever gate they were constructed with.
 	subagentGate *SharedHeadlessGate
 
-	label      string
-	modelRef   string
-	sessionDir string
+	// observe is non-nil for a read-only unattended run; see ObserveRun.
+	observe *ObserveRun
+
+	label               string
+	modelRef            string
+	effort              string
+	providerFingerprint string
+	effortSel           effortSelection    // set by an in-place depth change; see effort_in_place.go
+	modelModes          []config.ModelMode // what SetModelMode accepts; see model_modes.go
+	modelFace           *ModelFace         // what the build resolved for the session's model; see model_face.go
+	sessionDir          string
 	// skills owns the session's discovered skills (enabled subset, full set, and
 	// the reloadable stores) — the skills slice of the Capabilities concern. See
 	// skill.go.
 	skills              skillSet
+	rules               rulesSet
+	date                dateAnchor
+	scratch             scratchAnchor
 	skillRunner         skill.SubagentRunner
+	side                sideSet // see side_session.go
 	readOnlySkillRunner skill.SubagentRunner
 	skillProfile        skill.ProfileResolver
 	hooks               *hook.Runner // session hook runner; nil-safe (no hooks configured)
@@ -79,11 +103,16 @@ type controllerDeps struct {
 	// when the provider declares none). Captured at build so a model/key switch —
 	// which rebuilds the controller — refreshes it.
 	balance *billing.Cache
+	tariff  TariffSource
+
+	feedback FeedbackOptions
 
 	// jobs is the session-scoped background-job manager. The agent's background
 	// tools spawn into it; Compose drains its completion notes into the next turn;
 	// Close cancels its still-running jobs.
-	jobs *jobs.Manager
+	jobs      *jobs.Manager
+	subagents SubagentReader
+	taskStore taskmonitor.WriteStore
 	// workspaceLease is the Delivery writer owner shared with the executor.
 	// It is exposed only through a sanitized state snapshot for Desktop recovery.
 	workspaceLease *workspacelease.Owner
@@ -93,7 +122,7 @@ type controllerDeps struct {
 	// The Controller keeps the config-facing orchestration. See mcp.go.
 	mcp               mcpManager
 	mcpConfigureSpec  func(*plugin.Spec)
-	capabilityRuntime *agent.MCPCapabilityRuntime
+	capabilityRuntime *usecap.MCPCapabilityRuntime
 	runtimeOwner      *extension.RuntimeOwner
 	ablation          ablation.Set
 
@@ -102,10 +131,23 @@ type controllerDeps struct {
 	// stalls an approval or status poll on c.mu. See goal.go.
 	goals goalMachine
 
+	// dispatch is the state behind the cross-project dispatch tool; see peer_dispatch.go.
+	dispatch dispatchState
+
+	// goalRetry is the unattended retry of an evaluator pause; see goal_retry.go.
+	goalRetry goalRetry
+	// awaitResume is the unattended wait behind an await_user gate; see await_resume.go.
+	awaitResume awaitResume
+
 	// Base for @-refs and slash path refs, cwd for user "!" commands and command
 	// discovery, and the guard root for checkpoint restore writes. Frontends read
 	// it through WorkspaceRoot().
 	workspaceRoot string
+	// repo is workspaceRoot's git identity, resolved before any turn ran.
+	repo    repoSlot
+	posture PostureEvidence
+	// refused owes the model the calls the host refused, once.
+	refused promptFailureDebt
 
 	// approval owns prompt bookkeeping and the runtime posture (ask/auto/yolo,
 	// session grants, the just-approved-plan window) behind its own locks, off
@@ -124,15 +166,24 @@ func newControllerDeps(opts Options, sink event.Sink, usageTee *goalUsageTee, ru
 		guardianSess:           opts.Guardian,
 		evaluator:              opts.GoalEvaluator,
 		refiner:                opts.PromptRefiner,
+		committer:              opts.CommitMessenger,
 		goalUsageTee:           usageTee,
 		sink:                   sink,
 		policy:                 opts.Policy,
+		observe:                cloneObserveRun(opts.Observe),
 		subagentGate:           opts.SubagentGate,
 		label:                  opts.Label,
 		modelRef:               opts.ModelRef,
+		effort:                 opts.Effort,
+		providerFingerprint:    opts.ProviderFingerprint,
+		modelModes:             opts.ModelModes,
+		modelFace:              faceOfEntry(opts.ModelEntry),
 		sessionDir:             opts.SessionDir,
-		skills:                 newSkillSet(opts.Skills, opts.AllSkills, opts.SkillStore, opts.AllSkillStore, opts.DisableImplicitSkillInvocation),
+		date:                   newDateAnchor(opts.Clock),
+		scratch:                scratchAnchor{temp: opts.SessionTemp},
+		skills:                 newSkillSet(opts.Skills, opts.AllSkills, opts.SkillStore, opts.AllSkillStore, opts.DisableImplicitSkillInvocation, opts.WorkspaceRoot),
 		skillRunner:            opts.SkillRunner,
+		side:                   sideSet{factory: opts.SideFactory},
 		readOnlySkillRunner:    opts.ReadOnlySkillRunner,
 		skillProfile:           opts.SkillProfile,
 		hooks:                  opts.Hooks,
@@ -144,13 +195,19 @@ func newControllerDeps(opts Options, sink event.Sink, usageTee *goalUsageTee, ru
 		onRemember:             opts.OnRemember,
 		sessionRecoveryMeta:    opts.SessionRecoveryMeta,
 		balance:                opts.Balance,
+		tariff:                 opts.Tariff,
+		feedback:               opts.Feedback,
 		jobs:                   opts.Jobs,
+		subagents:              opts.Subagents,
+		taskStore:              opts.TaskStore,
 		workspaceLease:         opts.WorkspaceLease,
-		mcp:                    newMcpManager(opts.Host, opts.Registry, pluginCtx, opts.MCPDefaultCallTimeout),
+		mcp:                    newMcpManager(opts.Host, opts.Registry, pluginCtx, opts.MCPDefaultCallTimeout, hostFactNotice(opts.Executor)),
 		mcpConfigureSpec:       opts.MCPConfigureSpec,
 		capabilityRuntime:      opts.CapabilityRuntime,
 		ablation:               opts.Ablation,
 		workspaceRoot:          opts.WorkspaceRoot,
+		repo:                   repoSlot{repo: opts.WorkspaceRepo},
+		posture:                opts.Posture,
 		runtimeOwner:           runtimeOwner,
 		approval:               newApprovalManager(opts.Policy, ToolApprovalAsk, opts.ApprovalTimeout, opts.OnRemember != nil),
 	}
@@ -160,4 +217,16 @@ func newControllerDeps(opts Options, sink event.Sink, usageTee *goalUsageTee, ru
 // real turn: the skills catalog and the standing instructions. Neither is in
 // the cached prefix — that is what makes the prefix identical across projects.
 func (c *Controller) publishPerProjectContext(opts Options) {
+}
+
+// WorkspaceRepo is the workspace's git identity as the session resolved it when
+// it opened. Host git reads the workspace through it rather than rediscovering
+// the repository from files the session's own commands may have written.
+
+// Executor returns the underlying agent when present (nil for pure runners).
+func (c *Controller) Executor() *agent.Agent {
+	if c == nil {
+		return nil
+	}
+	return c.executor
 }

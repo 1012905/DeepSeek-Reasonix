@@ -219,6 +219,8 @@ func TestAgentReservesParentWriteBeforePreToolUse(t *testing.T) {
 		Hooks:              hooks,
 		WriteScheduler:     sched,
 		WriteWorkspaceRoot: root,
+
+		CheckTargetAccess: allowTestFileAccess,
 	}, event.Discard)
 
 	out := a.executeOne(context.Background(), &a.turn, provider.ToolCall{
@@ -265,7 +267,7 @@ func TestAgentReserveParentWriteSkipsSubagentDepth(t *testing.T) {
 	inner := &recordingWriter{name: "write_file", writesPaths: true}
 	release, err := a.reserveParentWrite(inner, mustJSON(t, map[string]string{
 		"path": filepath.Join(root, "a.md"), "content": "x",
-	}), false)
+	}), false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,7 +285,7 @@ func TestAgentReserveParentWriteHoldsClaim(t *testing.T) {
 	inner := &recordingWriter{name: "write_file", writesPaths: true}
 	release, err := a.reserveParentWrite(inner, mustJSON(t, map[string]string{
 		"path": filepath.Join(root, "a.md"), "content": "x",
-	}), false)
+	}), false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -343,9 +345,10 @@ func (*parentClaimProbeHooks) PostToolUseFailure(context.Context, string, json.R
 func (*parentClaimProbeHooks) PostLLMCall(_ context.Context, reasoning string, _ int) string {
 	return reasoning
 }
-func (*parentClaimProbeHooks) HasPostLLMCall() bool                      { return false }
-func (*parentClaimProbeHooks) SubagentStop(context.Context, string)      {}
-func (*parentClaimProbeHooks) PreCompact(context.Context, string) string { return "" }
+func (*parentClaimProbeHooks) HasPostLLMCall() bool                                   { return false }
+func (*parentClaimProbeHooks) SubagentStart(context.Context, string, json.RawMessage) {}
+func (*parentClaimProbeHooks) SubagentStop(context.Context, string, string, error)    {}
+func (*parentClaimProbeHooks) PreCompact(context.Context, string) string              { return "" }
 
 func (r *recordingWriter) Name() string        { return r.name }
 func (r *recordingWriter) Description() string { return r.name }

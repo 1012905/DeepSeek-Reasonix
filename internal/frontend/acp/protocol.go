@@ -30,7 +30,18 @@ const (
 	ErrMethodNotFound = -32601
 	ErrInvalidParams  = -32602
 	ErrInternal       = -32603
+	// ErrAuthRequired is the ACP schema's "Authentication required" code.
+	ErrAuthRequired = -32000
 )
+
+// TurnFailed is the TurnErrorData code of a session/prompt that failed after it
+// was admitted. The cause is the error message; the code is what a client keys on.
+const TurnFailed = "turn_failed"
+
+// TurnErrorData is the data member of a failed session/prompt error.
+type TurnErrorData struct {
+	Code string `json:"code"`
+}
 
 // initialize
 
@@ -51,7 +62,10 @@ type InitializeParams struct {
 type ClientCapabilities struct {
 	FS       FSCapabilities `json:"fs,omitempty"`
 	Terminal bool           `json:"terminal,omitempty"`
-	Meta     map[string]any `json:"_meta,omitempty"`
+	// Elicitation names the interaction modes the client can show; a mode is
+	// supported only when its key is present and not null.
+	Elicitation *ElicitationCapabilities `json:"elicitation,omitempty"`
+	Meta        map[string]any           `json:"_meta,omitempty"`
 }
 
 // FSCapabilities reports which client filesystem methods are available.
@@ -68,8 +82,8 @@ type Implementation struct {
 }
 
 // InitializeResult advertises what this agent supports: persisted session load,
-// ACP v1 session lifecycle helpers, inline resource text (embeddedContext) but
-// not image/audio, and stdio / Streamable HTTP MCP (no legacy sse).
+// ACP v1 session lifecycle helpers, image and embedded-resource prompts but not
+// audio, and stdio / Streamable HTTP MCP (no legacy sse).
 type InitializeResult struct {
 	ProtocolVersion   int               `json:"protocolVersion"`
 	AgentCapabilities AgentCapabilities `json:"agentCapabilities"`
@@ -141,6 +155,8 @@ type SessionCapabilities struct {
 	Resume *EmptyCapability `json:"resume,omitempty"`
 	Close  *EmptyCapability `json:"close,omitempty"`
 	Delete *EmptyCapability `json:"delete,omitempty"`
+	// AdditionalDirectories says session/new, load and resume take extra workspace roots.
+	AdditionalDirectories *EmptyCapability `json:"additionalDirectories,omitempty"`
 }
 
 // PromptCapabilities reports which content-block kinds prompts may carry.
@@ -181,8 +197,9 @@ type AuthenticateResult struct{}
 // SessionNewParams opens a session rooted at cwd, optionally with MCP servers
 // the agent should connect for the session's lifetime.
 type SessionNewParams struct {
-	Cwd        string          `json:"cwd,omitempty"`
-	MCPServers []MCPServerSpec `json:"mcpServers,omitempty"`
+	Cwd                   string          `json:"cwd,omitempty"`
+	AdditionalDirectories []string        `json:"additionalDirectories,omitempty"`
+	MCPServers            []MCPServerSpec `json:"mcpServers,omitempty"`
 }
 
 // MCPServerSpec describes one MCP server the client asks the agent to connect.
@@ -312,9 +329,10 @@ type SessionModelState struct {
 // The agent replays the stored conversation as session/update notifications
 // before the request returns.
 type SessionLoadParams struct {
-	SessionID  string          `json:"sessionId"`
-	Cwd        string          `json:"cwd,omitempty"`
-	MCPServers []MCPServerSpec `json:"mcpServers,omitempty"`
+	SessionID             string          `json:"sessionId"`
+	Cwd                   string          `json:"cwd,omitempty"`
+	AdditionalDirectories []string        `json:"additionalDirectories,omitempty"`
+	MCPServers            []MCPServerSpec `json:"mcpServers,omitempty"`
 }
 
 // SessionLoadResult is the empty ack; the conversation has already arrived as a
@@ -329,9 +347,10 @@ type SessionLoadResult struct {
 
 // SessionResumeParams resumes a session without replaying its transcript.
 type SessionResumeParams struct {
-	SessionID  string          `json:"sessionId"`
-	Cwd        string          `json:"cwd,omitempty"`
-	MCPServers []MCPServerSpec `json:"mcpServers,omitempty"`
+	SessionID             string          `json:"sessionId"`
+	Cwd                   string          `json:"cwd,omitempty"`
+	AdditionalDirectories []string        `json:"additionalDirectories,omitempty"`
+	MCPServers            []MCPServerSpec `json:"mcpServers,omitempty"`
 }
 
 // SessionResumeResult is the empty ack returned once the session is ready.
@@ -430,9 +449,8 @@ type SessionDeleteResult struct{}
 
 // content blocks (inbound prompt)
 
-// ContentBlock is one piece of a prompt. The agent reads text blocks and the
-// inline text of resource blocks (embeddedContext); image/audio are accepted on
-// the wire but ignored, matching the advertised capabilities.
+// ContentBlock is one piece of a prompt: text, an image, audio, or an embedded
+// resource carrying either inline text or base64 bytes.
 type ContentBlock struct {
 	Type     string            `json:"type"`
 	Text     string            `json:"text,omitempty"`
@@ -446,27 +464,7 @@ type ResourceContents struct {
 	URI      string `json:"uri"`
 	MimeType string `json:"mimeType,omitempty"`
 	Text     string `json:"text,omitempty"`
-}
-
-// FlattenPrompt extracts the user-visible prompt text out of ACP content blocks.
-// Text blocks contribute their text; resource blocks contribute their inline
-// text when present (embeddedContext). Other block kinds are dropped. Ported from
-// protocol.ts flattenPrompt.
-func FlattenPrompt(blocks []ContentBlock) string {
-	parts := make([]string, 0, len(blocks))
-	for _, b := range blocks {
-		switch b.Type {
-		case "text":
-			if b.Text != "" {
-				parts = append(parts, b.Text)
-			}
-		case "resource":
-			if b.Resource != nil && b.Resource.Text != "" {
-				parts = append(parts, b.Resource.Text)
-			}
-		}
-	}
-	return strings.TrimSpace(strings.Join(parts, "\n\n"))
+	Blob     string `json:"blob,omitempty"`
 }
 
 // session/prompt
@@ -564,14 +562,13 @@ type StopReason string
 const (
 	StopEndTurn   StopReason = "end_turn"
 	StopCancelled StopReason = "cancelled"
-	StopError     StopReason = "error"
 )
 
-// SessionPromptResult ends a session/prompt. TranscriptPath is reserved for a
-// future on-disk transcript pointer; omitted (null) for now.
+// SessionPromptResult ends a session/prompt. Vendor members, such as the
+// on-disk transcript path, ride Meta under "reasonix.io".
 type SessionPromptResult struct {
-	StopReason     StopReason `json:"stopReason"`
-	TranscriptPath *string    `json:"transcriptPath,omitempty"`
+	StopReason StopReason     `json:"stopReason"`
+	Meta       map[string]any `json:"_meta,omitempty"`
 }
 
 // session/update (agent → client notifications)
@@ -591,6 +588,7 @@ type SessionUpdateParams struct {
 // messageChunk is agent_message_chunk / agent_thought_chunk.
 type messageChunk struct {
 	SessionUpdate string       `json:"sessionUpdate"`
+	MessageID     string       `json:"messageId,omitempty"`
 	Content       ContentBlock `json:"content"`
 	Metadata      *updateMeta  `json:"metadata,omitempty"`
 }
@@ -616,38 +614,6 @@ type updateMeta struct {
 type updateError struct {
 	Name    string `json:"name"`
 	Message string `json:"message"`
-}
-
-// toolCall is a "tool_call" update (announces a call, with title/kind/rawInput).
-type toolCall struct {
-	SessionUpdate string             `json:"sessionUpdate"`
-	ToolCallID    string             `json:"toolCallId"`
-	Title         string             `json:"title,omitempty"`
-	Kind          string             `json:"kind,omitempty"`
-	Status        string             `json:"status,omitempty"`
-	RawInput      json.RawMessage    `json:"rawInput,omitempty"`
-	Locations     []ToolCallLocation `json:"locations,omitempty"`
-}
-
-// ToolCallLocation names a file (and optionally a line) a tool call touches, so
-// the client can follow along in the editor.
-type ToolCallLocation struct {
-	Path string `json:"path"`
-	Line *int   `json:"line,omitempty"`
-}
-
-// toolCallUpdateMsg is a "tool_call_update" update (status + result content).
-type toolCallUpdateMsg struct {
-	SessionUpdate string        `json:"sessionUpdate"`
-	ToolCallID    string        `json:"toolCallId"`
-	Status        string        `json:"status,omitempty"`
-	Content       []toolContent `json:"content,omitempty"`
-}
-
-// toolContent wraps a tool result's text, per the ACP tool_call_update shape.
-type toolContent struct {
-	Type    string       `json:"type"`
-	Content ContentBlock `json:"content"`
 }
 
 // availableCommandsUpdate advertises slash commands that the ACP client may
@@ -726,8 +692,8 @@ type FSWriteTextFileParams struct {
 
 // TerminalCreateParams starts a command in a client-owned terminal.
 // Env follows ACP v1's official EnvVariable[] shape (same as MCP env): only
-// the overrides Reasonix owns (typically TMPDIR/TMP/TEMP) are sent — never a
-// full host environment dump.
+// the overrides Reasonix owns — session-private TMPDIR/TMP/TEMP plus the
+// user's [tools.shell] env — are sent, never a full host environment dump.
 type TerminalCreateParams struct {
 	SessionID       string        `json:"sessionId"`
 	Command         string        `json:"command"`
@@ -805,6 +771,7 @@ type PermissionRequestParams struct {
 // PermissionToolCall describes the call awaiting approval.
 type PermissionToolCall struct {
 	ToolCallID string             `json:"toolCallId"`
+	Name       string             `json:"name,omitempty"`
 	Title      string             `json:"title,omitempty"`
 	Kind       string             `json:"kind,omitempty"`
 	Status     string             `json:"status,omitempty"`

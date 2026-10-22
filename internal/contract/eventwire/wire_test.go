@@ -28,6 +28,29 @@ func TestToWireRetryingJSON(t *testing.T) {
 	}
 }
 
+func TestToWireRetryingCarriesTheFailureClass(t *testing.T) {
+	w := ToWire(event.Event{
+		Kind: event.Retrying, RetryAttempt: 1, RetryMax: 10, RetryScope: event.RetryScopeHeaders,
+		RetryCause: provider.RetryCauseUpstreamStatus, RetryStatus: 502,
+		RetryDelayMs: 1250, RetryTimeoutSecs: 300,
+	})
+	b, err := json.Marshal(w)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	for _, want := range []string{`"retryCause":"upstream_status"`, `"retryStatus":502`, `"retryDelayMs":1250`, `"retryTimeoutSecs":300`} {
+		if !strings.Contains(string(b), want) {
+			t.Fatalf("retrying JSON = %s, want it to contain %s", b, want)
+		}
+	}
+	bare, _ := json.Marshal(ToWire(event.Event{Kind: event.Retrying, RetryAttempt: 1, RetryMax: 10}))
+	for _, absent := range []string{"retryCause", "retryStatus", "retryDelayMs", "retryTimeoutSecs"} {
+		if strings.Contains(string(bare), absent) {
+			t.Fatalf("a retry with no class must omit %s: %s", absent, bare)
+		}
+	}
+}
+
 func TestToWireStreamAttemptJSON(t *testing.T) {
 	w := ToWire(event.Event{
 		Kind: event.StreamAttempt,
@@ -153,11 +176,15 @@ func TestDesktopWireEventTypeCoversSharedPayloadFields(t *testing.T) {
 	ts := readDesktopTypes(t)
 	for _, want := range []string{
 		"detail?: string;",
-		`outcome?: "final_readiness" | "recovery_paused";`,
+		`outcome?: "final_readiness" | "recovery_paused" | "no_progress";`,
 		"checkpointTurn?: number;",
 		"retryAttempt?: number;",
 		"retryMax?: number;",
 		"retryScope?:",
+		"retryCause?:",
+		"retryStatus?: number;",
+		"retryDelayMs?: number;",
+		"retryTimeoutSecs?: number;",
 		"streamAttempt?: StreamAttempt;",
 		"export interface StreamAttempt",
 		"attemptId?: string;",
@@ -403,6 +430,18 @@ func TestToWireInteractionAndLifecyclePayloads(t *testing.T) {
 			want: []string{`"kind":"approval_request"`, `"approval":{"id":"a1","tool":"bash","subject":"rm"}`},
 		},
 		{
+			name: "approval arguments stay home without a scope",
+			in: event.Event{Kind: event.ApprovalRequest, Approval: event.Approval{
+				ID: "a3", Tool: "write_file", Subject: "a.go", RawInput: json.RawMessage(`{"path":"a.go","content":"x"}`)}},
+			want: []string{`"approval":{"id":"a3","tool":"write_file","subject":"a.go"}`},
+		},
+		{
+			name: "scoped approval carries what it covers",
+			in: event.Event{Kind: event.ApprovalRequest, Approval: event.Approval{
+				ID: "a4", Tool: "best_of_n", Scope: "unattended_attempts", RawInput: json.RawMessage(`{"prompt":"p","n":2}`)}},
+			want: []string{`"scope":"unattended_attempts"`, `"input":{"prompt":"p","n":2}`},
+		},
+		{
 			name: "fresh approval",
 			in:   event.Event{Kind: event.ApprovalRequest, Approval: event.Approval{ID: "a2", Tool: "mcp__srv__wipe", Subject: "srv/wipe", Fresh: true}},
 			want: []string{`"kind":"approval_request"`, `"tool":"mcp__srv__wipe"`, `"fresh":true`},
@@ -522,5 +561,22 @@ func TestToWirePartialDispatchClaimsNoContextCost(t *testing.T) {
 	}
 	if strings.Contains(string(b), "contextTokens") {
 		t.Fatalf("zero cost should be omitted from the wire: %s", b)
+	}
+}
+
+func TestToWireSubagentStatusCarriesItsRate(t *testing.T) {
+	w := ToWire(event.Event{Kind: event.ToolProgress, Tool: event.Tool{
+		ID: "c1", Name: event.SubagentProgressStatusName, Output: "reasoning", RateTokensPerSec: 42,
+	}})
+	b, err := json.Marshal(w)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(b), `"rate":42`) {
+		t.Fatalf("status JSON = %s, want rate 42", b)
+	}
+	quiet, _ := json.Marshal(ToWire(event.Event{Kind: event.ToolProgress, Tool: event.Tool{ID: "c1", Name: event.SubagentProgressStatusName, Output: "tool"}}))
+	if strings.Contains(string(quiet), `"rate"`) {
+		t.Fatalf("a status with no rate wrote one: %s", quiet)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
 )
 
@@ -37,18 +38,19 @@ func CompactionDeclineReason(err error) string {
 // ModelVisibleMessages is the view a request carries: the history the host
 // would send plus the state it derives for that request. A caller reasoning
 // about history alone wants modelVisibleHistory instead.
-func (a *Agent) ModelVisibleMessages() []provider.Message { return a.modelVisibleMessages() }
+func (a *Agent) ModelVisibleMessages() []provider.Message { return a.window().modelVisibleMessages() }
 
 // LocalOnly stripping still happens in prepareSamplingRequest.
-func (a *Agent) modelVisibleMessages() []provider.Message {
-	return a.withTodoIdentityTail(a.withHostContextTail(withAgedToolImages(a.modelVisibleHistory())))
+func (a *contextWindow) modelVisibleMessages() []provider.Message {
+	visible := a.withHostContextTail(withAgedToolImages(a.modelVisibleHistory()))
+	return a.withTodoIdentityTail(a.withFoldProgressTail(visible, a.foldProgress()))
 }
 
 // modelVisibleHistory is the conversation half of that view: frozen body plus
 // canonical tail, and nothing derived per request. A fold plans on this, so
 // what the host adds at the tail can never become digest input or frozen
 // material.
-func (a *Agent) modelVisibleHistory() []provider.Message {
+func (a *contextWindow) modelVisibleHistory() []provider.Message {
 	if a == nil || a.sess.conversation == nil {
 		return nil
 	}
@@ -61,46 +63,71 @@ func (a *Agent) modelVisibleHistory() []provider.Message {
 // visibleByFullScan is the same answer read out of the canonical transcript. It
 // runs where the memo cannot vouch for the folded prefix — a fold, a rewrite,
 // the first turn after a load — and refills the memo on its way through.
-func (a *Agent) visibleByFullScan() []provider.Message {
+func (a *contextWindow) visibleByFullScan() []provider.Message {
 	snap := a.snapshotForProjection()
 	msgs := snap.msgs
-	a.sess.compactionMu.Lock()
-	st := a.sess.compactionState
-	a.sess.compactionMu.Unlock()
-	if projectionValid(st, msgs, a.currentPromptCacheKey(), snap.fingerprint) {
+	a.sess.win.compactionMu.Lock()
+	st := a.sess.win.compactionState
+	a.sess.win.compactionMu.Unlock()
+	key := a.currentPromptCacheKey()
+	if projectionValid(st, msgs, key, snap.fingerprint) {
 		if visible := modelVisibleFromProjection(st.Projection, msgs); len(visible) > 0 {
 			return visible
 		}
 	}
+	a.announceWidenedView(st, key)
 	return msgs
+}
+
+// announceWidenedView says why a fold that was installed stopped being used: the
+// request that widens the view to the whole history is the one that carries the
+// reason, once per cause. A session that never had a fold has nothing to say.
+func (a *contextWindow) announceWidenedView(st sessionstore.CompactionState, key string) {
+	if len(st.Projection.Messages) == 0 {
+		return
+	}
+	drop := ProjectionDropHistory
+	if !projectionLineageOK(st, key) {
+		drop = ProjectionDropLineage
+	}
+	a.sess.win.compactionMu.Lock()
+	already := a.sess.win.checkpointState == string(drop)
+	a.sess.win.checkpointState = string(drop)
+	a.sess.win.compactionMu.Unlock()
+	if already {
+		return
+	}
+	if code, text, ok := FoldNotReusedNotice(drop); ok {
+		a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Code: code, Text: text})
+	}
 }
 
 // ProjectionVersion is the installed fold's version. A caller comparing folds
 // across a run wants this scalar, not ContextMaintenanceSnapshot — that one
 // reads the whole canonical transcript to report what the fold saved, which is
 // a large answer to a small question.
-func (a *Agent) ProjectionVersion() uint64 { return a.currentProjectionVersion() }
+func (a *Agent) ProjectionVersion() uint64 { return a.window().currentProjectionVersion() }
 
-func (a *Agent) currentProjectionVersion() uint64 {
+func (a *contextWindow) currentProjectionVersion() uint64 {
 	if a == nil {
 		return 0
 	}
-	a.sess.compactionMu.Lock()
-	defer a.sess.compactionMu.Unlock()
-	return a.sess.compactionState.Projection.ProjectionVersion
+	a.sess.win.compactionMu.Lock()
+	defer a.sess.win.compactionMu.Unlock()
+	return a.sess.win.compactionState.Projection.ProjectionVersion
 }
 
 // currentPromptCacheKey is the lineage key for the bound session + model.
-func (a *Agent) currentPromptCacheKey() string {
+func (a *contextWindow) currentPromptCacheKey() string {
 	if a == nil {
 		return ""
 	}
-	a.sess.compactionMu.Lock()
-	defer a.sess.compactionMu.Unlock()
+	a.sess.win.compactionMu.Lock()
+	defer a.sess.win.compactionMu.Unlock()
 	return a.currentPromptCacheKeyLocked()
 }
 
-func (a *Agent) currentPromptCacheKeyLocked() string {
+func (a *contextWindow) currentPromptCacheKeyLocked() string {
 	return promptCacheKey(a.workspaceID, sessionstore.BranchID(a.sess.path), a.modelRef)
 }
 
@@ -110,12 +137,17 @@ func (a *Agent) InvalidateProjection() {
 	if a == nil {
 		return
 	}
-	a.sess.compactionMu.Lock()
+	a.window().invalidateProjection()
+}
+
+func (a *contextWindow) invalidateProjection() {
+	a.sess.win.compactionMu.Lock()
 	path := a.sess.path
-	a.sess.compactionState = sessionstore.CompactionState{}
-	a.sess.compactionMu.Unlock()
-	a.sess.compaction.restart()
-	if path != "" {
+	a.sess.win.compactionState = sessionstore.CompactionState{}
+	a.sess.win.compactionMu.Unlock()
+	a.sess.win.compaction.restart()
+	// This build never changes a 1.x log, so 1.x's projection of it stays valid.
+	if path != "" && !sessionstore.IsForeignSessionLog(path) {
 		if err := sessionstore.RemoveCompactionState(path); err != nil {
 			slog.Warn("agent: remove context projection", "err", err)
 		}
@@ -130,9 +162,13 @@ func (a *Agent) RevalidateProjection() {
 	if a == nil {
 		return
 	}
-	a.sess.compactionMu.Lock()
-	st := a.sess.compactionState
-	a.sess.compactionMu.Unlock()
+	a.window().revalidateProjection()
+}
+
+func (a *contextWindow) revalidateProjection() {
+	a.sess.win.compactionMu.Lock()
+	st := a.sess.win.compactionState
+	a.sess.win.compactionMu.Unlock()
 	if len(st.Projection.Messages) == 0 {
 		return
 	}
@@ -140,30 +176,33 @@ func (a *Agent) RevalidateProjection() {
 	if projectionValid(st, snap.msgs, a.currentPromptCacheKey(), snap.fingerprint) {
 		return
 	}
-	a.InvalidateProjection()
+	a.invalidateProjection()
 }
 
-// LoadProjectionSidecar loads the context sidecar into the agent. Corrupt or
-// incompatible state is dropped so the next request rebuilds from canonical.
-// Sidecars whose PromptCacheKey does not match the current agent lineage are
-// discarded without deleting the file (another model may still own it).
+// LoadProjectionSidecar loads the context sidecar into the agent. State it
+// cannot read or use is dropped in memory only, so the next request rebuilds
+// from canonical and the file stays with whichever release wrote it.
 func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 	if a == nil {
 		return
 	}
-	a.sess.compactionMu.Lock()
+	a.window().loadProjectionSidecar(sessionPath)
+}
+
+func (a *contextWindow) loadProjectionSidecar(sessionPath string) {
+	a.sess.win.compactionMu.Lock()
 	a.sess.path = sessionPath
-	a.sess.compactionState = sessionstore.CompactionState{}
-	a.sess.checkpointState = "none"
-	a.sess.compactionMu.Unlock()
+	a.sess.win.compactionState = sessionstore.CompactionState{}
+	a.sess.win.checkpointState = "none"
+	a.sess.win.compactionMu.Unlock()
 	if sessionPath == "" {
 		a.resetCompactionState()
 		return
 	}
 	st, ok, err := sessionstore.LoadCompactionState(sessionPath)
 	if err != nil {
-		slog.Warn("agent: load context projection", "err", err)
-		_ = sessionstore.RemoveCompactionState(sessionPath)
+		slog.Warn("agent: load context projection", "err", err,
+			"unsupported_schema", errors.Is(err, sessionstore.ErrContextSchemaUnsupported))
 		a.resetCompactionState()
 		return
 	}
@@ -171,7 +210,7 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 		a.resetCompactionState()
 		return
 	}
-	a.sess.compactionMu.Lock()
+	a.sess.win.compactionMu.Lock()
 	key := a.currentPromptCacheKeyLocked()
 	normalized, keyOK := lineageKeyCompatible(st.PromptCacheKey, key)
 	// Keep receipt-only blocked/failed sidecars (no projection body) and legacy
@@ -195,16 +234,20 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 		}
 	}
 	if (key != "" && !keyOK) || !hasMaintenanceSignal {
-		a.sess.compactionState = sessionstore.CompactionState{}
-		a.sess.checkpointState = "none"
-		a.sess.compactionMu.Unlock()
+		a.sess.win.compactionState = sessionstore.CompactionState{}
+		a.sess.win.checkpointState = "none"
+		if key != "" && !keyOK && len(st.Projection.Messages) > 0 {
+			a.sess.win.checkpointState = string(ProjectionDropLineage)
+		}
+		a.sess.win.compactionMu.Unlock()
 		return
 	}
-	// Only rewrite legacy native-editing lineage keys; exact matches stay pure-read.
+	// Only rewrite legacy native-editing lineage keys; exact matches and
+	// another release line's file stay pure-read.
 	needsNormalization := false
 	if keyOK && key != "" && normalized != st.PromptCacheKey {
 		st.PromptCacheKey = normalized
-		needsNormalization = true
+		needsNormalization = !st.Foreign()
 	}
 	// Only mark restored when the projection still matches the transcript.
 	var msgs []provider.Message
@@ -215,22 +258,69 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 		fingerprint = a.prefixHasher(rewriteVersion)
 	}
 	valid := len(st.Projection.Messages) > 0 && projectionValid(st, msgs, key, fingerprint)
-	if !valid && len(st.Projection.Messages) > 0 {
+	dropped := !valid && len(st.Projection.Messages) > 0
+	if dropped {
 		// Keep blocked receipts / telemetry; drop unusable projection body.
 		st.Projection = sessionstore.ContextProjection{}
 	}
-	a.sess.compactionState = st
-	if valid {
-		a.sess.checkpointState = "restored"
+	a.sess.win.compactionState = st
+	if dropped {
+		a.sess.win.checkpointState = string(ProjectionDropHistory)
+	} else if valid {
+		a.sess.win.checkpointState = "restored"
 		if needsNormalization {
 			if err := a.persistCompactionStateLocked(); err != nil {
 				slog.Warn("agent: persist normalized projection lineage", "err", err)
 			}
 		}
 	} else {
-		a.sess.checkpointState = "none"
+		a.sess.win.checkpointState = "none"
 	}
-	a.sess.compactionMu.Unlock()
+	a.sess.win.compactionMu.Unlock()
+}
+
+// ProjectionDrop names why a saved fold was not reused when its session was
+// bound. The host is the only party that saw which it was.
+type ProjectionDrop string
+
+const (
+	ProjectionDropNone ProjectionDrop = ""
+	// ProjectionDropHistory: the fold's lineage matched but the history behind it changed.
+	ProjectionDropHistory ProjectionDrop = "dropped_history"
+	// ProjectionDropLineage: another model or workspace made it and the history does not match either.
+	ProjectionDropLineage ProjectionDrop = "dropped_lineage"
+)
+
+// FoldNotReusedNotice is what the person is told when a saved fold is not used
+// and the whole history goes to the model instead; both the session bind and a
+// later request say it in these words.
+func FoldNotReusedNotice(d ProjectionDrop) (code, text string, ok bool) {
+	switch d {
+	case ProjectionDropHistory:
+		return event.NoticeCodeFoldNotReusedHistory, "A saved compaction of this conversation was not reused: the history it summarised has changed since. The full history is sent instead.", true
+	case ProjectionDropLineage:
+		return event.NoticeCodeFoldNotReusedLineage, "A saved compaction of this conversation was made under another model or workspace and does not match its history. The full history is sent instead.", true
+	}
+	return "", "", false
+}
+
+// ProjectionDropped reports why the fold saved beside the bound session was
+// not reused, or ProjectionDropNone when there was none or it was.
+func (a *Agent) ProjectionDropped() ProjectionDrop {
+	if a == nil {
+		return ProjectionDropNone
+	}
+	return a.window().projectionDropped()
+}
+
+func (a *contextWindow) projectionDropped() ProjectionDrop {
+	a.sess.win.compactionMu.Lock()
+	defer a.sess.win.compactionMu.Unlock()
+	switch d := ProjectionDrop(a.sess.win.checkpointState); d {
+	case ProjectionDropHistory, ProjectionDropLineage:
+		return d
+	}
+	return ProjectionDropNone
 }
 
 // lineageKeyCompatible reports whether a stored PromptCacheKey still belongs to
@@ -258,11 +348,11 @@ func lineageKeyCompatible(stored, current string) (normalized string, ok bool) {
 	return "", false
 }
 
-func (a *Agent) resetCompactionState() {
-	a.sess.compactionMu.Lock()
-	a.sess.compactionState = sessionstore.CompactionState{}
-	a.sess.checkpointState = "none"
-	a.sess.compactionMu.Unlock()
+func (a *contextWindow) resetCompactionState() {
+	a.sess.win.compactionMu.Lock()
+	a.sess.win.compactionState = sessionstore.CompactionState{}
+	a.sess.win.checkpointState = "none"
+	a.sess.win.compactionMu.Unlock()
 }
 
 // BindSessionPath rebinds projection persistence to path. When loadSidecar is
@@ -272,17 +362,21 @@ func (a *Agent) BindSessionPath(path string, loadSidecar bool) {
 	if a == nil {
 		return
 	}
+	a.window().bindSessionPath(path, loadSidecar)
+}
+
+func (a *contextWindow) bindSessionPath(path string, loadSidecar bool) {
 	if loadSidecar {
-		a.LoadProjectionSidecar(path)
+		a.loadProjectionSidecar(path)
 		return
 	}
-	a.sess.compactionMu.Lock()
+	a.sess.win.compactionMu.Lock()
 	a.sess.path = path
-	a.sess.compactionState = sessionstore.CompactionState{}
-	a.sess.checkpointState = "none"
-	a.sess.cacheState = CacheStateUnknown
-	a.sess.compactionMu.Unlock()
-	a.sess.compaction.restart()
+	a.sess.win.compactionState = sessionstore.CompactionState{}
+	a.sess.win.checkpointState = "none"
+	a.sess.win.cacheState = CacheStateUnknown
+	a.sess.win.compactionMu.Unlock()
+	a.sess.win.compaction.restart()
 }
 
 // SetSessionPath binds the transcript path used for projection persistence.
@@ -290,9 +384,13 @@ func (a *Agent) SetSessionPath(path string) {
 	if a == nil {
 		return
 	}
-	a.sess.compactionMu.Lock()
+	a.window().setSessionPath(path)
+}
+
+func (a *contextWindow) setSessionPath(path string) {
+	a.sess.win.compactionMu.Lock()
 	a.sess.path = path
-	a.sess.compactionMu.Unlock()
+	a.sess.win.compactionMu.Unlock()
 }
 
 // SessionPath returns the bound transcript path.
@@ -300,8 +398,12 @@ func (a *Agent) SessionPath() string {
 	if a == nil {
 		return ""
 	}
-	a.sess.compactionMu.Lock()
-	defer a.sess.compactionMu.Unlock()
+	return a.window().sessionPath()
+}
+
+func (a *contextWindow) sessionPath() string {
+	a.sess.win.compactionMu.Lock()
+	defer a.sess.win.compactionMu.Unlock()
 	return a.sess.path
 }
 
@@ -310,19 +412,23 @@ func (a *Agent) SetCacheState(state string) {
 	if a == nil {
 		return
 	}
+	a.window().setCacheState(state)
+}
+
+func (a *contextWindow) setCacheState(state string) {
 	switch state {
 	case CacheStateWarm, CacheStateCold, CacheStateUnknown:
 	default:
 		state = CacheStateUnknown
 	}
-	a.sess.compactionMu.Lock()
-	defer a.sess.compactionMu.Unlock()
-	a.sess.cacheState = state
-	if a.sess.compactionState.SchemaVersion == 0 && len(a.sess.compactionState.Projection.Messages) == 0 {
-		a.sess.compactionState.SchemaVersion = sessionstore.CompactionStateSchemaCurrent
+	a.sess.win.compactionMu.Lock()
+	defer a.sess.win.compactionMu.Unlock()
+	a.sess.win.cacheState = state
+	if a.sess.win.compactionState.SchemaVersion == 0 && len(a.sess.win.compactionState.Projection.Messages) == 0 {
+		a.sess.win.compactionState.SchemaVersion = sessionstore.CompactionStateSchemaCurrent
 	}
-	a.sess.compactionState.LastCacheState = state
-	a.sess.compactionState.UpdatedAt = time.Now().UTC()
+	a.sess.win.compactionState.LastCacheState = state
+	a.sess.win.compactionState.UpdatedAt = time.Now().UTC()
 }
 
 // CacheState returns the last estimated cache warm/cold/unknown label.
@@ -330,19 +436,26 @@ func (a *Agent) CacheState() string {
 	if a == nil {
 		return CacheStateUnknown
 	}
-	a.sess.compactionMu.Lock()
-	defer a.sess.compactionMu.Unlock()
-	if a.sess.cacheState == "" {
-		return CacheStateUnknown
-	}
-	return a.sess.cacheState
+	return a.window().cacheState()
 }
 
-func (a *Agent) persistCompactionStateLocked() error {
+func (a *contextWindow) cacheState() string {
+	a.sess.win.compactionMu.Lock()
+	defer a.sess.win.compactionMu.Unlock()
+	if a.sess.win.cacheState == "" {
+		return CacheStateUnknown
+	}
+	return a.sess.win.cacheState
+}
+
+func (a *contextWindow) persistCompactionStateLocked() error {
 	if a.sess.path == "" {
 		return nil
 	}
-	return sessionstore.SaveCompactionState(a.sess.path, a.sess.compactionState)
+	// The sidecar is the durable record of a fold, so it is published under the
+	// session's write authority: a controller whose transcript save would be
+	// refused must not install a fold either.
+	return a.sess.conversation.SaveCompactionState(a.sess.path, a.sess.win.compactionState)
 }
 
 // promptCacheKey builds a stable lineage key for session + model identity.

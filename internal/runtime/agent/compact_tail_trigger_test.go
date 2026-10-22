@@ -27,7 +27,7 @@ type oneTurnMock struct {
 func (m *oneTurnMock) handler(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	if isSummarizeRequest(body) {
-		writeSSE(w, m.t, streamChunk(deltaText("- digest")), finishChunk("stop"), usageChunk(80, 30, 0, 80))
+		writeSSE(w, m.t, streamChunk(deltaText("## Digest\n- digest")), finishChunk("stop"), usageChunk(80, 30, 0, 80))
 		return
 	}
 	promptTok := charsOf(decodeMessages(body)) / 4
@@ -59,7 +59,7 @@ func TestTailBudgetYieldsToLowTrigger(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(mock.handler))
 			defer srv.Close()
 			reg := tool.NewRegistry()
-			reg.Add(fatTool{blob: strings.Repeat("FILE CONTENTS LINE. ", 200)})
+			reg.Add(fatTool{blob: strings.Repeat("FILE CONTENTS LINE. ", 1000)})
 			prov, err := openai.New(provider.Config{
 				Name: "deepseek", BaseURL: srv.URL, Model: "deepseek-reasoner", APIKey: "test",
 				Extra: map[string]any{"api_key_env": "DEEPSEEK_API_KEY"},
@@ -80,14 +80,19 @@ func TestTailBudgetYieldsToLowTrigger(t *testing.T) {
 			if err := a.Run(context.Background(), "one turn: keep reading until done"); err != nil {
 				t.Fatalf("run: %v", err)
 			}
-			if trigger, tail := a.compactTrigger(), a.recentTailBudget(); tail > trigger/2 {
+			if trigger, tail := a.window().compactTrigger(), a.window().recentTailBudget(); tail > trigger/2 {
 				t.Fatalf("tail %d leaves no fold region under trigger %d", tail, trigger)
 			}
-			if mock.peak <= a.compactTrigger() {
-				t.Fatalf("peak prompt %d never reached trigger %d; the case proves nothing", mock.peak, a.compactTrigger())
+			if mock.peak <= a.window().compactTrigger() {
+				t.Fatalf("peak prompt %d never reached trigger %d; the case proves nothing", mock.peak, a.window().compactTrigger())
 			}
-			if started == 0 {
-				t.Fatalf("context passed the trigger (peak %d > %d) but nothing folded", mock.peak, a.compactTrigger())
+			// A fold that cannot get under the trigger is refused before its summary
+			// is paid for, so acting on the crossing is a card or a recorded refusal.
+			a.sess.win.compactionMu.Lock()
+			receipt := a.sess.win.compactionState.LastReceipt
+			a.sess.win.compactionMu.Unlock()
+			if started == 0 && receipt == nil {
+				t.Fatalf("context passed the trigger (peak %d > %d) but maintenance did nothing", mock.peak, a.window().compactTrigger())
 			}
 		})
 	}

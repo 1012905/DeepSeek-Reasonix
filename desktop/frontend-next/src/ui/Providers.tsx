@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Clip } from "./Clip";
 import { useEscape } from "./dismiss";
 import { t } from "../i18n";
-import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe } from "../port/port";
+import type { Protocol, ProviderCheck, ProviderCheckDraft, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderRemoval, ProviderPreset, ProviderPresetInstall } from "../port/port";
 import { AddProvider } from "./AddProvider";
-import { EditConn } from "./EditConn";
-import { KIND_LABEL, accountKey, accountLabel, disambiguate, hostOf } from "./vendors";
-import { PROVIDER_EDIT_DISABLED, reason } from "../i18n/kernel";
-import { HttpError } from "../port/http_error";
+import { ProviderDetail } from "./ProviderDetail";
+import { accountKey, accountLabel, disambiguate, hostOf } from "./vendors";
+import { reason } from "../i18n/kernel";
+import { providerDot } from "./providerdot";
+import { moveAccount, orderAccounts, useProviderOrder, writeProviderOrder } from "../state/providerorder";
+import { StudioIcon } from "./StudioIcon";
+import { RemovalNotice, removalChangedRoles, type Removal } from "./ProviderRemoval";
 
 // A connection is an account, not a config row. One endpoint answering two
 // protocols is two rows in the file and one service to the person paying for it,
@@ -19,24 +22,27 @@ import { HttpError } from "../port/http_error";
 export type Port = {
   providers(): Promise<ProviderEntry[]>;
   protocols(): Promise<Protocol[]>;
+  providerPresets(): Promise<ProviderPreset[]>;
+  installProviderPreset(req: ProviderPresetInstall): Promise<{ names: string[] }>;
   probeProvider(baseUrl: string, apiKey: string): Promise<ProviderProbe>;
   saveProvider(draft: ProviderDraft): Promise<void>;
-  removeProvider(name: string): Promise<void>;
-  checkProvider(name: string): Promise<ProviderCheck>;
+  removeProvider(name: string): Promise<ProviderRemoval>;
+  checkProvider(name: string, draft?: ProviderCheckDraft): Promise<ProviderCheck>;
   checkProviderModel(request: ProviderModelCheckRequest): Promise<ProviderModelCheck>;
   editProvider(edit: ProviderEdit): Promise<void>;
-  setProviderWebSearch(name: string, on: boolean): Promise<void>;
-  setProviderThinking(name: string, on: boolean): Promise<void>;
-  setProviderContinuation(name: string, mode: string): Promise<void>;
+  renameProvider(names: string[], displayName: string): Promise<void>;
+  openExternal(url: string): Promise<void>;
 };
 
 // One account: every configured entry that answers on the same host.
-interface Account {
+export interface Account {
   key: string;
   label: string;
   host: string;
   // The config entry's own name, shown only when one host holds two accounts.
   hint: string;
+  // What the account is called when nobody has renamed it.
+  derived: string;
   byKind: Record<string, ProviderEntry>;
   kinds: string[];
 }
@@ -45,21 +51,27 @@ function groupAccounts(list: ProviderEntry[]): Account[] {
   const out = new Map<string, Account>();
   for (const p of list) {
     const host = hostOf(p.baseUrl);
-    const key = accountKey(host, p.keyEnv);
+    const kind = p.kind || "openai";
+    let key = accountKey(host, p.keyEnv);
+    // A second entry for a door the account already has is a duplicate, and a
+    // duplicate is still somebody's config: it gets its own row, never a seat
+    // behind the first one.
+    if (out.get(key)?.byKind[kind]) key = `${key}\u0000${p.name}`;
     let a = out.get(key);
     if (!a) {
-      a = { key, label: "", host, hint: p.name, byKind: {}, kinds: [] };
+      a = { key, label: "", host, hint: p.name, derived: "", byKind: {}, kinds: [] };
       out.set(key, a);
     }
-    const kind = p.kind || "openai";
-    if (!a.byKind[kind]) {
-      a.byKind[kind] = p;
-      a.kinds.push(kind);
-    }
+    a.byKind[kind] = p;
+    a.kinds.push(kind);
   }
   // Every door has to be in hand before the account can be named: the one the
   // user renamed is not always the first the config file lists.
-  for (const a of out.values()) a.label = accountLabel(a.host, Object.values(a.byKind));
+  for (const a of out.values()) {
+    const entries = Object.values(a.byKind);
+    a.label = accountLabel(a.host, entries);
+    a.derived = accountLabel(a.host, entries.map((e) => ({ ...e, displayName: undefined })));
+  }
   return disambiguate([...out.values()]);
 }
 
@@ -70,7 +82,7 @@ interface ProvidersProps {
   // missed, and the page above already has one place to say it.
   onFailed: (why: string) => void;
   // Which protocol each account is showing, and how to change it. The model
-  // list reads the same map, so switching here re-lists the models below.
+  // list reads the same map, so switching here re-lists the models there.
   protocol: Record<string, string>;
   onProtocol: (account: Account, kind: string) => void;
   activeKindFor: (account: Account) => string;
@@ -79,22 +91,84 @@ interface ProvidersProps {
   declare?: string;
 }
 
+const SEARCH_FROM = 6;
+// The kernel counts characters; maxLength counts UTF-16 units, so this can only
+// stop short of the kernel's limit, never past it.
+const DISPLAY_NAME_MAX = 64;
+
+const shownName = (a: Account) => Object.values(a.byKind).find((e) => e.displayName?.trim())?.displayName?.trim() ?? "";
+
+// A list of accounts beside the one being edited: picking a row is navigation,
+// and every field of the picked account is on screen without a second click.
 export function Providers({ port, onChanged, onFailed, protocol, onProtocol, activeKindFor, declare }: ProvidersProps) {
   const [list, setList] = useState<ProviderEntry[] | null>(null);
   const [adding, setAdding] = useState(false);
   useEscape(adding, () => setAdding(false));
   const [busy, setBusy] = useState("");
+  const [removal, setRemoval] = useState<Removal | null>(null);
+  const [picked, setPickedRaw] = useState("");
+  const setPicked = useCallback((key: string) => { setRemoval(null); setPickedRaw(key); }, []);
+  const [q, setQ] = useState("");
+  const [renaming, setRenaming] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const [asked, setAsked] = useState<{ go: () => void; from: HTMLElement | null } | null>(null);
+  const pmain = useRef<HTMLDivElement>(null);
+  const order = useProviderOrder();
+  const rows = useRef(new Map<string, HTMLButtonElement>());
+  // The accounts that existed when an add began: the one that is new afterwards
+  // is the one just added, and it is what the detail should show.
+  const before = useRef<Set<string> | null>(null);
 
-  const reload = useCallback(() => {
-    port.providers().then(setList).catch(() => setList([]));
-  }, [port]);
-  useEffect(reload, [reload]);
+  const reload = useCallback(
+    () => port.providers().then(setList).catch(() => setList([])),
+    [port],
+  );
+  useEffect(() => { void reload(); }, [reload]);
+
+  const accounts = list ? orderAccounts(groupAccounts(list), order) : [];
+  useEffect(() => {
+    if (!list || !before.current) return;
+    const fresh = groupAccounts(list).find((a) => !before.current?.has(a.key));
+    before.current = null;
+    if (fresh) setPicked(fresh.key);
+  }, [list]);
+  // Until someone picks, the page shows the service it was sent to, else the
+  // one in use, else the first.
+  const selected = accounts.some((a) => a.key === picked) ? picked : (
+    accounts.find((a) => declare && Object.values(a.byKind).some((e) => e.name === declare))
+    ?? accounts.find((a) => Object.values(a.byKind).some((e) => e.inUse))
+    ?? accounts[0]
+  )?.key ?? "";
 
   const remove = async (name: string) => {
     setBusy(name);
     onFailed("");
+    setRemoval(null);
+    const key = selected;
     try {
-      await port.removeProvider(name);
+      const report = await port.removeProvider(name);
+      if (removalChangedRoles(report)) setRemoval({ key, name, why: "", report });
+    } catch (e) {
+      setRemoval({ key, name, why: reason(e), report: null });
+    } finally {
+      reload();
+      onChanged();
+      setBusy("");
+    }
+  };
+
+  // An empty name, or the one it would be called anyway, clears the label so
+  // the account follows its derived name again.
+  const rename = async (a: Account, typed: string) => {
+    setRenaming("");
+    const value = typed.trim();
+    const next = value === a.derived ? "" : value;
+    if (next === shownName(a)) return;
+    const names = Object.values(a.byKind).map((e) => e.name);
+    setBusy(`rename:${a.key}`);
+    onFailed("");
+    try {
+      await port.renameProvider(names, next);
       reload();
       onChanged();
     } catch (e) {
@@ -104,287 +178,183 @@ export function Providers({ port, onChanged, onFailed, protocol, onProtocol, act
     }
   };
 
+  // A form with pending edits is replaced only after the person says so. A save
+  // in flight is not interrupted: it lands on its own and the form is clean after.
+  const leave = (go: () => void, leaving = true) => {
+    if (!leaving || !dirty) go();
+    else if (!busy.startsWith("edit:")) {
+      const from = document.activeElement;
+      setAsked({ go, from: from instanceof HTMLElement && from !== document.body ? from : null });
+    }
+  };
+  useEffect(() => {
+    if (!dirty) setAsked(null);
+  }, [dirty]);
+
+  // Focus goes back to the control that asked to leave, or to the form's first
+  // field when that control is gone.
+  const keepEditing = () => {
+    const back = asked?.from?.isConnected ? asked.from : pmain.current?.querySelector<HTMLElement>("input:not(:disabled)");
+    setAsked(null);
+    back?.focus();
+  };
+
+  const startRename = (key: string) => leave(() => {
+    setAdding(false);
+    setPicked(key);
+    setRenaming(key);
+  }, key !== selected);
+
+  const move = (key: string, direction: -1 | 1) => {
+    const next = moveAccount(order, accounts.map((a) => a.key), key, direction);
+    if (!next) return;
+    if (!picked) setPicked(selected);
+    rows.current.get(key)?.focus();
+    if (writeProviderOrder(next)) onFailed("");
+    else onFailed(t("无法保存服务顺序。"));
+  };
+
   if (list === null) return <p className="acct-note">{t("正在读取…")}</p>;
 
+  const query = q.trim().toLowerCase();
+  const shown = accounts.filter((a) => !query || a.label.toLowerCase().includes(query) || a.host.toLowerCase().includes(query));
+  const current = accounts.find((a) => a.key === selected);
   return (
-    <>
-      <div className="provider-toolbar">
-        <span>{t("{n} 个来源", { n: groupAccounts(list).length })}</span>
-        {!adding && (
-          <button className="act" data-primary data-action="provider.add-start" onClick={() => setAdding(true)}>
-            <b aria-hidden="true">＋</b>{t("添加来源")}
-          </button>
+    <div className="psplit">
+      <div className="plist">
+        {accounts.length >= SEARCH_FROM && (
+          <input className="psearch" type="search" value={q} spellCheck={false}
+            placeholder={t("搜索已添加的服务")} aria-label={t("搜索已添加的服务")}
+            onChange={(e) => setQ(e.target.value)} />
+        )}
+        <div className="plist-rows" role="group" aria-label={t("{n} 个来源", { n: accounts.length })}>
+          {shown.map((a, index) => {
+            const entries = Object.values(a.byKind);
+            const dot = providerDot(entries);
+            if (renaming === a.key) {
+              return (
+                <div className="svcrow-wrap" data-selected="true" data-renaming="" key={a.key}>
+                  <input className="svcrow-name" autoFocus maxLength={DISPLAY_NAME_MAX} spellCheck={false}
+                    defaultValue={shownName(a) || a.derived} placeholder={a.derived}
+                    aria-label={t("重命名 {name}", { name: a.label })}
+                    title={t("回车保存，Esc 取消；留空恢复为「{name}」", { name: a.derived })}
+                    onFocus={(ev) => ev.currentTarget.select()}
+                    onBlur={(ev) => void rename(a, ev.currentTarget.value)}
+                    data-action-keydown="provider.rename" data-target={a.key}
+                    onKeyDown={(ev) => {
+                      if (ev.key === "Enter") {
+                        ev.preventDefault();
+                        ev.currentTarget.blur();
+                      } else if (ev.key === "Escape") {
+                        // Abandoning a rename is not closing the settings page.
+                        ev.stopPropagation();
+                        ev.currentTarget.value = shownName(a) || a.derived;
+                        ev.currentTarget.blur();
+                      }
+                    }} />
+                </div>
+              );
+            }
+            return (
+              <div className="svcrow-wrap" data-selected={!adding && a.key === selected} key={a.key}>
+                <button className="svcrow" data-action-click="provider.select" data-action-keydown="provider.move" data-target={a.key}
+                  ref={(node) => { if (node) rows.current.set(a.key, node); else rows.current.delete(a.key); }}
+                  aria-pressed={!adding && a.key === selected}
+                  onKeyDown={(event) => {
+                    if (event.key === "F2") {
+                      event.preventDefault();
+                      startRename(a.key);
+                      return;
+                    }
+                    if (!query && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
+                      && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+                      event.preventDefault();
+                      move(a.key, event.key === "ArrowUp" ? -1 : 1);
+                    }
+                  }}
+                  onClick={() => leave(() => { setAdding(false); setPicked(a.key); }, a.key !== selected)}>
+                  <span className="tx">
+                    <span className="nm">{a.label}</span>
+                    <Clip className="ds">{a.host}</Clip>
+                  </span>
+                  <i className="pstate" data-state={dot.state} title={dot.title} />
+                </button>
+                <span className="svcrow-order">
+                  <button data-action="provider.rename-start" data-target={a.key} disabled={busy !== ""}
+                    aria-label={t("重命名 {name}（F2）", { name: a.label })}
+                    title={t("重命名 {name}（F2）", { name: a.label })}
+                    onClick={() => startRename(a.key)}><StudioIcon name="edit" /></button>
+                  {index > 0 && <button data-action="provider.move" data-target={a.key} data-value="up"
+                    aria-label={t("上移 {name}（Alt+上方向键）", { name: a.label })}
+                    title={t("上移 {name}（Alt+上方向键）", { name: a.label })}
+                    onClick={() => move(a.key, -1)}><StudioIcon name="arrow" /></button>}
+                  {index < shown.length - 1 && <button data-action="provider.move" data-target={a.key} data-value="down"
+                    aria-label={t("下移 {name}（Alt+下方向键）", { name: a.label })}
+                    title={t("下移 {name}（Alt+下方向键）", { name: a.label })}
+                    onClick={() => move(a.key, 1)}><StudioIcon name="arrow" className="svcrow-arrow-down" /></button>}
+                </span>
+              </div>
+            );
+          })}
+          {accounts.length === 0 && <div className="empty">{t("尚未配置任何模型来源。")}</div>}
+          {accounts.length > 0 && shown.length === 0 && <div className="empty">{t("没有匹配的服务。")}</div>}
+        </div>
+        <button className="act padd" data-action="provider.add-start" aria-pressed={adding} onClick={() => leave(() => setAdding(true))}>
+          <b aria-hidden="true">＋</b>{t("添加模型服务")}
+        </button>
+      </div>
+      <div className="pmain" ref={pmain}>
+        {removal && (removal.report || !accounts.some((a) => a.key === removal.key)) && (
+          <RemovalNotice removal={removal} />
+        )}
+        {asked && (
+          <div className="wsconfirm" role="alertdialog" aria-labelledby="provider-leave-q" aria-describedby="provider-leave-q"
+            data-action-keydown="layer.dismiss"
+            onKeyDown={(ev) => {
+              if (ev.key !== "Escape") return;
+              ev.stopPropagation();
+              keepEditing();
+            }}>
+            <div className="wsconfirm-t">
+              <span className="q" id="provider-leave-q">{t("这个服务有未保存的更改")}</span>
+              <span className="h">{t("离开后这些更改会丢失。")}</span>
+            </div>
+            <div className="wsconfirm-a">
+              <button autoFocus data-primary data-action="layer.dismiss" onClick={keepEditing}>{t("保留编辑")}</button>
+              <button data-action="provider.discard-edits" data-danger
+                onClick={() => { const { go } = asked; setAsked(null); setDirty(false); go(); }}>
+                {t("放弃更改并离开")}
+              </button>
+            </div>
+          </div>
+        )}
+        {adding ? (
+          <AddProvider
+            port={port}
+            taken={list.map((p) => p.name)}
+            known={list}
+            onDone={() => {
+              before.current = new Set(accounts.map((a) => a.key));
+              setAdding(false);
+              void reload();
+              onChanged();
+            }}
+            onCancel={() => setAdding(false)}
+          />
+        ) : current ? (
+          <ProviderDetail key={current.key} a={current} port={port} busy={busy} setBusy={setBusy}
+            kind={protocol[current.key] ?? activeKindFor(current)}
+            onProtocol={(k) => leave(() => onProtocol(current, k))}
+            onRemove={remove} removeFailed={removal?.key === current.key ? removal.why : ""}
+            onRename={() => startRename(current.key)}
+            declare={declare}
+            onEdited={() => { const fresh = reload(); onChanged(); return fresh; }}
+            onChecked={() => void reload()}
+            onDirty={setDirty} />
+        ) : (
+          <div className="empty">{t("添加一个模型服务后，在这里查看和修改它。")}</div>
         )}
       </div>
-      {adding && (
-        <AddProvider
-          port={port}
-          taken={list.map((p) => p.name)}
-          known={list}
-          onDone={() => {
-            setAdding(false);
-            reload();
-            onChanged();
-          }}
-          onCancel={() => setAdding(false)}
-        />
-      )}
-      <div className="vlist">
-        {groupAccounts(list).map((a) => (
-          <Conn key={a.key} a={a} port={port} busy={busy} setBusy={setBusy}
-            kind={protocol[a.key] ?? activeKindFor(a)}
-            onProtocol={(k) => onProtocol(a, k)}
-            onRemove={remove}
-            declare={declare}
-            onEdited={() => { reload(); onChanged(); }}
-            onFailed={onFailed} />
-        ))}
-        {list.length === 0 && <div className="empty">{t("尚未配置任何模型来源。")}</div>}
-      </div>
-    </>
-  );
-}
-
-// How a turn's context reaches the next one. Auto is vendor detection, which is
-// the only honest answer for an endpoint nobody has characterised; the other two
-// are what a reader picks when the endpoint has already contradicted it.
-const CONTINUATIONS: ReadonlyArray<readonly [string, string]> = [
-  ["", "自动"],
-  ["stateful", "引用上一轮"],
-  ["stateless", "每轮完整发送"],
-];
-
-const CONTINUATION_WHY: Record<string, string> = {
-  "": "按端点厂商判断。中转站若回报 previous_response_id 不受支持，改为「每轮完整发送」。",
-  stateful: "只发送新的一轮，历史由端点自己保存 —— 前缀缓存命中率最高，但要求端点真的存了。",
-  stateless: "每轮重发完整历史。中转站只转发、不保存状态时用这一档。",
-};
-
-// One account. The protocol is a switch on it rather than a fact on a row,
-// because both entries are the same key at the same host; 测一下 is what turns
-// "which protocol did we record" back into a finding when the endpoint moved.
-function Conn({
-  a, port, busy, setBusy, kind, onProtocol, onRemove, onEdited, onFailed, declare,
-}: {
-  a: Account; port: Port; busy: string; setBusy: (b: string) => void;
-  kind: string; onProtocol: (kind: string) => void; onRemove: (name: string) => void;
-  onEdited: () => void; onFailed: (why: string) => void; declare?: string;
-}) {
-  const [found, setFound] = useState<ProviderCheck | null>(null);
-  // A refusal is not a failed probe. The kernel withholds these routes from a
-  // server reachable over the network, because adding a source writes a key
-  // into the credential store of the machine running the kernel — so nothing
-  // was tried, and "cannot connect" names the wrong thing to go fix.
-  const [refused, setRefused] = useState("");
-  const entry = a.byKind[kind] ?? a.byKind[a.kinds[0]];
-  const declaring = !!declare && entry.name === declare;
-  const [editing, setEditing] = useState(declaring);
-  useEscape(editing, () => setEditing(false));
-  const checking = busy === `check:${entry.name}`;
-  const inUse = a.kinds.some((k) => a.byKind[k].inUse);
-
-  const setSearch = async (on: boolean) => {
-    setBusy(`search:${entry.name}`);
-    onFailed("");
-    try {
-      await port.setProviderWebSearch(entry.name, on);
-      onEdited();
-    } catch (e) {
-      onFailed(reason(e));
-    } finally {
-      setBusy("");
-    }
-  };
-
-  const setThinking = async (on: boolean) => {
-    setBusy(`thinking:${entry.name}`);
-    onFailed("");
-    try {
-      await port.setProviderThinking(entry.name, on);
-      onEdited();
-    } catch (e) {
-      onFailed(reason(e));
-    } finally {
-      setBusy("");
-    }
-  };
-
-  const setContinuation = async (mode: string) => {
-    setBusy(`continuation:${entry.name}`);
-    onFailed("");
-    try {
-      await port.setProviderContinuation(entry.name, mode);
-      onEdited();
-    } catch (e) {
-      onFailed(reason(e));
-    } finally {
-      setBusy("");
-    }
-  };
-
-  const check = async () => {
-    setBusy(`check:${entry.name}`);
-    setFound(null);
-    setRefused("");
-    try {
-      setFound(await port.checkProvider(entry.name));
-    } catch (e) {
-      // Read off the code the kernel sent, never the status: 403 is also what a
-      // gateway in front of it answers, and that is a different thing to do next.
-      if (e instanceof HttpError && e.reason?.code === PROVIDER_EDIT_DISABLED) setRefused(reason(e));
-      else setFound({ ok: false, error: reason(e) });
-    } finally {
-      setBusy("");
-    }
-  };
-
-  const models = entry.models.length;
-  // What the endpoint answered with that this connection does not list. The
-  // vendor adds models to endpoints we already know; a stored list never finds
-  // out on its own, and the probe is the one place that already has the answer.
-  const unlisted = (found?.models ?? []).filter((m) => !entry.models.includes(m));
-  return (
-    <>
-      <div className="vrow" data-on={inUse ? "" : undefined}>
-        <span className="nm">{a.label}</span>
-        <Clip className="ds">
-          {a.host + (models > 0 ? ` · ${t("{n} 个模型", { n: models })}` : "") + t(entry.hasKey ? "" : " · 缺 key")}
-        </Clip>
-        <span className="sc">{t(inUse ? "正在用" : "")}</span>
-        {/* Hover-reveal is right for 删除; a diagnostic nobody can find is not
-            a diagnostic, so this one stays on the row. */}
-        <button className="sa lnk" data-keep onClick={() => setEditing((v) => !v)} disabled={busy !== ""}>
-          {t(editing ? "收起" : "编辑")}
-        </button>
-        <button className="sa lnk" data-keep data-action="provider.probe" onClick={check} disabled={busy !== ""}>
-          {t(checking ? "测试中…" : "测试连接")}
-        </button>
-        <button className="sa lnk" data-action="provider.remove" data-target={entry.name} onClick={() => onRemove(entry.name)} disabled={busy !== ""}>
-          {t("删除")}
-        </button>
-      </div>
-      {(a.kinds.length > 1 || entry.canWebSearch || entry.canSetThinking || entry.canSetContinuation) && (
-        <details className="provider-options">
-          <summary>
-            <span className="tx">
-              <strong>{t("请求与能力")}</strong>
-              <small>{t("思考、联网搜索与上下文续接")}</small>
-            </span>
-            <span className="provider-options-state">
-              {entry.canSetThinking && t(entry.sendsThinking === false ? "不发送思考参数" : "思考自动")}
-            </span>
-          </summary>
-      {a.kinds.length > 1 && (
-        <div className="vway">
-          <span className="lb">{t("接入方式")}</span>
-          <div className="seg" role="group" aria-label={t("{name} 的接入方式", { name: a.label })}>
-            {a.kinds.map((k) => (
-              <button key={k} data-action="provider.protocol" data-target={entry.name} data-value={k} aria-pressed={k === kind} disabled={busy !== ""} onClick={() => onProtocol(k)}>
-                {t(KIND_LABEL[k] ?? k)}
-                {/* A door that carries a capability the other lacks has to say
-                    so on itself: switching is otherwise a silent downgrade. */}
-                {a.byKind[k].canWebSearch && <i className="perk">{t("联网搜索")}</i>}
-              </button>
-            ))}
-          </div>
-          <span className="why">
-            {t(a.kinds.some((k) => a.byKind[k].canWebSearch) && !entry.canWebSearch ? "同一账号的两种接入方式。当前这一种不支持联网搜索；这是协议差异，不是可配置项。" : "同一账号的两种接入方式。切换后下方的模型列表随之改变。")}
-          </span>
-        </div>
-      )}
-      {entry.canWebSearch && (
-        <div className="vway">
-          <span className="lb">{t("联网搜索")}</span>
-          <div className="seg" role="group" aria-label={t("{name} 的联网搜索", { name: a.label })}>
-            {[true, false].map((on) => (
-              <button key={String(on)} data-action="provider.web-search" data-target={entry.name} data-value={String(on)}
-                aria-pressed={entry.webSearch === on} disabled={busy !== ""}
-                onClick={() => setSearch(on)}>
-                {t(on ? "开" : "关")}
-              </button>
-            ))}
-          </div>
-          <span className="why">{t("端点自己执行的搜索，不占本地工具。")}</span>
-        </div>
-      )}
-      {entry.canSetThinking && (
-        <div className="vway">
-          <span className="lb">{t("思考参数")}</span>
-          <div className="seg" role="group" aria-label={t("{name} 的思考参数", { name: a.label })}>
-            {[true, false].map((on) => (
-              <button key={String(on)} data-action="provider.thinking" data-target={entry.name} data-value={String(on)}
-                aria-pressed={(entry.sendsThinking ?? true) === on} disabled={busy !== ""}
-                onClick={() => setThinking(on)}>
-                {t(on ? "自动" : "不发送")}
-              </button>
-            ))}
-          </div>
-          <span className="why">
-            {t(entry.sendsThinking === false ? "只发送常规聊天参数，不再指定思考深度；模型自身的推理行为不受影响。" : "部分中转站不支持 thinking 字段，会拒绝整个请求。遇到这种情况请切换为「不发送」。")}
-          </span>
-        </div>
-      )}
-      {entry.canSetContinuation && (
-        <div className="vway">
-          <span className="lb">{t("上下文续接")}</span>
-          <div className="seg" role="group" aria-label={t("{name} 的上下文续接方式", { name: a.label })}>
-            {CONTINUATIONS.map(([mode, label]) => (
-              <button key={mode} data-action="provider.continuation" data-target={entry.name} data-value={mode}
-                aria-pressed={(entry.continuation ?? "") === mode} disabled={busy !== ""}
-                onClick={() => setContinuation(mode)}>
-                {t(label)}
-              </button>
-            ))}
-          </div>
-          <span className="why">{t(CONTINUATION_WHY[entry.continuation ?? ""] ?? CONTINUATION_WHY[""])}</span>
-        </div>
-      )}
-        </details>
-      )}
-      {editing && (
-        <EditConn
-          entry={entry}
-          initialCheck={found?.ok ? found : undefined}
-          port={port}
-          busy={busy}
-          setBusy={setBusy}
-          declare={declaring}
-          onDone={() => {
-            setEditing(false);
-            onEdited();
-          }}
-        />
-      )}
-      {refused && (
-        <div className="find" data-lvl="warn" role="status">
-          <span className="t">{refused}</span>
-          <span className="why">{t("模型来源要在运行内核的那台机器上配置。")}</span>
-        </div>
-      )}
-      {found && (
-        <div className="find" data-lvl={found.ok ? "ok" : "warn"} role="status">
-          <span className="t">
-            {found.ok
-              ? `${t("连上了")} · ${t(KIND_LABEL[found.kind ?? ""] ?? found.kind ?? "")} · ${t("{n} 个模型", { n: found.models?.length ?? 0 })}`
-              : t("无法连接")}
-          </span>
-          <span className="why">
-            {!found.ok && found.error}
-            {found.ok && found.matches === false &&
-              t("记的是 {had}，但它答的是 {got}。", { had: t(KIND_LABEL[entry.kind] ?? entry.kind), got: t(KIND_LABEL[found.kind ?? ""] ?? found.kind ?? "") })}
-            {found.ok && found.matches !== false && t("key 有效，协议也对得上。")}
-            {found.ok && found.noProxy && " " + t("走代理连不上、直连可以。")}
-            {/* A stored list cannot learn that the vendor shipped something. The
-                probe already knows, so saying it costs nothing and is the only
-                moment anyone finds out. */}
-            {found.ok && unlisted.length > 0 &&
-              " " + t("这个端点还有 {n} 个模型不在列表里：{names}。点「编辑」把它们加进来。", {
-                n: unlisted.length,
-                names: unlisted.slice(0, 3).join("、") + (unlisted.length > 3 ? "…" : ""),
-              })}
-          </span>
-        </div>
-      )}
-    </>
+    </div>
   );
 }

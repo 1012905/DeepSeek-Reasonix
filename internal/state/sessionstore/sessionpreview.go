@@ -21,7 +21,7 @@ func SessionPreviewFromMessages(msgs []provider.Message) (string, int) {
 	first := ""
 	turns := 0
 	for _, m := range msgs {
-		if m.Role == provider.RoleUser && IsUserAuthoredTurn(UserMessageText(m)) {
+		if m.Role == provider.RoleUser && !m.HostAuthored && IsUserAuthoredTurn(UserMessageText(m)) {
 			turns++
 			if first == "" {
 				first = TruncatePreview(PreviewProse(UserMessageText(m)))
@@ -68,4 +68,31 @@ func TruncatePreview(s string) string {
 		return string(r[:77]) + "…"
 	}
 	return s
+}
+
+// UserMessagesTitleSource returns the last 300 runes of all human-authored turns joined in order.
+func UserMessagesTitleSource(path string) (string, error) {
+	msgs, _, _, err := loadSessionMessages(path)
+	if err != nil {
+		return "", err
+	}
+	var parts []string
+	for _, m := range msgs {
+		if m.Role != provider.RoleUser || m.HostAuthored {
+			continue
+		}
+		text := UserMessageText(m)
+		if !IsUserAuthoredTurn(text) {
+			continue
+		}
+		text = strings.TrimSpace(StripPasteDisplayLabel(text))
+		if text != "" {
+			parts = append(parts, text)
+		}
+	}
+	runes := []rune(strings.Join(parts, "\n"))
+	if len(runes) > 300 {
+		runes = runes[len(runes)-300:]
+	}
+	return string(runes), nil
 }

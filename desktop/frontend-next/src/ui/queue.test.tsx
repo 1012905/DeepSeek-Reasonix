@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Queue } from "./Queue";
+import { BLOCK_WHY } from "../i18n/queue_why";
+import { EN } from "../i18n/en";
 import type { Queue as QueueSnapshot, QueueItem } from "../port/port";
 
 const item = (over: Partial<QueueItem> = {}): QueueItem => ({
@@ -38,6 +40,53 @@ const paint = (q: QueueSnapshot, running: boolean) =>
 
 const draw = (q: QueueSnapshot) => paint(q, true);
 const drawIdle = (q: QueueSnapshot) => paint(q, false);
+
+describe("why a held entry stopped", () => {
+  const held = (over: Partial<QueueItem>) => draw(snapshot({ paused: true, items: [item({ state: "uncertain", ...over })] }));
+
+  it("words a coded stop in this build's language, not the kernel's English", () => {
+    const html = held({ blockCode: "steer_unapplied", blockReason: "steer accepted but unapplied before turn exit" });
+    expect(html).toContain("没来得及送达");
+    expect(html).not.toContain("unapplied before turn exit");
+  });
+
+  it.each(Object.entries(BLOCK_WHY))("%s reads in Chinese and has an English sentence", (code, zh) => {
+    const html = held({ blockCode: code, blockReason: "kernel diagnostic" });
+    expect(html).toContain(zh);
+    expect(html).not.toContain("kernel diagnostic");
+    expect(EN[zh], `no English for ${code}`).toBeTruthy();
+    expect(EN[zh]).not.toBe(zh);
+  });
+
+  it("covers exactly the codes the kernel sends", () => {
+    expect(Object.keys(BLOCK_WHY).sort()).toEqual(
+      ["manifest_salvaged", "owner_inactive", "steer_unapplied", "turn_ack_failed", "turn_snapshot_failed"],
+    );
+  });
+
+  it("offers Retry on an uncertain entry the kernel knows was never sent", () => {
+    expect(held({ blockCode: "steer_unapplied" })).toContain('data-action="queue.retry"');
+  });
+
+  it.each(["turn_ack_failed", "turn_snapshot_failed", "owner_inactive", "manifest_salvaged", "future_code"])(
+    "offers no Retry on an uncertain %s entry, which may already have run",
+    (code) => {
+      expect(held({ blockCode: code })).not.toContain('data-action="queue.retry"');
+    },
+  );
+
+  it("offers no Retry on an uncertain entry with no code", () => {
+    expect(held({})).not.toContain('data-action="queue.retry"');
+  });
+
+  it("still offers Retry on a blocked entry", () => {
+    expect(draw(snapshot({ items: [item({ state: "blocked", intent: "followup" })] }))).toContain('data-action="queue.retry"');
+  });
+
+  it("keeps the kernel's text for a code this build has no sentence for", () => {
+    expect(held({ blockCode: "future_code", blockReason: "something new" })).toContain("something new");
+  });
+});
 
 // Typing at a working turn does reach the model — the report was that nobody
 // could tell. Every assertion here is on what the strip says back, because a
@@ -108,6 +157,25 @@ describe("what the pending strip says back", () => {
     const html = draw(snapshot({ capacity: { items: 49, maxItems: 64, bytes: 3174, maxBytes: 64 << 20 } }));
     expect(html).toContain("49/64");
     expect(html).toContain("3.1k/64M");
+  });
+
+  it("draws each capacity limit as a labelled meter with its own value and maximum", () => {
+    const html = draw(snapshot({ capacity: { items: 64, maxItems: 64, bytes: 3174, maxBytes: 64 << 20 } }));
+    expect(html).toMatch(/role="meter" aria-label="条目" aria-valuemin="0" aria-valuemax="64" aria-valuenow="64" data-full="true"/);
+    expect(html).toMatch(/role="meter" aria-label="字节" aria-valuemin="0" aria-valuemax="67108864" aria-valuenow="3174"/);
+    expect(html).not.toMatch(/aria-label="字节"[^>]*data-full/);
+  });
+
+  it("draws no item meter when the queue has no item limit, only the byte one under pressure", () => {
+    const html = draw(snapshot({ capacity: { items: 300, maxItems: 0, bytes: 60 << 20, maxBytes: 64 << 20 } }));
+    expect(html).not.toContain("300/0");
+    expect(html).not.toMatch(/aria-label="条目" aria-valuemin/);
+    expect(html).toMatch(/role="meter" aria-label="字节"/);
+  });
+
+  it("shows no capacity strip for a long unlimited queue with room in the bytes", () => {
+    const html = draw(snapshot({ capacity: { items: 300, maxItems: 0, bytes: 3174, maxBytes: 64 << 20 } }));
+    expect(html).not.toContain('class="qcap"');
   });
 
   it("renders nothing when there is nothing waiting and the queue is not held", () => {

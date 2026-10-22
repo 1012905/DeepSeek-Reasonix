@@ -21,19 +21,20 @@ func (s *Server) shellSettings(w http.ResponseWriter, _ *http.Request) {
 // the machine running the kernel — a networked client must not pick which
 // program the agent's commands are handed to.
 func (s *Server) saveShellSettings(w http.ResponseWriter, r *http.Request) {
-	if !s.grants.providerEdit {
+	if !s.grants.at(r).providerEdit {
 		refuse(w, http.StatusForbidden, "shell.editing_disabled", "shell editing is not enabled on this server", nil)
 		return
 	}
 	var body struct {
-		Prefer string `json:"prefer"`
-		Path   string `json:"path"`
+		Prefer string   `json:"prefer"`
+		Path   string   `json:"path"`
+		Args   []string `json:"args"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&body); err != nil {
 		badBody(w)
 		return
 	}
-	if err := s.ctl().SaveShellSettings(body.Prefer, body.Path); err != nil {
+	if err := s.ctl().SaveShellSettings(body.Prefer, body.Path, body.Args...); err != nil {
 		saveFailed(w, http.StatusBadRequest, "shell.rejected", err)
 		return
 	}

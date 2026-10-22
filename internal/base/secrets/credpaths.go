@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync/atomic"
 )
@@ -177,6 +178,24 @@ func ForbiddenReadPaths(broad bool) []string {
 	return out
 }
 
+// CredentialDirs are the directories that hold credential files: ~/.ssh and
+// ~/.gnupg, and the parent of every exact credential path (~/.aws,
+// ~/.config/gcloud). A folder that is one of these, sits inside one or contains
+// one gives its holder a write path to the keys.
+func CredentialDirs() []string {
+	home := credentialHome()
+	if home == "" {
+		return nil
+	}
+	out := []string{filepath.Join(home, ".ssh"), filepath.Join(home, ".gnupg")}
+	for _, p := range credentialExactPaths(home) {
+		if dir := filepath.Dir(p); dir != home && !slices.Contains(out, dir) {
+			out = append(out, dir)
+		}
+	}
+	return out
+}
+
 // SensitiveHomeDirs are the home directories protect_sensitive_files hides.
 func SensitiveHomeDirs() []string {
 	home := credentialHome()
@@ -184,4 +203,24 @@ func SensitiveHomeDirs() []string {
 		return nil
 	}
 	return []string{filepath.Join(home, ".ssh")}
+}
+
+// SensitiveFileName reports whether a file's base name marks it as holding
+// secrets wherever it sits: dotenv files and credential stores, private key
+// and certificate containers, and the default SSH identity files.
+func SensitiveFileName(name string) bool {
+	name = strings.ToLower(name)
+	switch name {
+	case ".env", ".git-credentials", ".netrc", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519":
+		return true
+	}
+	if rest, ok := strings.CutPrefix(name, ".env."); ok {
+		return rest != "example" && rest != "sample" && rest != "template"
+	}
+	for _, ext := range []string{".pem", ".key", ".p12", ".pfx"} {
+		if strings.HasSuffix(name, ext) {
+			return true
+		}
+	}
+	return false
 }

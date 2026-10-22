@@ -68,7 +68,7 @@ func TestLengthHasACeiling(t *testing.T) {
 // is what stops a pack from reaching a variable the frontend never meant to
 // hand over, including the ones that carry meaning.
 func TestUnknownAndReservedNamesAreRefused(t *testing.T) {
-	for _, name := range []string{"ok", "err", "radiusPill", "bgColor", ""} {
+	for _, name := range []string{"ok", "warn", "err", "net", "deleg", "add", "del", "focus", "radiusPill", "bgColor", ""} {
 		if validToken(name, "#ffffff") {
 			t.Errorf("validToken accepted %q, which is not in the vocabulary", name)
 		}
@@ -88,6 +88,28 @@ func TestShippedPacksUseOnlyRealTokens(t *testing.T) {
 		if len(pack.Warnings) > 0 {
 			t.Errorf("%s: %v", pack.ID, pack.Warnings)
 		}
+	}
+}
+
+// Bold text in the transcript is the one ink a reader asks to tell apart by
+// colour rather than weight, so a pack can name it without arbitrary CSS.
+func TestDecodeAcceptsAStrongTextColour(t *testing.T) {
+	pack, err := decode([]byte(`{
+      "schemaVersion": 1,
+      "name": "Strong",
+      "tokens": {
+        "light": {"fg": "#1a1a1a", "fgStrong": "#8a3b12"},
+        "dark":  {"fg": "#f0f0f0", "fgStrong": "#f2b27a"}
+      }
+    }`), "strong")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pack.Warnings) > 0 {
+		t.Fatalf("warnings = %v, want none", pack.Warnings)
+	}
+	if got := pack.Tokens["dark"]["fgStrong"]; got != "#f2b27a" {
+		t.Fatalf("fgStrong = %q, want it kept", got)
 	}
 }
 
@@ -124,7 +146,7 @@ func TestDecodeKeepsGoodTokensAndReportsBadOnes(t *testing.T) {
 // reads as a window that has gone wrong.
 func TestShippedPacksMeetTextContrast(t *testing.T) {
 	const aa = 4.5
-	inks := []string{"fg", "fgDim", "fgFaint"}
+	inks := []string{"fg", "fgStrong", "fgDim", "fgFaint"}
 	surfaces := []string{"bg", "bgSoft", "panel", "bgElev", "float", "floatHi", "codeBg", "sunkBg"}
 	packs := listBuiltin()
 	if len(packs) == 0 {
@@ -220,5 +242,93 @@ func TestThemeTokenVocabularyMatchesTheFrontend(t *testing.T) {
 	slices.Sort(frontend)
 	if kernel := TokenNames(); !slices.Equal(frontend, kernel) {
 		t.Fatalf("frontend maps %v, kernel accepts %v", frontend, kernel)
+	}
+}
+
+// link, brand, halo and labelAgent are decoration — a hyperlink, the product
+// accent, an interaction halo, an agent's name — and colours like any other.
+func TestDecorativeRolesAreColourTokens(t *testing.T) {
+	for _, name := range []string{"link", "brand", "halo", "labelAgent"} {
+		if Tokens[name] != TokenColour {
+			t.Errorf("%s is %q, want a colour token", name, Tokens[name])
+		}
+		if !validToken(name, "#0a84ff") || validToken(name, "url(x)") {
+			t.Errorf("%s does not use the colour grammar", name)
+		}
+	}
+}
+
+// A pack that tries to recolour what the status colours mean loses those
+// tokens and is told so, while the decorative ones it set are kept.
+func TestStatusNamesAreDroppedWithAWarningNextToKeptDecoration(t *testing.T) {
+	pack, err := decode([]byte(`{
+      "schemaVersion": 1,
+      "name": "Mono",
+      "tokens": {
+        "light": {"bg": "#ffffff", "fg": "#000000", "link": "#111111", "brand": "#222222", "halo": "#333333", "labelAgent": "#444444", "net": "#555555", "deleg": "#666666"},
+        "dark":  {"bg": "#000000", "fg": "#ffffff"}
+      }
+    }`), "mono")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kept := range []string{"link", "brand", "halo", "labelAgent"} {
+		if _, ok := pack.Tokens["light"][kept]; !ok {
+			t.Errorf("%s was dropped", kept)
+		}
+	}
+	for _, dropped := range []string{"net", "deleg"} {
+		if _, ok := pack.Tokens["light"][dropped]; ok {
+			t.Errorf("%s survived into the pack", dropped)
+		}
+	}
+	if len(pack.Warnings) != 2 {
+		t.Fatalf("warnings = %v, want one each for net and deleg", pack.Warnings)
+	}
+}
+
+// A shadow is a list of layers written into box-shadow, so its grammar is as
+// strict as a colour's: offsets, blur, spread, an optional inset and a hex
+// colour, and nothing that could leave the declaration or reach the network.
+func TestShadowTokenAcceptsWhatAPackWrites(t *testing.T) {
+	for _, v := range []string{
+		"none",
+		"0 0 0 1px #00000040",
+		"0 8px 24px -8px #00000033",
+		"inset 0 1px 0 #ffffff80, 0 16px 40px -14px #171e3333, 0 4px 12px -8px #171e3324",
+		"0 1px 2px #000",
+		"2px 2px #00000088",
+	} {
+		if !validToken("shadowFloat", v) {
+			t.Errorf("validToken(shadowFloat, %q) refused a shadow a pack would reasonably write", v)
+		}
+	}
+}
+
+func TestShadowTokenRefusesWhatCouldLeaveItsDeclaration(t *testing.T) {
+	for _, v := range []string{
+		"",
+		"0 0 0 red",
+		"0 0 0 rgb(0 0 0 / .5)",
+		"0 0 0 var(--err)",
+		"0 0 0 #000; position: fixed",
+		"0 0 0 #000 }",
+		"0 0 0 url(https://evil.example/x) #000",
+		"0 -2 4px #000",
+		"0 0 -4px #000",
+		"0 0 999px #000",
+		"0 0 0 0 0 #000",
+		"inset #000",
+		"0 0 0 #000, , 0 0 0 #000",
+		"0 0 0 #000, 0 0 0 #000, 0 0 0 #000, 0 0 0 #000, 0 0 0 #000",
+		"1em 1em #000",
+		"0\u00a00 0 #000000",
+		"0 0\u20280 #000000",
+		"0\u30000 4px #000000",
+		"0\t0 4px #000000",
+	} {
+		if validToken("shadowFloat", v) {
+			t.Errorf("validToken(shadowFloat, %q) accepted a value that is not a plain shadow", v)
+		}
 	}
 }

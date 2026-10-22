@@ -10,6 +10,7 @@ import (
 
 	"reasonix/internal/contract/ablation"
 	"reasonix/internal/contract/event"
+	"reasonix/internal/ext/extension"
 	"reasonix/internal/runtime/taskpolicy"
 	"reasonix/internal/safety/evidence"
 	"reasonix/internal/state/instruction"
@@ -20,8 +21,10 @@ import (
 // says what is missing rather than merely that something is.
 
 type finalReadinessCheck struct {
-	applies                   bool
-	reason                    string
+	applies bool
+	reason  string
+	// abridged pairs each short reference in reason with the full line it stands for.
+	abridged                  [][2]string
 	missingProjectChecks      int
 	incompleteTodos           int
 	missingAcceptanceCriteria int
@@ -47,8 +50,19 @@ func (c finalReadinessCheck) progressSignature() string {
 		c.missingCapabilities,
 		c.missingRender,
 		boolInt(c.applies),
-		c.reason,
+		c.unabridgedReason(),
 	)
+}
+
+// unabridgedReason is reason with every short reference spelled out again. How
+// much of a debt a round explains is a courtesy to the reader; whether the
+// round moved is not, so the progress signature never sees one change into the other.
+func (c finalReadinessCheck) unabridgedReason() string {
+	reason := c.reason
+	for _, p := range c.abridged {
+		reason = strings.ReplaceAll(reason, p[0], p[1])
+	}
+	return reason
 }
 
 func (c finalReadinessCheck) missingIDs() []string {
@@ -109,20 +123,41 @@ func (a *Agent) declaredChecksRanAfter(writer int) bool {
 	return true
 }
 
-// unmetProjectChecks lists the declared checks that have not run since the
-// latest write, phrased as the instruction that would settle each one.
+// unmetProjectChecks lists the checks that have not run since the latest write,
+// phrased as the instruction that would settle each one: every check declared
+// now, and every one the delivery scope began under that no declaration names.
 func (a *Agent) unmetProjectChecks(writer int) []string {
 	var gaps []string
+	declared := map[string]bool{}
 	for _, check := range a.projectChecks {
 		command := strings.TrimSpace(check.Command)
 		if command == "" {
 			continue
 		}
+		declared[evidence.VerificationIdentity(command)] = true
 		if !a.task.ledger.HasSuccessfulCommandAfter(command, writer) {
 			gaps = append(gaps, fmt.Sprintf("run %q from %s after the latest write", command, finalReadinessCheckSource(check)))
 		}
 	}
+	if !a.deliveryCheckpointApplies() {
+		return gaps
+	}
+	// The workspace cannot supersede a captured criterion, so a declaration
+	// rewritten since the scope began does not retire what it used to name.
+	for _, id := range a.task.checkpoint.BaselineChecks {
+		if declared[id] || a.task.ledger.HasSuccessfulCommandAfter(id, writer) {
+			continue
+		}
+		gaps = append(gaps, fmt.Sprintf("run %q after the latest write: this task began under it, and a changed "+
+			"declaration does not retire a check the task was accepted under", id))
+	}
 	return gaps
+}
+
+// deliveryCheckpointApplies reports whether the checkpoint belongs to the
+// delivery scope this turn runs in, rather than to a scope a restore left behind.
+func (a *Agent) deliveryCheckpointApplies() bool {
+	return a.turn.deliveryScopeActive && a.task.checkpoint.ScopeID == a.task.scopeID
 }
 
 func (a *Agent) finalReadinessCheckFor() finalReadinessCheck {
@@ -142,7 +177,8 @@ func (a *Agent) finalReadinessCheckFor() finalReadinessCheck {
 	deliveryMutation := false
 	deliveryVerificationOnly := false
 	checkpoint := a.task.checkpoint
-	checkpointApplies := a.turn.deliveryScopeActive && checkpoint.ScopeID == a.task.scopeID
+	checkpointApplies := a.deliveryCheckpointApplies()
+	var carried *evidence.ProvenMutation
 	if a.deliveryProfile {
 		if mutation, ok := a.mutationBaseline(true); ok {
 			writer, hasWriter = mutation, true
@@ -153,6 +189,7 @@ func (a *Agent) finalReadinessCheckFor() finalReadinessCheck {
 			// without manufacturing another write.
 			writer, hasWriter = -1, true
 			deliveryMutation = true
+			carried = a.carriedProof()
 		} else if checkpointApplies && checkpoint.MutationObserved {
 			deliveryMutation = true
 		}
@@ -182,7 +219,8 @@ func (a *Agent) finalReadinessCheckFor() finalReadinessCheck {
 			return out
 		}
 	}
-	if !hasWriter {
+	missing = a.appendPlanDeliverableGap(&out, missing, checkpointApplies && (checkpoint.PendingMutation || checkpoint.MutationObserved))
+	if a.owesNothingForChanges(hasWriter) {
 		if len(missing) > 0 {
 			out.reason = strings.Join(missing, "; ")
 		}
@@ -192,7 +230,9 @@ func (a *Agent) finalReadinessCheckFor() finalReadinessCheck {
 	// what it cannot owe is a passing one, since the task being impossible is
 	// exactly why the check does not pass. Nothing else about the turn is waived.
 	verified, blockedWithCheck := a.postWriteVerification(writer)
-	missing = a.appendVerificationGap(&out, missing, writer, blockedWithCheck, verified)
+	if carried == nil || !carried.Verified {
+		missing = a.appendVerificationGap(&out, missing, writer, blockedWithCheck, verified)
+	}
 	missing = a.appendReviewGap(&out, missing)
 	missing = a.appendUnprovenMutationGap(&out, missing)
 	missing = a.appendUnseenRenderGap(&out, missing, writer)
@@ -202,30 +242,11 @@ func (a *Agent) finalReadinessCheckFor() finalReadinessCheck {
 	out.applies = true
 	if a.deliveryProfile {
 		a.emitTurnPhase(event.TurnPhaseVerifying)
-		criteriaEstablished := a.turn.deliveryCriteriaEstablished || (checkpointApplies && checkpoint.CriteriaEstablished)
-		if !criteriaEstablished {
-			out.missingAcceptanceCriteria++
-			missing = append(missing, "establish concrete acceptance criteria with todo_write before changing state")
-		}
-		hasCompleteStep := a.task.ledger.HasSuccessfulCompleteStepAfter(writer)
-		if !hasCompleteStep {
-			out.missingSignoff++
-			missing = append(missing, "call complete_step after the latest mutation")
-		}
-		// A sign-off that cited a passing check but lacks the review is missing
-		// the review, not the verification. Reporting both sends the model to
-		// re-run and re-cite a check it already ran, cited, and watched pass.
-		if !a.task.ledger.HasSuccessfulDeliverySignoffAfter(writer) && !blockedWithCheck &&
-			!a.task.ledger.HasCitedVerificationAfter(writer) {
-			out.missingVerification++
-			missing = append(missing, "run relevant verification after the latest mutation and cite that successful command in complete_step")
-		}
-		if deliveryMutation {
-			missing = a.appendSelfInspectionGap(&out, missing, writer)
-		}
+		criteria := a.turn.deliveryCriteriaEstablished || (checkpointApplies && checkpoint.CriteriaEstablished)
+		missing = a.appendDeliveryGaps(&out, missing, writer, carried, criteria, blockedWithCheck, deliveryMutation)
 		// The capability gate already ran before the no-writer fast path above.
 	}
-	if !deliveryVerificationOnly {
+	if !deliveryVerificationOnly && (carried == nil || !carried.ProjectChecks) {
 		missing = a.appendProjectCheckGaps(&out, missing, writer)
 	}
 
@@ -237,6 +258,39 @@ func (a *Agent) finalReadinessCheckFor() finalReadinessCheck {
 	}
 	out.reason = strings.Join(missing, "; ")
 	return out
+}
+
+// owesNothingForChanges is true when no write put a check on the turn, or the
+// user waived the checks a write owes.
+func (a *Agent) owesNothingForChanges(hasWriter bool) bool {
+	return !hasWriter || a.role.waiveOwedChecks
+}
+
+// appendDeliveryGaps is what a Delivery turn owes on top of any turn: criteria,
+// sign-off, a cited check, and inspection of what changed. carried is proof a
+// restart brought in for a pending change, and discharges what it proved.
+func (a *Agent) appendDeliveryGaps(out *finalReadinessCheck, missing []string, writer int, carried *evidence.ProvenMutation, criteria, blockedWithCheck, deliveryMutation bool) []string {
+	if !criteria {
+		out.missingAcceptanceCriteria++
+		missing = append(missing, "establish concrete acceptance criteria with todo_write before changing state")
+	}
+	signedOff := carried != nil && carried.SignedOff
+	if !signedOff && !a.task.ledger.HasSuccessfulCompleteStepAfter(writer) {
+		out.missingSignoff++
+		missing = append(missing, "call complete_step after the latest mutation")
+	}
+	// A sign-off that cited a passing check but lacks the review is missing
+	// the review, not the verification. Reporting both sends the model to
+	// re-run and re-cite a check it already ran, cited, and watched pass.
+	if !signedOff && !a.task.ledger.HasSuccessfulDeliverySignoffAfter(writer) && !blockedWithCheck &&
+		!a.task.ledger.HasCitedVerificationAfter(writer) && !a.task.ledger.ProseOnlyWithoutChecks(a.checkContract()) {
+		out.missingVerification++
+		missing = append(missing, "run relevant verification after the latest mutation and cite that successful command in complete_step")
+	}
+	if deliveryMutation && (carried == nil || !carried.Inspected) {
+		missing = a.appendSelfInspectionGap(out, missing, writer)
+	}
+	return missing
 }
 
 // appendIncompleteTodoGap records a list the turn left open. It needs a progress
@@ -260,9 +314,9 @@ func (a *Agent) appendIncompleteTodoGap(out *finalReadinessCheck, missing []stri
 	return append(missing, finalReadinessIncompleteTodos(incomplete))
 }
 
-// appendProjectCheckGaps records the project's own declared checks that have
-// not run since the latest write, and shadows the same question against the
-// ledger's obligations without letting the answer reach the gate.
+// appendProjectCheckGaps records the project's checks that have not run since
+// the latest write, and shadows the same question against the ledger's
+// obligations, whose remaining disagreements the probe classifies.
 func (a *Agent) appendProjectCheckGaps(out *finalReadinessCheck, missing []string, writer int) []string {
 	gaps := a.unmetProjectChecks(writer)
 	out.missingProjectChecks += len(gaps)
@@ -363,7 +417,27 @@ func (a *Agent) mutationEpoch() uint64 {
 // re-reading them is how a rewritten declaration would come to speak for the
 // requirement it replaced.
 func (a *Agent) checkContract() evidence.CheckContract {
-	return evidence.CaptureCheckContract(a.task.checkpoint.BaselineChecks, a.declaredChecks())
+	return evidence.CaptureCheckContract(a.task.checkpoint.BaselineChecks, a.declaredChecks()).
+		WithCapturedTests(len(a.task.baselineCriteria)).WithDelivery(a.deliveryProfile).WithObserveRoot(a.observeRoot).
+		WithUnversionedWorkspace(a.workspaceUnversioned).
+		WithUnseenWriter(a.unseenToolWriter() || a.runningJobWriter())
+}
+
+// unseenToolWriter reports a writer that runs around tool calls and names no
+// paths: a tool hook, a live Claude Code mod, or an extension sidecar on a point
+// every call passes (tool.before, permission.decision, tool.after), outside the
+// bash sandbox.
+func (a *Agent) unseenToolWriter() bool {
+	d := a.svc.extensions
+	return toolHooksMayMutateWorkspace(a.svc.hooks) || d.HasMod() || d.Intercepts(extension.PointToolBefore) ||
+		d.Intercepts(extension.PointPermissionDecision) || d.Intercepts(extension.PointToolAfter)
+}
+
+// runningJobWriter reports a background job of this session that has not
+// exited: its writes reach the ledger only when the turn collects it, so until
+// then no receipt bounds what it changes.
+func (a *Agent) runningJobWriter() bool {
+	return a.svc.jobs != nil && len(a.svc.jobs.RunningForSession(a.turn.jobSession)) > 0
 }
 
 // DeclaredProjectChecks is the declaration this process loaded, for a host that
@@ -409,9 +483,14 @@ func (a *Agent) turnHasNothingToAnswerFor(out finalReadinessCheck, missing []str
 // only one that ran after can answer. The debt is recorded for every preset —
 // it is the host's, not the model's — but only Delivery may not finish owing it.
 func (a *Agent) appendUnprovenMutationGap(out *finalReadinessCheck, missing []string) []string {
-	if !slices.ContainsFunc(a.obligations(), func(o evidence.Obligation) bool {
-		return o.Kind == evidence.ObligationUnprovenMutation
-	}) {
+	var owed *evidence.Obligation
+	for _, o := range a.obligations() {
+		if o.Kind == evidence.ObligationUnprovenMutation {
+			owed = &o
+			break
+		}
+	}
+	if owed == nil {
 		return missing
 	}
 	out.applies = true
@@ -419,8 +498,42 @@ func (a *Agent) appendUnprovenMutationGap(out *finalReadinessCheck, missing []st
 	if !a.deliveryProfile {
 		return missing
 	}
-	return append(missing, "a change ran whose extent the host could not establish, and no check can establish it: "+
-		"make the change again through a tool that reports what it touched, or call conclude_blocked with what cannot be established")
+	if slices.Contains(a.task.explained, owed.ID) {
+		out.abridged = append(out.abridged, [2]string{unprovenMutationAgain, unprovenMutationAsk})
+		return append(missing, unprovenMutationAgain)
+	}
+	return append(missing, unprovenMutationAsk)
+}
+
+const unprovenMutationAsk = "a change ran whose extent the host could not establish, and neither a check nor making the change again settles it: " +
+	evidence.UnprovenMutationSettle
+
+const unprovenMutationAgain = "the unproven change was already explained and still stands: call conclude_blocked saying what could not be established, or leave it to the user"
+
+// noteObligationsExplained records that the turn ending now carried the full
+// explanation of what it owes, so a continuation of the same task repeats each
+// debt once, short. An unproven change is explained only under Delivery, the one
+// profile that may not finish owing it; a verification debt only outside it,
+// where its full text is the one the gap prints.
+func (a *Agent) noteObligationsExplained() {
+	for _, o := range a.obligations() {
+		explained := (o.Kind == evidence.ObligationUnprovenMutation && a.deliveryProfile) ||
+			(o.Kind == evidence.ObligationStaleVerification && !a.deliveryProfile)
+		if explained && !slices.Contains(a.task.explained, o.ID) {
+			a.task.explained = append(a.task.explained, o.ID)
+		}
+	}
+}
+
+// verificationExplained reports that the verification this turn still owes was
+// already explained in full by an ended turn of the same task.
+func (a *Agent) verificationExplained() bool {
+	for _, o := range a.obligations() {
+		if o.Kind == evidence.ObligationStaleVerification && slices.Contains(a.task.explained, o.ID) {
+			return true
+		}
+	}
+	return false
 }
 
 // appendUnseenRenderGap owes a look at each page or image the turn wrote and no
@@ -450,12 +563,18 @@ func (a *Agent) appendUnseenRenderGap(out *finalReadinessCheck, missing []string
 // ran, it declines to judge rather than guessing.
 func (a *Agent) appendVerificationGap(out *finalReadinessCheck, missing []string, writer int, blockedWithCheck, verified bool) []string {
 	if a.deliveryProfile || !a.turn.policySet || a.turn.policy.Verification < taskpolicy.VerifyTargeted ||
-		!toolPresent(a.svc.tools, "bash") || blockedWithCheck || a.checkEstablished(writer, verified) {
+		!toolPresent(a.svc.tools, "bash") || blockedWithCheck || a.task.ledger.HandedBackAfter(writer) || a.checkEstablished(writer, verified) ||
+		a.task.ledger.ProseOnlyWithoutChecks(a.checkContract()) ||
+		a.task.ledger.VerifiedBeneathProse(a.checkContract(), writer, a.writerBaselineThrough) {
 		return missing
 	}
 	gap, owed := a.verificationGap(writer)
 	if !owed {
 		return missing
+	}
+	if gap == verificationOwedAgain {
+		full, _ := a.verificationGapIn(writer, false)
+		out.abridged = append(out.abridged, [2]string{gap, full})
 	}
 	out.applies = true
 	out.missingVerification++
@@ -468,7 +587,15 @@ func (a *Agent) appendVerificationGap(out *finalReadinessCheck, missing []string
 // to the model that just ran one; what it needs is the command named and a
 // shape whose status answers for the check.
 func (a *Agent) verificationGap(writer int) (string, bool) {
-	const ask = "run a relevant verification command after the latest write for the current role setting"
+	return a.verificationGapIn(writer, a.verificationExplained())
+}
+
+// verificationGapIn is verificationGap with the choice of abridging made by the caller.
+func (a *Agent) verificationGapIn(writer int, abridge bool) (string, bool) {
+	ask := "run a relevant verification command after the latest write for the current role setting" + a.verificationCause()
+	if _, unproven := a.task.ledger.LatestUnprovenMutationIndex(); unproven {
+		ask += " — but a check cannot settle a change the host could not read: " + evidence.UnprovenMutationSettle
+	}
 	if unreadable, ok := a.task.ledger.LatestUnreadableVerificationAfter(writer); ok && strings.TrimSpace(unreadable.Command) != "" {
 		return fmt.Sprintf("%s — %q ran, but its exit status is the last stage's, not the check's, "+
 			"so it proves nothing either way; re-run the check on its own", ask, strings.TrimSpace(unreadable.Command)), true
@@ -485,14 +612,64 @@ func (a *Agent) verificationGap(writer int) (string, bool) {
 			"or, if it cannot pass as specified, call conclude_blocked with the evidence for why", named), true
 	}
 	// Commands ran and the table read none as a check. The host cannot tell a
-	// runner from a deploy, so it owes nothing and says nothing: it has no
-	// honest sentence, and failing on the guess is the gate over-reaching.
-	if len(a.projectChecks) == 0 {
-		if _, ok := a.task.ledger.LatestUnrecognizedCommandAfter(writer); ok {
-			return "", false
-		}
+	// runner from a deploy, so it owes nothing and says nothing — but only while
+	// it can say they all left the tree as they found it.
+	if len(a.projectChecks) == 0 &&
+		a.task.ledger.HasUnrecognizedCommandAfter(writer) &&
+		!a.task.ledger.HasUnrecognizedMutationAfter(writer) {
+		return "", false
+	}
+	if abridge {
+		return verificationOwedAgain, true
 	}
 	return ask, true
+}
+
+const verificationOwedAgain = "the verification owed after the latest write is still owed, as already explained: run a relevant verification command after it"
+
+// verificationCause names what keeps the check owed. A turn whose every change
+// is prose, in a project declaring no checks, owes none; the paths that are not
+// prose, or the declaration, are what lifts that.
+func (a *Agent) verificationCause() string {
+	contract := a.checkContract()
+	paths, scoped := a.task.ledger.MutationPathsBeyondProse(contract)
+	switch {
+	case len(paths) > 0:
+		const shown = 3
+		paths = a.relativeUnique(paths)
+		list := strings.Join(quoteEach(paths[:min(len(paths), shown)]), ", ")
+		if len(paths) > shown {
+			list += fmt.Sprintf(" and %d more", len(paths)-shown)
+		}
+		return " (not documentation-only: " + list + " changed)"
+	case !scoped:
+		return " (a change ran whose extent the host could not establish)"
+	case contract.DeclaresChecks():
+		return " (checks are declared for this task or project)"
+	case contract.UnseenWriter():
+		if a.runningJobWriter() && !a.unseenToolWriter() {
+			return " (a background job is still running and may change files no receipt reports)"
+		}
+		return " (a tool hook or extension runs around tool calls and may change files no tool reports)"
+	}
+	return ""
+}
+
+// relativeUnique spells each path from the workspace root when it lies inside
+// it, so one file written under two spellings is named once.
+func (a *Agent) relativeUnique(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if filepath.IsAbs(p) && a.observeRoot != "" {
+			if rel, err := filepath.Rel(a.observeRoot, p); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				p = rel
+			}
+		}
+		if !slices.Contains(out, p) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func quoteEach(items []string) []string {

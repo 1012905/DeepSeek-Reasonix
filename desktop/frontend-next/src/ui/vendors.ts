@@ -8,6 +8,7 @@ export const KIND_LABEL: Record<string, string> = {
   openai: "OpenAI 兼容",
   anthropic: "Anthropic 兼容",
   responses: "Responses",
+  gemini: "Gemini 原生（实验）",
   typesafe: "决策 · System One",
   extension: "扩展",
 };
@@ -20,9 +21,11 @@ export function accountKey(host: string, keyEnv?: string): string {
   return `${host}\u0000${(keyEnv ?? "").trim()}`;
 }
 
+// The endpoint's identity: host plus a port that is not the scheme's default.
+// Two ports on one host are two servers, not two doors onto one account.
 export function hostOf(baseUrl: string): string {
   try {
-    return new URL(baseUrl).hostname.toLowerCase();
+    return new URL(baseUrl).host.toLowerCase();
   } catch {
     return baseUrl.trim().toLowerCase();
   }
@@ -30,7 +33,7 @@ export function hostOf(baseUrl: string): string {
 
 // The name a person would use for the account. "api.deepseek.com" is deepseek.
 export function vendorLabel(host: string): string {
-  const bare = host.replace(/^(www|api|open|gateway)\./, "");
+  const bare = host.replace(/:\d+$/, "").replace(/^(www|api|open|gateway)\./, "");
   const first = bare.split(".")[0];
   return first || host;
 }
@@ -42,6 +45,11 @@ export function derivedName(host: string): string {
   return vendorLabel(host).replace(/[^a-zA-Z0-9._-]/g, "-") || "custom";
 }
 
+// Mirrors providerNameRE in internal/frontend/serve/providers.go: the name is a
+// config table name and the head of every "<provider>/<model>" ref.
+const SOURCE_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
+export const sourceNameUsable = (name: string): boolean => SOURCE_NAME.test(name.trim());
+
 export function nameFrom(baseUrl: string): string {
   try {
     return derivedName(new URL(baseUrl).hostname.toLowerCase());
@@ -50,24 +58,28 @@ export function nameFrom(baseUrl: string): string {
   }
 }
 
-// The name to put on an account. A name the user typed is the answer: a curated
-// entry carries our preset id, a new source is prefilled with derivedName, and
-// uniqueName's -2, -3 … suffix is ours too — so anything left is a name somebody
-// chose on purpose. Only when no entry has one does the shared host speak.
-export function accountLabel(host: string, entries: { name: string; preset?: boolean }[]): string {
+// The name to put on an account. A display name the user set wins outright.
+// Otherwise a name the user typed is the answer: a curated entry carries our
+// preset id, a new source is prefilled with derivedName, and uniqueName's -2,
+// -3 … suffix is ours too — so anything left is a name somebody chose on
+// purpose. Only when no entry has one does the shared host speak.
+export function accountLabel(host: string, entries: { name: string; preset?: boolean; displayName?: string }[]): string {
+  const shown = entries.find((e) => e.displayName?.trim())?.displayName?.trim();
+  if (shown) return shown;
   const auto = derivedName(host).toLowerCase();
   const own = entries.find((e) => !e.preset && e.name.trim().replace(/-\d+$/, "").toLowerCase() !== auto);
   return own ? own.name.trim() : vendorLabel(host);
 }
 
-// Two accounts on one host are both called by that host's name, which tells the
-// user nothing about which is which. Only then does the config entry's own name
-// earn a place on screen.
+// Two accounts on one host called the same thing tell the user nothing about
+// which is which. Only then does the config entry's own name earn a place on
+// screen; two labels the user already told apart are left as they are.
 export function disambiguate<T extends { host: string; label: string; hint: string }>(items: T[]): T[] {
   const seen = new Map<string, number>();
-  for (const it of items) seen.set(it.host, (seen.get(it.host) ?? 0) + 1);
+  const key = (it: T) => `${it.host}\u0000${it.label}`;
+  for (const it of items) seen.set(key(it), (seen.get(key(it)) ?? 0) + 1);
   return items.map((it) =>
-    (seen.get(it.host) ?? 0) > 1 && it.hint && it.hint !== it.label
+    (seen.get(key(it)) ?? 0) > 1 && it.hint && it.hint !== it.label
       ? { ...it, label: `${it.label} · ${it.hint}` }
       : it,
   );

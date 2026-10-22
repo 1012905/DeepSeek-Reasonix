@@ -2,8 +2,11 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reasonix/internal/runtime/writeclaim"
+	"reasonix/internal/state/checkpoint"
 	"runtime"
 	"slices"
 	"testing"
@@ -81,7 +84,7 @@ func TestBaselineIgnoresScratchFilesTheTurnCleanedUp(t *testing.T) {
 		Created:          []string{scratch},
 	}
 	ledger.Record(cleaned)
-	if leftSomethingBehind(ledger, cleaned) {
+	if leftSomethingBehind(ledger, cleaned, "") {
 		t.Fatal("a created file that is now gone left nothing to verify")
 	}
 
@@ -92,7 +95,7 @@ func TestBaselineIgnoresScratchFilesTheTurnCleanedUp(t *testing.T) {
 	survivor.Paths = []string{kept}
 	survivor.Created = []string{kept}
 	ledger.Record(survivor)
-	if !leftSomethingBehind(ledger, survivor) {
+	if !leftSomethingBehind(ledger, survivor, "") {
 		t.Fatal("a created file still on disk must be verified")
 	}
 }
@@ -107,7 +110,7 @@ func TestBaselineKeepsWritesItDidNotWatchCreate(t *testing.T) {
 		MutationEvidence: evidence.MutationProven,
 		Paths:            []string{gone},
 	}
-	if !leftSomethingBehind(evidence.NewLedger(), edit) {
+	if !leftSomethingBehind(evidence.NewLedger(), edit, "") {
 		t.Fatal("a write with no observed creation must count as surviving")
 	}
 }
@@ -157,7 +160,7 @@ func TestBuildArtifactCreatedAndRemovedLeavesNothingBehind(t *testing.T) {
 	if !slices.Contains(cleanupRec.Paths, artifact) {
 		t.Fatalf("Paths = %v, want the artifact the cleanup removed", cleanupRec.Paths)
 	}
-	if leftSomethingBehind(ledger, cleanupRec) {
+	if leftSomethingBehind(ledger, cleanupRec, "") {
 		t.Fatal("removing what this turn built leaves nothing to verify")
 	}
 }
@@ -178,7 +181,7 @@ func TestRemovingAPreexistingFileStillCounts(t *testing.T) {
 	decorateObservedPaths(&rec, plan)
 	ledger.Record(rec)
 
-	if !leftSomethingBehind(ledger, rec) {
+	if !leftSomethingBehind(ledger, rec, "") {
 		t.Fatal("deleting a file the turn never created is a change to account for")
 	}
 }
@@ -228,7 +231,7 @@ func TestUnprovenCallSettlesAgainstTheWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := &Agent{}
-	a.writeWorkspaceRoot = root
+	a.observeRoot = root
 
 	unproven := func() evidence.Receipt {
 		return evidence.Receipt{
@@ -271,6 +274,53 @@ func TestUnprovenCallSettlesAgainstTheWorkspace(t *testing.T) {
 	a.settleUnchangedWorkspace(t.Context(), &created, before)
 	if !created.Mutation {
 		t.Error("a file that appeared must leave the mutation standing")
+	}
+}
+
+// What the watched paths prove is not all a call did: a new top-level entry
+// proves a change while a rewrite deeper in the tree goes unseen. Only the walk
+// names every file, and only a list it did not cut short is complete.
+func TestTheWalkCompletesWhatTheWatchedPathsProved(t *testing.T) {
+	root := testenv.TempDir(t)
+	lib := filepath.Join(root, "lib", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(lib), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(lib, []byte("good\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := &Agent{}
+	a.observeRoot = root
+	plan := &toolCallPlan{scanBefore: scanWorkspace(t.Context(), root), pathsBefore: snapshotPaths(evidence.NewLedger(), root, nil)}
+	stamp := filepath.Join(root, ".cache", "stamp")
+	if err := os.MkdirAll(filepath.Dir(stamp), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for path, body := range map[string]string{stamp: "1\n", lib: "clobbered\n"} {
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec := evidence.Receipt{ToolName: "bash", Success: true, Mutation: true, MutationEvidence: evidence.MutationUnknown, Command: "sh check.sh"}
+	decorateObservedPaths(&rec, plan)
+	a.settleUnchangedWorkspace(t.Context(), &rec, plan)
+	if !holdsPath(rec.Paths, lib) || holdsPath(rec.Created, lib) {
+		t.Fatalf("paths = %q, created = %q, want the rewritten lib/a.txt named and not created", rec.Paths, rec.Created)
+	}
+	if !holdsPath(rec.Created, stamp) || !rec.PathsComplete {
+		t.Fatalf("created = %q, complete = %v, want the new stamp created by a complete walk", rec.Created, rec.PathsComplete)
+	}
+
+	crowd := &toolCallPlan{scanBefore: scanWorkspace(t.Context(), root)}
+	for i := range observedPathLimit {
+		if err := os.WriteFile(filepath.Join(root, ".cache", fmt.Sprintf("f%d", i)), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cut := evidence.Receipt{ToolName: "bash", Success: true, Mutation: true, MutationEvidence: evidence.MutationUnknown, Command: "sh check.sh"}
+	a.settleUnchangedWorkspace(t.Context(), &cut, crowd)
+	if cut.PathsComplete {
+		t.Fatalf("a list cut at %d paths claimed to be complete", observedPathLimit)
 	}
 }
 
@@ -319,7 +369,7 @@ func TestTheVCSStoreIsNotTheWorkspace(t *testing.T) {
 // is about to write to still looks untouched. It must never settle.
 func TestABackgroundJobNeverSettles(t *testing.T) {
 	a := &Agent{}
-	a.writeWorkspaceRoot = testenv.TempDir(t)
+	a.observeRoot = testenv.TempDir(t)
 	plan := &toolCallPlan{
 		evidenceName: "bash",
 		evidenceArgs: []byte(`{"command":"make build","run_in_background":true}`),
@@ -359,5 +409,130 @@ func TestOneFileIsWatchedOnceAcrossSpellings(t *testing.T) {
 	decorateObservedPaths(&rec, &toolCallPlan{pathsBefore: snap})
 	if len(rec.Paths) != 1 {
 		t.Fatalf("Paths = %v, want the one file it changed", rec.Paths)
+	}
+}
+
+// A background writer running beside a call writes into the same tree, so the
+// difference between the two walks is not this call's to claim. Nothing settles
+// while one is registered, and the call's scope stays unknown.
+func TestAnActiveBackgroundWriterSettlesNothing(t *testing.T) {
+	root := testenv.TempDir(t)
+	a := &Agent{}
+	a.observeRoot = root
+	a.svc.mutationObserver = checkpoint.NewMutationObserver(checkpoint.ObserverOptions{})
+	if err := a.svc.mutationObserver.RegisterWriter("sibling", "background_subagent", 0); err != nil {
+		t.Fatal(err)
+	}
+	plan := &toolCallPlan{evidenceName: "bash", evidenceArgs: []byte(`{"command":"make build"}`)}
+	if a.scanBeforeUnprovenCall(t.Context(), plan).complete {
+		t.Fatal("a call took a before-scan while another writer was running")
+	}
+	plan.scanBefore = scanWorkspace(t.Context(), root)
+	if err := os.WriteFile(filepath.Join(root, "sibling.go"), []byte("package x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec := evidence.Receipt{ToolName: "bash", Success: true, Mutation: true, MutationEvidence: evidence.MutationUnknown, Command: "make build"}
+	a.settleUnchangedWorkspace(t.Context(), &rec, plan)
+	if rec.MutationEvidence != evidence.MutationUnknown || len(rec.Paths) != 0 {
+		t.Fatalf("receipt = %+v, want the sibling's write not attributed to this call", rec)
+	}
+	a.svc.mutationObserver.UnregisterWriter("sibling")
+	if !a.scanBeforeUnprovenCall(t.Context(), plan).complete {
+		t.Fatal("with no other writer running the call should scan")
+	}
+}
+
+// A child is built without the parent's write root; the observe root alone is
+// what lets its unclassified calls settle.
+func TestObserveRootAloneLetsAChildSettle(t *testing.T) {
+	root := testenv.TempDir(t)
+	child := New(nil, nil, nil, Options{ObserveRoot: root}, nil)
+	if child.writeWorkspaceRoot != "" || child.observeRoot != root {
+		t.Fatalf("child roots = write %q observe %q, want only the observe root", child.writeWorkspaceRoot, child.observeRoot)
+	}
+	plan := &toolCallPlan{evidenceName: "bash", evidenceArgs: []byte(`{"command":"sed -i s/a/b/ f.txt"}`)}
+	plan.scanBefore = child.scanBeforeUnprovenCall(t.Context(), plan)
+	if err := os.WriteFile(filepath.Join(root, "f.txt"), []byte("b"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec := evidence.Receipt{ToolName: "bash", Success: true, Mutation: true, MutationEvidence: evidence.MutationUnknown, Command: "sed -i s/a/b/ f.txt"}
+	child.settleUnchangedWorkspace(t.Context(), &rec, plan)
+	if rec.MutationEvidence != evidence.MutationProven || !holdsPath(rec.Paths, filepath.Join(root, "f.txt")) {
+		t.Fatalf("receipt = %+v, want the child's own write proven by observation", rec)
+	}
+	if New(nil, nil, nil, Options{WriteWorkspaceRoot: root}, nil).observeRoot != root {
+		t.Fatal("an agent with a write root observes it when no observe root is set")
+	}
+}
+
+// A run that declared its write paths takes a change inside them as its own
+// even while siblings write beside it; a change outside them is theirs.
+func TestADeclaredScopeAttributesOnlyWhatFallsInsideIt(t *testing.T) {
+	root := testenv.TempDir(t)
+	mine, theirs := filepath.Join(root, "billing"), filepath.Join(root, "notify")
+	for _, d := range []string{mine, theirs} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	claim, err := writeclaim.NormalizeWritePaths(root, []string{"billing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := writeclaim.WithSubagentWriteGrant(t.Context(), writeclaim.NewWriteGrant(claim))
+	a := &Agent{}
+	a.observeRoot = root
+	a.svc.mutationObserver = checkpoint.NewMutationObserver(checkpoint.ObserverOptions{})
+	if err := a.svc.mutationObserver.RegisterWriter("sibling", "background_subagent", 0); err != nil {
+		t.Fatal(err)
+	}
+	unknown := func() evidence.Receipt {
+		return evidence.Receipt{ToolName: "bash", Success: true, Mutation: true, MutationEvidence: evidence.MutationUnknown, Command: "sed -i s/a/b/ total.py"}
+	}
+	plan := &toolCallPlan{evidenceName: "bash", evidenceArgs: []byte(`{"command":"sed -i s/a/b/ total.py"}`)}
+	plan.scanBefore = a.scanBeforeUnprovenCall(ctx, plan)
+	if !plan.scanBefore.complete {
+		t.Fatal("a run with declared paths should walk even beside another writer")
+	}
+	writeTo := func(p string) {
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeTo(filepath.Join(mine, "total.py"))
+	writeTo(filepath.Join(theirs, "subject.py"))
+	rec := unknown()
+	a.settleUnchangedWorkspace(ctx, &rec, plan)
+	if rec.MutationEvidence != evidence.MutationProven || len(rec.Paths) != 1 || !holdsPath(rec.Paths, filepath.Join(mine, "total.py")) {
+		t.Fatalf("receipt = %+v, want only the write inside billing attributed", rec)
+	}
+
+	outside := &toolCallPlan{scanBefore: scanWorkspace(t.Context(), root)}
+	writeTo(filepath.Join(theirs, "other.py"))
+	onlyTheirs := unknown()
+	a.settleUnchangedWorkspace(ctx, &onlyTheirs, outside)
+	if onlyTheirs.MutationEvidence != evidence.MutationUnknown || !onlyTheirs.Mutation {
+		t.Fatalf("receipt = %+v, want a call that only saw a sibling's write to stay unknown, never unchanged", onlyTheirs)
+	}
+}
+
+// A background child is itself a registered writer; it is not another writer
+// beside its own calls.
+func TestABackgroundChildIsNotItsOwnSibling(t *testing.T) {
+	parent := checkpoint.NewMutationObserver(checkpoint.ObserverOptions{})
+	child := parent.CloneForSubagent("subagent:c1", 0, true)
+	if err := child.RegisterWriter("subagent:c1", "background_subagent", 0); err != nil {
+		t.Fatal(err)
+	}
+	a := &Agent{}
+	a.svc.mutationObserver = child
+	if !a.mayAttributeObserved(t.Context()) {
+		t.Fatal("a background child alone was treated as running beside another writer")
+	}
+	if err := parent.RegisterWriter("subagent:c2", "background_subagent", 0); err != nil {
+		t.Fatal(err)
+	}
+	if a.mayAttributeObserved(t.Context()) {
+		t.Fatal("with a sibling running and no declared scope, nothing may be attributed")
 	}
 }

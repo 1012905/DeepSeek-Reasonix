@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"sync"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"reasonix/internal/base/netclient"
+	"reasonix/internal/platform/remote/execfs"
 	"reasonix/internal/platform/remote/forward"
 	"reasonix/internal/platform/remote/sftpfs"
 )
@@ -40,7 +42,7 @@ type JumpHostOptions struct {
 
 // Client is a supervised SSH connection: it dials, verifies the host key,
 // attaches forwards, keeps the link alive, and reconnects with backoff. It
-// shares one SFTP session and one forward.Set across its lifetime.
+// shares one file layer and one forward.Set across its lifetime.
 type Client struct {
 	opts     Options
 	clock    Clock
@@ -51,8 +53,8 @@ type Client struct {
 	mu          sync.Mutex
 	ssh         *ssh.Client
 	hops        []*ssh.Client
-	sftp        *sftpfs.FS
-	generation  uint64 // bumps on every (re)connect; SFTP handles carry it
+	volume      sftpfs.Volume // SFTP, or scripts when the server refuses the subsystem
+	generation  uint64        // bumps on every (re)connect; file handles carry it
 	status      Status
 	closed      bool
 	hopHosts    map[string]ResolvedHost
@@ -172,24 +174,47 @@ func (c *Client) SSH() (*ssh.Client, error) {
 	return c.ssh, nil
 }
 
-// SFTP returns the shared SFTP handle, lazily created for the current
-// connection. Handles obtained before a reconnect return ErrDisconnected on
-// use; re-fetch via SFTP.
-func (c *Client) SFTP() (*sftpfs.FS, error) {
+// Volume returns the connection's file layer, created on first use. SFTP is
+// preferred; only a server's refusal of the subsystem gets the script layer
+// instead, and the connection keeps that answer until it is replaced. Any other
+// failure to open SFTP is returned as it is: the scripts ride the same channel.
+// Handles obtained before a reconnect return ErrDisconnected; re-fetch.
+func (c *Client) Volume() (sftpfs.Volume, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.ssh == nil {
 		return nil, ErrNotConnected
 	}
-	if c.sftp != nil {
-		return c.sftp, nil
+	if c.volume != nil {
+		return c.volume, nil
 	}
 	fsys, err := sftpfs.New(c.ssh)
+	switch {
+	case err == nil:
+		c.volume = fsys
+	case errors.Is(err, sftpfs.ErrSubsystemRefused):
+		c.volume = execfs.New(scriptRunner{c})
+	default:
+		return nil, err
+	}
+	return c.volume, nil
+}
+
+// Files is the connection's file layer as a kernel bootstrap needs it.
+func (c *Client) Files() (sftpfs.Files, error) {
+	v, err := c.Volume()
 	if err != nil {
 		return nil, err
 	}
-	c.sftp = fsys
-	return c.sftp, nil
+	return v, nil
+}
+
+// scriptRunner runs execfs scripts over the connection's exec channel.
+type scriptRunner struct{ c *Client }
+
+func (r scriptRunner) Script(ctx context.Context, stdin io.Reader, body string, args ...string) (execfs.Result, error) {
+	res, err := r.c.execIn(ctx, stdin, execfs.CommandLine(body, args...))
+	return execfs.Result{Stdout: res.Stdout, Stderr: res.Stderr, ExitCode: res.ExitCode}, err
 }
 
 // ExecResult is the outcome of a one-shot remote command.
@@ -199,46 +224,137 @@ type ExecResult struct {
 	ExitCode int
 }
 
-// Exec runs cmd via `sh -c` on a fresh session and collects its output.
+type execSessionOpener func() (execSession, error)
+
+type sessionOpenState uint8
+
+const (
+	sessionOpening sessionOpenState = iota
+	sessionReady
+	sessionDone
+)
+
+// openExecSession installs cancellation before the channel open can block.
+// Closing the shared SSH client is reserved for an open that is actually in
+// flight; if the context was already done the opener is not called, and once
+// the session is ready cancellation closes only that session.
+func openExecSession(ctx context.Context, cl io.Closer, open execSessionOpener) (execSession, func() bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, func() bool { return true }, err
+	}
+
+	var (
+		mu    sync.Mutex
+		state = sessionOpening
+		sess  execSession
+	)
+	stopClose := context.AfterFunc(ctx, func() {
+		mu.Lock()
+		defer mu.Unlock()
+		switch state {
+		case sessionOpening:
+			_ = cl.Close()
+		case sessionReady:
+			if sess != nil {
+				_ = sess.Close()
+			}
+		}
+	})
+
+	opened, err := open()
+	mu.Lock()
+	if err == nil && opened != nil {
+		sess = opened
+		state = sessionReady
+	} else {
+		state = sessionDone
+	}
+	mu.Unlock()
+
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			err = ctxErr
+		}
+		return nil, stopClose, err
+	}
+	if opened == nil {
+		return nil, stopClose, errors.New("remote: SSH session opener returned nil")
+	}
+	return opened, stopClose, nil
+}
+
+// Exec runs cmd via `sh -c` on a fresh session and collects its output. When
+// ctx ends first the session is closed, so the channel is not held open by a
+// command that never returns. If cancellation wins while the session channel is
+// opening, the shared client is closed to unblock NewSession; the supervisor
+// reconnects it.
 func (c *Client) Exec(ctx context.Context, cmd string) (ExecResult, error) {
+	return c.execIn(ctx, nil, cmd)
+}
+
+// execIn is Exec with stdin fed to the command; nil leaves it empty.
+func (c *Client) execIn(ctx context.Context, stdin io.Reader, cmd string) (ExecResult, error) {
 	cl, err := c.SSH()
 	if err != nil {
 		return ExecResult{}, err
 	}
-	type res struct {
-		out ExecResult
-		err error
-	}
-	ch := make(chan res, 1)
-	go func() {
-		sess, serr := cl.NewSession()
-		if serr != nil {
-			ch <- res{err: serr}
-			return
+	sess, stopClose, err := openExecSession(ctx, cl, func() (execSession, error) {
+		sess, err := cl.NewSession()
+		if err != nil {
+			return nil, err
 		}
-		defer sess.Close()
-		var stdout, stderr bytes.Buffer
-		sess.Stdout = &stdout
-		sess.Stderr = &stderr
-		runErr := sess.Run(cmd)
+		return &sshExecSession{Session: sess}, nil
+	})
+	defer stopClose()
+	if err != nil {
+		return ExecResult{}, err
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		_ = sess.Close()
+		return ExecResult{}, ctxErr
+	}
+	if in, ok := sess.(interface{ feed(io.Reader) }); ok && stdin != nil {
+		in.feed(stdin)
+	}
+	return runExec(ctx, sess, cmd)
+}
+
+// execSession is the part of *ssh.Session runExec drives.
+type execSession interface {
+	Run(cmd string) error
+	Close() error
+	capture(stdout, stderr *bytes.Buffer)
+}
+
+type sshExecSession struct{ *ssh.Session }
+
+func (s *sshExecSession) feed(r io.Reader) { s.Stdin = r }
+
+func (s *sshExecSession) capture(stdout, stderr *bytes.Buffer) {
+	s.Stdout, s.Stderr = stdout, stderr
+}
+
+func runExec(ctx context.Context, sess execSession, cmd string) (ExecResult, error) {
+	defer sess.Close()
+	var stdout, stderr bytes.Buffer
+	sess.capture(&stdout, &stderr)
+	done := make(chan error, 1)
+	go func() { done <- sess.Run(cmd) }()
+	select {
+	case <-ctx.Done():
+		_ = sess.Close()
+		return ExecResult{}, ctx.Err()
+	case runErr := <-done:
 		out := ExecResult{Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}
 		if runErr != nil {
 			var ee *ssh.ExitError
 			if errors.As(runErr, &ee) {
 				out.ExitCode = ee.ExitStatus()
-				ch <- res{out: out}
-				return
+				return out, nil
 			}
-			ch <- res{out: out, err: runErr}
-			return
+			return out, runErr
 		}
-		ch <- res{out: out}
-	}()
-	select {
-	case <-ctx.Done():
-		return ExecResult{}, ctx.Err()
-	case r := <-ch:
-		return r.out, r.err
+		return out, nil
 	}
 }
 
@@ -443,18 +559,18 @@ func (c *Client) installConn(cl *ssh.Client, hops []*ssh.Client) {
 	c.mu.Lock()
 	c.ssh = cl
 	c.hops = hops
-	c.sftp = nil
+	c.volume = nil
 	c.generation++
 	c.mu.Unlock()
 }
 
 func (c *Client) teardownConn() {
 	c.mu.Lock()
-	sftpH, cl, hops := c.sftp, c.ssh, c.hops
-	c.sftp, c.ssh, c.hops = nil, nil, nil
+	vol, cl, hops := c.volume, c.ssh, c.hops
+	c.volume, c.ssh, c.hops = nil, nil, nil
 	c.mu.Unlock()
-	if sftpH != nil {
-		_ = sftpH.Close()
+	if vol != nil {
+		_ = vol.Close()
 	}
 	if cl != nil {
 		_ = cl.Close()

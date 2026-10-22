@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -20,7 +21,7 @@ import (
 
 // newProviderEditServer is a server with one configured provider, its config
 // and credential store redirected into the test's own home.
-func newProviderEditServer(t *testing.T) *Server {
+func newProviderEditServer(t *testing.T, workspaceRoot ...string) *Server {
 	t.Helper()
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
 	t.Setenv("REASONIX_CREDENTIALS_STORE", "file")
@@ -42,8 +43,12 @@ api_key_env = "EXISTING_API_KEY"
 		t.Fatal(err)
 	}
 	bc := NewBroadcaster()
+	root := ""
+	if len(workspaceRoot) > 0 {
+		root = workspaceRoot[0]
+	}
 	ctrl := control.New(control.Options{
-		Sink: bc, Label: "model-a", ModelRef: "existing/model-a", SessionDir: testenv.TempDir(t),
+		Sink: bc, Label: "model-a", ModelRef: "existing/model-a", SessionDir: testenv.TempDir(t), WorkspaceRoot: root,
 	})
 	t.Cleanup(ctrl.Close)
 	closeSharedCatalogsOnCleanup(t)
@@ -79,7 +84,7 @@ func postProvider(t *testing.T, base, path, body string) *http.Response {
 // host says its only client is a local window.
 func TestProviderEditIsRefusedUntilTheHostGrantsIt(t *testing.T) {
 	s := newProviderEditServer(t)
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	for _, path := range []string{"/providers", "/providers/probe", "/providers/check/model", "/providers/remove"} {
@@ -104,7 +109,7 @@ func TestProviderEditIsRefusedUntilTheHostGrantsIt(t *testing.T) {
 func TestSaveProviderWritesConfigAndKeepsTheKeyOutOfIt(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp := postProvider(t, srv.URL, "/providers", `{
@@ -172,7 +177,7 @@ func TestSaveProviderWritesConfigAndKeepsTheKeyOutOfIt(t *testing.T) {
 func TestSaveProviderNarrowsVisionToTheListedModels(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp := postProvider(t, srv.URL, "/providers", `{
@@ -210,7 +215,7 @@ func TestSaveProviderNarrowsVisionToTheListedModels(t *testing.T) {
 func TestSaveProviderRejectsWhatItCannotStore(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	// The status the producer chose now reaches the wire, so this asserts what a
@@ -218,6 +223,12 @@ func TestSaveProviderRejectsWhatItCannotStore(t *testing.T) {
 	// the code and the 422 and wrote a bare 400.
 	for name, tc := range map[string]struct{ body, code string }{
 		"a name that would break the model ref": {`{"name":"a/b","kind":"openai","baseUrl":"https://x.invalid","models":["m"]}`, "provider.name_invalid"},
+		"an empty name":                         {`{"name":"","kind":"openai","baseUrl":"https://x.invalid","models":["m"]}`, "provider.name_invalid"},
+		"a whitespace-only name":                {`{"name":"   ","kind":"openai","baseUrl":"https://x.invalid","models":["m"]}`, "provider.name_invalid"},
+		"a Chinese name":                        {`{"name":"公司中转站","kind":"openai","baseUrl":"https://x.invalid","models":["m"]}`, "provider.name_invalid"},
+		"a Unicode-normalizable name":           {`{"name":"ｒｅｌａｙ","kind":"openai","baseUrl":"https://x.invalid","models":["m"]}`, "provider.name_invalid"},
+		"a combining-mark name":                 {`{"name":"relay\u0301","kind":"openai","baseUrl":"https://x.invalid","models":["m"]}`, "provider.name_invalid"},
+		"a name longer than 64 characters":      {`{"name":"` + strings.Repeat("a", 65) + `","kind":"openai","baseUrl":"https://x.invalid","models":["m"]}`, "provider.name_invalid"},
 		"an unsupported protocol":               {`{"name":"x","kind":"grpc","baseUrl":"https://x.invalid","models":["m"]}`, "provider.kind_unsupported"},
 		"no endpoint":                           {`{"name":"x","kind":"openai","baseUrl":"","models":["m"]}`, "provider.endpoint_required"},
 		"no models":                             {`{"name":"x","kind":"openai","baseUrl":"https://x.invalid","models":[]}`, "provider.no_models_picked"},
@@ -243,12 +254,12 @@ func TestSaveProviderRejectsWhatItCannotStore(t *testing.T) {
 func TestRemoveProviderInUseGoesWhenIdle(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp := postProvider(t, srv.URL, "/providers/remove", `{"name":"existing"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
+	if resp.StatusCode != http.StatusOK {
 		b, _ := readAllString(resp)
 		t.Fatalf("removing the idle in-use provider = %d: %s", resp.StatusCode, b)
 	}
@@ -265,11 +276,45 @@ func TestRemoveProviderInUseGoesWhenIdle(t *testing.T) {
 func TestRemoveProviderInUseMovesTheConversation(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	add := postProvider(t, srv.URL, "/providers", `{"name":"spare","kind":"openai","baseUrl":"https://x.invalid","apiKey":"sk-spare","models":["m"]}`)
 	add.Body.Close()
+	resp := postProvider(t, srv.URL, "/providers/remove", `{"name":"existing"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := readAllString(resp)
+		t.Fatalf("remove = %d: %s", resp.StatusCode, b)
+	}
+	if got, _, _ := strings.Cut(currentModelRef(s.ctl()), "/"); got != "spare" {
+		t.Fatalf("conversation is on %q, want it moved to spare", currentModelRef(s.ctl()))
+	}
+}
+
+// A saved default nothing serves is not where the conversation goes: it moves
+// to what remains, as a window opening on that config would.
+func TestRemoveProviderInUseSkipsAStaleDefault(t *testing.T) {
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+
+	add := postProvider(t, srv.URL, "/providers", `{"name":"spare","kind":"openai","baseUrl":"https://x.invalid","apiKey":"sk-spare","models":["m"]}`)
+	add.Body.Close()
+	path := config.UserConfigPath()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := strings.Replace(string(body), `default_model = "existing/model-a"`, `default_model = "deepseek-v4-flash"`, 1)
+	if stale == string(body) {
+		t.Fatalf("fixture has no default_model line to make stale:\n%s", body)
+	}
+	if err := os.WriteFile(path, []byte(stale), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
 	resp := postProvider(t, srv.URL, "/providers/remove", `{"name":"existing"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
@@ -284,7 +329,7 @@ func TestRemoveProviderInUseMovesTheConversation(t *testing.T) {
 func TestRemoveProviderDropsAnUnusedOne(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	add := postProvider(t, srv.URL, "/providers", `{"name":"spare","kind":"openai","baseUrl":"https://x.invalid","models":["m"]}`)
@@ -306,9 +351,40 @@ func TestRemoveProviderDropsAnUnusedOne(t *testing.T) {
 	}
 }
 
+// Removing the last provider moves the runtime to the stand-in and leaves
+// nothing to list, so the window asks for a connection rather than showing a
+// built-in provider nobody added.
+func TestRemoveProviderLastLeavesTheListEmpty(t *testing.T) {
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+
+	resp := postProvider(t, srv.URL, "/providers/remove", `{"name":"existing"}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("remove = %d", resp.StatusCode)
+	}
+	if got := currentModelRef(s.ctl()); got != config.UnconfiguredRef {
+		t.Fatalf("conversation is on %q, want the stand-in %s", got, config.UnconfiguredRef)
+	}
+	listed, err := http.Get(srv.URL + "/providers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listed.Body.Close()
+	var got []providerView
+	if err := json.NewDecoder(listed.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("providers listed after removing the last one: %+v", got)
+	}
+}
+
 func TestProvidersListMarksTheOneInUse(t *testing.T) {
 	s := newProviderEditServer(t)
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/providers")
@@ -361,7 +437,7 @@ func readAllString(resp *http.Response) (string, error) {
 // build has to reach it without a frontend release.
 func TestProviderProtocolsListsEveryWireASourceMayBeSavedAs(t *testing.T) {
 	s := newProviderEditServer(t)
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/providers/protocols")
@@ -397,7 +473,7 @@ func TestProviderProtocolsListsEveryWireASourceMayBeSavedAs(t *testing.T) {
 func TestSaveProviderAcceptsEveryCatalogedWire(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp := postProvider(t, srv.URL, "/providers", `{
@@ -416,5 +492,90 @@ func TestSaveProviderAcceptsEveryCatalogedWire(t *testing.T) {
 	}
 	if !strings.Contains(string(raw), `"responses"`) {
 		t.Fatalf("the Responses source did not reach the config:\n%s", raw)
+	}
+}
+
+func TestSaveProviderTrimsASCIIName(t *testing.T) {
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+
+	resp := postProvider(t, srv.URL, "/providers", `{
+		"name":"  company-relay.1_x  ","kind":"openai","baseUrl":"https://relay.example/v1",
+		"models":["m1"]
+	}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := readAllString(resp)
+		t.Fatalf("POST /providers with surrounding spaces = %d: %s", resp.StatusCode, b)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := cfg.Provider("company-relay.1_x"); !ok {
+		t.Fatalf("trimmed provider name was not stored: %#v", cfg.Providers)
+	}
+}
+
+// The panel mirrors this pattern in vendors.ts (sourceNameUsable); the same
+// cases are asserted there so the two copies cannot drift apart silently.
+func TestProviderNameRE_Boundaries(t *testing.T) {
+	cases := map[string]bool{
+		"": false, "   ": false,
+		"a": true, strings.Repeat("a", 64): true, strings.Repeat("a", 65): false,
+		".a": false, "-a": false, "_a": false, "a.": true, "a b": false, "a/b": false,
+		"公司中转站": false, "ｒｅｌａｙ": false, "relay\u0301": false,
+		" company-relay.1_x ": false, "Relay_1.x-y": true,
+	}
+	for name, want := range cases {
+		if got := providerNameRE.MatchString(name); got != want {
+			t.Errorf("providerNameRE(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
+func TestRemoveProviderLeavesNoRoleNamingIt(t *testing.T) {
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+
+	add := postProvider(t, srv.URL, "/providers", `{"name":"spare","kind":"openai","baseUrl":"https://x.invalid","models":["m"]}`)
+	add.Body.Close()
+	path := config.UserConfigPath()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roles := "[desktop]\nprovider_access = [\"spare\", \"deepseek\"]\n\n[agent]\nguardian_model = \"spare/m\"\nvision_model = \"spare\"\nadvisor_model = \"spare/m\"\n"
+	if err := os.WriteFile(path, append(body, []byte("\n"+roles)...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := postProvider(t, srv.URL, "/providers/remove", `{"name":"spare"}`)
+	defer resp.Body.Close()
+	b, _ := readAllString(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("remove = %d: %s", resp.StatusCode, b)
+	}
+	var report struct {
+		MovedTo string   `json:"movedTo"`
+		Moved   []string `json:"moved"`
+		Cleared []string `json:"cleared"`
+	}
+	if err := json.Unmarshal([]byte(b), &report); err != nil {
+		t.Fatalf("remove body %q: %v", b, err)
+	}
+	if want := []string{"vision", "guardian", "advisor"}; !slices.Equal(report.Cleared, want) || len(report.Moved) != 0 {
+		t.Fatalf("report = %+v, want cleared %v", report, want)
+	}
+	saved, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(saved), "spare") {
+		t.Fatalf("saved config still names the removed provider:\n%s", saved)
 	}
 }

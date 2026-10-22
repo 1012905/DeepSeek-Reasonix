@@ -1,3 +1,10 @@
+---
+owner: @esengine
+backup: @SivanCola
+status: active
+reviewed: 2026-09-29
+---
+
 # Studio: the shell's boundaries
 
 This is not a plan and carries no dates. It is the set of boundaries Studio's
@@ -40,11 +47,12 @@ carries a boundary the host owns and no configuration can switch off
 - Checks run outermost first, so a caller that reached the socket under another
   name learns nothing about the credential.
 
-The user's `[serve]` authentication does not participate. Studio's boundary is
-this gate, and the two cannot share one cookie — a configured `auth_mode =
-"token"` left in place would refuse the launch credential on every request.
-`cmd/reasonix-studio-host` strips authentication out of the config it hands the
-hub for exactly that reason, and a test pins it.
+The user's `[serve]` authentication does not participate. Studio's boundary is this gate, and the two cannot share one cookie — a configured `auth_mode = "token"` left in place would refuse the launch credential on every request.
+
+`cmd/reasonix-studio-host` strips authentication out of the config it hands the hub for exactly that reason, and a test pins it.
+
+The hub's auth-disabled mode still holds mutations to a launch token; a request
+this gate admitted counts as holding it.
 
 ## 3. One transport
 
@@ -85,26 +93,26 @@ the real kernel with a scripted model.
 
 ## 5. Other applications
 
-On macOS the agent can read and operate other applications, and the split holds
-here as well.
+Studio operates approved applications through the pinned CUA Driver on macOS,
+Windows and Linux.
 
-- **The kernel** owns what the model sees and may reach: bundle ids, the
-  applications never operated, screenshot geometry, and who approved which
-  application.
-- **The helper** (`desktop/computer-helper`, Swift) carries operations out over
-  JSON lines on stdin and stdout, and decides nothing.
-- **The main process** only finds the helper beside the kernel and passes its
-  path with `-computer-helper`.
+- The kernel owns application and foreground approval, exact window scope,
+  private observation references, screenshot geometry and conservative effects.
+- CUA Driver owns native input and capture through initialized MCP. Reasonix
+  does not maintain native input shims or silently retry in foreground.
+- The host owns one Driver, passes it explicitly through runtime assembly and
+  closes it after its panes drain. Each controller owns private observations;
+  rebuilds retain the host driver without granting independent builds access.
+- On macOS, Electron owns a private embedded service so Accessibility and
+  Screen Recording permissions belong to Studio. Its abort-only endpoint waits
+  for the owned service to terminate before acknowledging fresh readiness.
+- The canonical manifest in `internal/platform/computer/cua-driver.lock.json`
+  supplies runtime contracts and artifact hashes to Go, Electron and packaging.
 
-- The host starts the helper, so macOS attributes Accessibility and Screen
-  Recording to Reasonix Studio.
-- A click is an accessibility action on the element under a point. The person's
-  pointer and the frontmost application stay as they were.
-- The helper draws its own cursor where the agent acts. Escape pressed while it
-  shows stops the run between steps.
-
-`internal/platform/computer/live_test.go` (`REASONIX_LIVE_COMPUTER=<helper>`) drives a
-real application through the helper.
+`internal/platform/computer/live_test.go` (`REASONIX_LIVE_COMPUTER=<cua-driver>`)
+operates a source-built target. Native macOS/Linux acceptance remains separate
+from cross-compilation and process fixtures. See [computer use](design/COMPUTER_USE.md)
+for supported operations and verification limits.
 
 ## 6. State taxonomy
 
@@ -117,11 +125,9 @@ deciding its API.
 | Projection | pull | Recomputed on demand; losing a read costs nothing the next one does not restore. |
 | State whose loss changes execution | replayable event or recoverable snapshot | A client that missed it cannot recover by asking again later. |
 
-The status icon is the worked example of the first two: prefs are durable
-intent and live in the config file (`GET`/`PUT /tray/prefs`), while the fold the
-icon paints is a projection (`GET /tray/state`) that gets no id, no replay and
-no lifecycle. Promoting a projection to an event makes a rendering detail into a
-fact the stream has to guarantee.
+The status icon is the worked example of the first two: prefs are durable intent and live in the config file (`GET`/`PUT /tray/prefs`), while the fold the icon paints is a projection (`GET /tray/state`) that gets no id, no replay and no lifecycle.
+
+Promoting a projection to an event makes a rendering detail into a fact the stream has to guarantee.
 
 A pending question put to the user is the third kind, and must not be modelled
 as a notification.

@@ -54,10 +54,11 @@ type updateSink struct {
 	sessionID string
 	// cwd resolves relative tool-arg paths for tool_call locations. Set once
 	// via bindCwd before the sink receives events.
-	cwd     string
-	approve func(id string, allow, session, persist bool)
-	answer  func(id string, answers []event.AskAnswer)
-	status  func(event.Event)
+	cwd       string
+	approve   func(id string, allow, session, persist bool)
+	answer    func(id string, answers []event.AskAnswer)
+	status    func(event.Event)
+	mcpStatus func()
 	// extensionSurface records the client's negotiated
 	// reasonix.extensionSurface support: structured surfaces go out as vendor
 	// session/update payloads on top of the always-sent text fallback.
@@ -67,6 +68,8 @@ type updateSink struct {
 	// parent sampling and background sub-agents may Emit concurrently.
 	speculativeToolIDs map[string]struct{}
 	activeAttemptID    string
+	msgIDs             messageIDs
+	elicitModes        elicitModes
 	mu                 sync.Mutex
 	turnCtx            context.Context
 }
@@ -90,13 +93,19 @@ func (s *updateSink) bindApprove(fn func(id string, allow, session, persist bool
 
 // bindAnswer installs the controller's AnswerQuestion callback for AskRequest
 // events.
-func (s *updateSink) bindAnswer(fn func(id string, answers []event.AskAnswer)) {
-	s.answer = fn
+func (s *updateSink) bindAnswer(fn func(id string, answers []event.AskAnswer) error) {
+	s.answer = func(id string, answers []event.AskAnswer) { _ = fn(id, answers) }
 }
 
 // bindStatus installs the vendor-status observer. It receives typed events,
 // never raw reasoning text or terminal transcripts.
 func (s *updateSink) bindStatus(fn func(event.Event)) { s.status = fn }
+
+func (s *updateSink) bindMCPStatus(fn func()) {
+	s.mu.Lock()
+	s.mcpStatus = fn
+	s.mu.Unlock()
+}
 
 // bindExtensionSurface records whether the client negotiated structured
 // extension-surface support in the initialize handshake.
@@ -131,6 +140,8 @@ func (s *updateSink) Emit(e event.Event) {
 		s.status(e)
 	}
 	switch e.Kind {
+	case event.MCPSurfaceReady:
+		s.emitMCPStatus()
 	case event.Reasoning:
 		if e.Text == "" {
 			return
@@ -141,7 +152,7 @@ func (s *updateSink) Emit(e event.Event) {
 		if e.Text == "" {
 			return
 		}
-		s.send(messageChunk{SessionUpdate: "agent_message_chunk", Content: textBlock(e.Text)})
+		s.send(messageChunk{SessionUpdate: "agent_message_chunk", MessageID: s.liveMessageID(), Content: textBlock(e.Text)})
 
 	case event.StreamAttempt:
 		// Attempt bookkeeping only. ACP still skips partial ToolDispatch (no
@@ -177,6 +188,7 @@ func (s *updateSink) Emit(e event.Event) {
 		s.send(toolCall{
 			SessionUpdate: "tool_call",
 			ToolCallID:    e.Tool.ID,
+			Name:          e.Tool.Name,
 			Title:         e.Tool.Name,
 			Kind:          toolKindFor(e.Tool.Name),
 			Status:        "pending",
@@ -200,17 +212,14 @@ func (s *updateSink) Emit(e event.Event) {
 			SessionUpdate: "tool_call_update",
 			ToolCallID:    e.Tool.ID,
 			Status:        status,
-			Content:       []toolContent{{Type: "content", Content: textBlock(clip(text))}},
+			Content:       []toolContent{{Type: "content", Content: textBlock(toolResultText(text, e.Tool.OutputDiff))}},
 		})
 
 	case event.Notice:
 		// Surface warnings to the host as a message chunk so they're not lost;
 		// info-level notices stay out of band.
 		if e.Level == event.LevelWarn && e.Text != "" {
-			s.send(messageChunk{
-				SessionUpdate: "agent_message_chunk",
-				Content:       textBlock("\n\n[warning] " + e.Text),
-			})
+			s.send(warningChunk(e))
 		}
 
 	case event.CompactionDone:
@@ -364,12 +373,13 @@ func (s *updateSink) replay(msgs []provider.Message) {
 			// Same display filter as live emission: goal markers and evidence
 			// blocks stay in history for parsing but never reach the client.
 			if display := agent.DisplayAssistantText(m.Content); display != "" {
-				s.send(messageChunk{SessionUpdate: "agent_message_chunk", Content: textBlock(display)})
+				s.send(messageChunk{SessionUpdate: "agent_message_chunk", MessageID: s.msgIDs.replayed(), Content: textBlock(display)})
 			}
 			for _, tc := range m.ToolCalls {
 				s.send(toolCall{
 					SessionUpdate: "tool_call",
 					ToolCallID:    tc.ID,
+					Name:          tc.Name,
 					Title:         tc.Name,
 					Kind:          toolKindFor(tc.Name),
 					Status:        "completed",
@@ -407,11 +417,12 @@ func (s *updateSink) requestPermission(ctx context.Context, a event.Approval) {
 	if a.Subject != "" {
 		title = a.Tool + " " + a.Subject
 	}
-	options := approvalOptions(a.Tool, a.Subject, a.Fresh)
+	options := approvalOptions(a.Tool, a.Subject, a.Fresh, a.AllowsPersist)
 	params := PermissionRequestParams{
 		SessionID: s.sessionID,
 		ToolCall: PermissionToolCall{
 			ToolCallID: "gate-" + a.ID,
+			Name:       a.Tool,
 			Title:      title,
 			Kind:       toolKindFor(a.Tool),
 			Status:     "pending",
@@ -431,6 +442,8 @@ func (s *updateSink) requestPermission(ctx context.Context, a event.Approval) {
 				allow = true
 			case OptAllowAlways:
 				allow, session = true, true
+			case optAllowPersist:
+				allow, session, persist = true, true, true
 			}
 		}
 	}
@@ -484,6 +497,13 @@ func (s *updateSink) permissionMeta(a event.Approval) map[string]any {
 
 func (s *updateSink) requestAsk(ctx context.Context, a event.Ask) {
 	if s.answer == nil {
+		return
+	}
+	// A server's form drawn in the permission prompt reads as the agent asking
+	// leave, so it goes through elicitation/create when the client advertised the
+	// mode and is declined otherwise.
+	if a.Origin != nil {
+		s.answer(a.ID, s.elicit(ctx, a))
 		return
 	}
 	answers := make([]event.AskAnswer, 0, len(a.Questions))
@@ -555,16 +575,42 @@ func (s *updateSink) requestAskQuestion(ctx context.Context, askID string, q eve
 }
 
 func approvalSessionOptionName(tool, subject string) string {
+	if tool == control.PaidSearchApprovalTool {
+		return "Allow " + subject + " (charged per request) for this session"
+	}
 	if tool == control.SandboxEscapeApprovalTool {
 		return "Use real environment for this session"
+	}
+	if tool == control.SettingApprovalTool {
+		return "Allow changes to " + subject + " for this session"
+	}
+	if tool == control.NetworkEgressApprovalTool {
+		return "Allow " + subject + " for this session"
 	}
 	sessionRule := permission.SessionGrantRuleForScope(tool, subject)
 	return "Allow " + sessionRule + " for this session"
 }
 
-func approvalOptions(tool, subject string, fresh bool) []PermissionOption {
+// optAllowPersist is the choice that records the answer in the user's settings.
+// ACP names no such kind, so it travels as an allow_always option with its own id.
+const optAllowPersist PermissionOptionKind = "allow_persist"
+
+// approvalOptions renders what an answer may grant. persist is the host's own
+// statement that the answer can be written down; only a paid backend, whose
+// consent is meant to outlive the session, has the choice drawn.
+func approvalOptions(tool, subject string, fresh, persist bool) []PermissionOption {
+	if tool == control.PaidSearchApprovalTool {
+		options := []PermissionOption{
+			{OptionID: string(OptAllowOnce), Name: "Allow", Kind: OptAllowOnce},
+			{OptionID: string(OptAllowAlways), Name: approvalSessionOptionName(tool, subject), Kind: OptAllowAlways},
+		}
+		if persist {
+			options = append(options, PermissionOption{OptionID: string(optAllowPersist), Name: "Always allow " + subject + " (charged per request; saved to your settings)", Kind: OptAllowAlways})
+		}
+		return append(options, PermissionOption{OptionID: string(OptRejectOnce), Name: "Reject", Kind: OptRejectOnce})
+	}
 	if fresh || control.RequiresFreshHumanApprovalTool(tool) {
-		if tool == control.SandboxEscapeApprovalTool {
+		if tool == control.SandboxEscapeApprovalTool || tool == control.NetworkEgressApprovalTool || tool == control.SettingApprovalTool {
 			return []PermissionOption{
 				{OptionID: string(OptAllowOnce), Name: "Allow", Kind: OptAllowOnce},
 				{OptionID: string(OptAllowAlways), Name: approvalSessionOptionName(tool, subject), Kind: OptAllowAlways},
@@ -595,6 +641,35 @@ func rawJSON(args string) json.RawMessage {
 		return nil
 	}
 	return json.RawMessage(args)
+}
+
+// toolResultText clips a tool result for display. A result the host marked as a
+// whole unified diff is passed through untruncated instead — the diff is the
+// client's to render — wrapped in a ```diff fence so +/- lines are coloured. The
+// fence outruns any backtick run in the body, or a ``` context line closes it early.
+func toolResultText(text string, isDiff bool) string {
+	if !isDiff {
+		return clip(text)
+	}
+	body := strings.TrimRight(text, "\n")
+	fence := strings.Repeat("`", max(3, longestBacktickRun(body)+1))
+	return fence + "diff\n" + body + "\n" + fence
+}
+
+// longestBacktickRun returns the longest run of backticks in s.
+func longestBacktickRun(s string) int {
+	longest, run := 0, 0
+	for i := range len(s) {
+		if s[i] == '`' {
+			run++
+			if run > longest {
+				longest = run
+			}
+			continue
+		}
+		run = 0
+	}
+	return longest
 }
 
 // clip truncates text to maxResultChars, appending a note, matching dispatch.ts.

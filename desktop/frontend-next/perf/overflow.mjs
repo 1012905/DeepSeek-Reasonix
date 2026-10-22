@@ -64,6 +64,9 @@ for (const width of WIDTHS) {
     }
     const past = [];
     for (const el of document.querySelectorAll("body *")) {
+      // A collapsed column keeps its boxes but is inert and unpainted; what it
+      // lays out past the edge is neither seen nor reachable.
+      if (el.closest("[inert]") || !el.checkVisibility({ visibilityProperty: true })) continue;
       const r = el.getBoundingClientRect();
       if (r.width < 12 || r.height < 6) continue;
       if (r.right > innerWidth + 2 && !scrolled(el)) {
@@ -84,6 +87,39 @@ for (const width of WIDTHS) {
   check("面包屑没有画到右侧控件底下", seen.painted <= seen.controls,
     seen.painted > seen.controls ? `压进去 ${seen.painted - seen.controls}px` : "");
   check("没有元素画到窗口之外", seen.past.length === 0, seen.past.join(", "));
+  await page.close();
+}
+// A switcher row in a service's detail: the hint either takes the width left
+// beside the switch or drops below it. The detail column is ~470px even in a
+// wide window, so a hint that only shrinks becomes one word per line.
+for (const width of [1400, 640]) {
+  const page = await browser.newPage({ viewport: { width, height: 900 } });
+  await page.goto(PAGE, { waitUntil: "networkidle" });
+  await page.waitForSelector(".app");
+  await page.keyboard.press("Meta+Comma");
+  await page.waitForTimeout(500);
+  await page.evaluate(() => document.getElementById("prefs-providers")?.click());
+  await page.waitForTimeout(700);
+  const hints = await page.evaluate(() =>
+    [...document.querySelectorAll(".pdetail-options .vway")].map((row) => {
+      const why = row.querySelector(".why");
+      const range = document.createRange();
+      range.selectNodeContents(why);
+      const s = getComputedStyle(row);
+      return {
+        lb: (row.querySelector(".lb")?.textContent ?? "").trim(),
+        width: Math.round(why.getBoundingClientRect().width),
+        room: Math.round(row.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight)),
+        lines: new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size,
+      };
+    }),
+  );
+  console.log(`\n${width}px 服务详情`);
+  check("有带说明的开关行", hints.length > 0, `${hints.length} 行`);
+  for (const h of hints) {
+    check(`「${h.lb}」的说明没有被开关挤成竖条`, h.width >= Math.min(200, h.room * 0.6) && h.lines <= 4,
+      `宽 ${h.width}px / 可用 ${h.room}px，${h.lines} 行`);
+  }
   await page.close();
 }
 await browser.close();

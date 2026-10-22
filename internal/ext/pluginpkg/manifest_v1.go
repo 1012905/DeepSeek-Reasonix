@@ -1,6 +1,7 @@
 package pluginpkg
 
 import (
+	"reasonix/internal/base/textutil"
 	"reasonix/internal/ext/extensioncontract"
 	"regexp"
 
@@ -29,14 +30,25 @@ const PluginRootEnvVar = "${REASONIX_PLUGIN_ROOT}"
 // the expansion happens at launch time (see ExpandRuntimeCommand for the
 // diagnostics-time equivalent).
 type RuntimeSpec struct {
-	Command      string            `json:"command"`
-	Args         []string          `json:"args,omitempty"`
-	Env          map[string]string `json:"env,omitempty"`
-	Required     bool              `json:"required,omitempty"`
-	Priority     int               `json:"priority,omitempty"`
-	Intercepts   []string          `json:"intercepts,omitempty"`
-	Replaces     []string          `json:"replaces,omitempty"`
-	Capabilities []string          `json:"capabilities,omitempty"`
+	Command  string            `json:"command"`
+	Args     []string          `json:"args,omitempty"`
+	Env      map[string]string `json:"env,omitempty"`
+	Required bool              `json:"required,omitempty"`
+	// TightenOnly restricts this runtime's permission rulings to making a
+	// decision stricter; the host refuses an allow or a rewrite from it.
+	TightenOnly bool `json:"tightenOnly,omitempty"`
+	// DynamicTools lets the runtime register its tools while it starts, in the
+	// handshake, instead of declaring them here. The host holds each one to the
+	// same checks as a manifest tool.
+	DynamicTools bool `json:"dynamicTools,omitempty"`
+	// KillOnTimeout ends the process when it fails to answer an intercept in
+	// time: a single-threaded runtime stuck in a loop never answers again, and
+	// skipping its hook would make every later one wait out the budget.
+	KillOnTimeout bool     `json:"killOnTimeout,omitempty"`
+	Priority      int      `json:"priority,omitempty"`
+	Intercepts    []string `json:"intercepts,omitempty"`
+	Replaces      []string `json:"replaces,omitempty"`
+	Capabilities  []string `json:"capabilities,omitempty"`
 	// TimeoutMillis optionally tunes this runtime's synchronous intercept
 	// budget. Zero keeps the host's per-point defaults; the host clamps any
 	// value to its 60s ceiling at dispatch time.
@@ -96,10 +108,20 @@ func strictDecode(data []byte, v any, path string) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
-		return fmt.Errorf("%s: %w", path, err)
+		return &decodeError{path: path, err: err}
 	}
 	return nil
 }
+
+// decodeError keeps the decoder's error in the chain for errors.Is/As and
+// shows its text as a literal, since the text can echo the manifest.
+type decodeError struct {
+	path string
+	err  error
+}
+
+func (e *decodeError) Error() string { return e.path + ": " + textutil.ShownLocator(e.err.Error()) }
+func (e *decodeError) Unwrap() error { return e.err }
 
 // v1Contributes is the shared strict-decoded contributes object used by the v2
 // parser. Agents, prompts, and themes exist ONLY here — the legacy top level
@@ -357,7 +379,7 @@ var runtimeNamedSlots = map[string]bool{
 	"frontend_events":   true,
 }
 
-var runtimeCapabilities = []string{"interceptors", "strategies", "providers", "ui", "tools"}
+var runtimeCapabilities = []string{"interceptors", "strategies", "providers", "ui", "tools", "session.read", "session.submit"}
 
 var runtimeToolName = regexp.MustCompile(`^[A-Za-z0-9_-]{1,48}$`)
 
@@ -372,25 +394,36 @@ func validateRuntimeTools(rt *RuntimeSpec) error {
 	}
 	seen := map[string]bool{}
 	for i, t := range rt.Tools {
-		if !runtimeToolName.MatchString(t.Name) {
-			return fmt.Errorf("runtime.tools[%d].name %q must be 1-48 letters, digits, _ or -", i, t.Name)
+		if err := validateRuntimeTool(fmt.Sprintf("runtime.tools[%d]", i), t); err != nil {
+			return err
 		}
 		if seen[t.Name] {
 			return fmt.Errorf("runtime.tools: %q is declared twice", t.Name)
 		}
 		seen[t.Name] = true
-		if strings.TrimSpace(t.Description) == "" {
-			return fmt.Errorf("runtime.tools[%d] (%s): description is required", i, t.Name)
-		}
-		if len(t.InputSchema) > maxRuntimeToolSchemaBytes {
-			return fmt.Errorf("runtime.tools[%d] (%s): inputSchema is over %d bytes", i, t.Name, maxRuntimeToolSchemaBytes)
-		}
-		var schema struct {
-			Type string `json:"type"`
-		}
-		if err := json.Unmarshal(t.InputSchema, &schema); err != nil || schema.Type != "object" {
-			return fmt.Errorf(`runtime.tools[%d] (%s): inputSchema must be a JSON schema with "type": "object"`, i, t.Name)
-		}
+	}
+	return nil
+}
+
+// ValidateRuntimeTool holds one tool to what a provider accepts as a tool
+// definition, whether the manifest declares it or a dynamic runtime registers it.
+func ValidateRuntimeTool(t RuntimeTool) error { return validateRuntimeTool("tool", t) }
+
+func validateRuntimeTool(where string, t RuntimeTool) error {
+	if !runtimeToolName.MatchString(t.Name) {
+		return fmt.Errorf("%s.name %q must be 1-48 letters, digits, _ or -", where, t.Name)
+	}
+	if strings.TrimSpace(t.Description) == "" {
+		return fmt.Errorf("%s (%s): description is required", where, t.Name)
+	}
+	if len(t.InputSchema) > maxRuntimeToolSchemaBytes {
+		return fmt.Errorf("%s (%s): inputSchema is over %d bytes", where, t.Name, maxRuntimeToolSchemaBytes)
+	}
+	var schema struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(t.InputSchema, &schema); err != nil || schema.Type != "object" {
+		return fmt.Errorf(`%s (%s): inputSchema must be a JSON schema with "type": "object"`, where, t.Name)
 	}
 	return nil
 }
@@ -493,17 +526,22 @@ func validateV1Paths(root string, m *Manifest) ([]string, error) {
 			if errors.Is(err, os.ErrNotExist) {
 				warnings = append(warnings, fmt.Sprintf("%s path %q does not exist", kind, rel))
 			} else {
-				warnings = append(warnings, fmt.Sprintf("%s path %q is not readable: %v", kind, rel, err))
+				warnings = append(warnings, fmt.Sprintf("%s path %q is not readable: %s", kind, rel, textutil.ShownLocator(err.Error())))
 			}
 			return nil
 		}
 		resolved, err := filepath.EvalSymlinks(abs)
 		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("%s path %q cannot be resolved: %v", kind, rel, err))
+			warnings = append(warnings, fmt.Sprintf("%s path %q cannot be resolved: %s", kind, rel, textutil.ShownLocator(err.Error())))
 			return nil
 		}
 		if !pathWithinRoot(resolvedRoot, resolved) {
 			return fmt.Errorf("%s path %q escapes the plugin root through a symlink", kind, rel)
+		}
+		if info, err := os.Stat(abs); err != nil {
+			warnings = append(warnings, fmt.Sprintf("%s path %q is not readable: %s", kind, rel, textutil.ShownLocator(err.Error())))
+		} else if !info.IsDir() {
+			warnings = append(warnings, fmt.Sprintf("%s path %q is not a directory; declare the containing directory instead", kind, rel))
 		}
 		return nil
 	}
@@ -534,7 +572,7 @@ func validateV1Paths(root string, m *Manifest) ([]string, error) {
 				if errors.Is(err, os.ErrNotExist) {
 					warnings = append(warnings, fmt.Sprintf("themes path %q does not exist", pattern))
 				} else {
-					warnings = append(warnings, fmt.Sprintf("themes path %q is not readable: %v", pattern, err))
+					warnings = append(warnings, fmt.Sprintf("themes path %q is not readable: %s", pattern, textutil.ShownLocator(err.Error())))
 				}
 				continue
 			}
@@ -601,7 +639,7 @@ func globThemePattern(root, pattern string) ([]string, error) {
 		}
 	}
 	matches := []string{filepath.Clean(root)}
-	for _, seg := range segs {
+	for i, seg := range segs {
 		var next []string
 		if !hasGlobMeta(seg) {
 			for _, base := range matches {
@@ -615,7 +653,13 @@ func globThemePattern(root, pattern string) ([]string, error) {
 				}
 				for _, entry := range entries {
 					if ok, _ := path.Match(seg, entry.Name()); ok {
-						next = append(next, filepath.Join(base, entry.Name()))
+						candidate := filepath.Join(base, entry.Name())
+						if i < len(segs)-1 {
+							if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+								continue
+							}
+						}
+						next = append(next, candidate)
 					}
 				}
 			}

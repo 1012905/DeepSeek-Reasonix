@@ -15,8 +15,12 @@ import (
 
 	"reasonix/internal/assembly/boot"
 	"reasonix/internal/model/billing"
+	"reasonix/internal/platform/computer"
+	"reasonix/internal/platform/wsl"
 
+	"reasonix/internal/base/backgroundwork"
 	"reasonix/internal/base/fileutil"
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
@@ -47,24 +51,39 @@ const runtimePrefix = "/rt/"
 // published under /rt/{id}/; the hub owns only what they share — the auth gate,
 // the workspace tree, and the rule that one session file gets one runtime.
 type Hub struct {
+	legacy   *hubLegacyListings
+	currency control.DisplayCurrencyGroup
 	mu       sync.RWMutex
 	runtimes map[string]*Runtime
 	order    []string
 	seq      int
 
 	opts HubOptions
-	auth *authGate
+	// notes answers the release-notes route; its state outlives one request. Nil reads
+	// through notesReader.
+	notes func(context.Context, update.Install, string, bool) (update.VersionNotes, error)
+	auth  *authGate
 	// What the host decided once and every later pane must inherit: where the
 	// setup surface is allowed, and the context its recovery sweep rides.
 	setupAddr string
 	gcCtx     context.Context
 	// titles reads each project's cached session titles for the sidebar tree.
 	titles map[string]*titleCache
+	// orphanLogged remembers the panes already reported, so a tree read that keeps
+	// failing the same match writes one line, not one per read.
+	orphanLogged sync.Map
+	// titleFallback shares a successfully initialized provider and usage recorder.
+	titleFallback *Server
+
 	// wallets is shared by every pane: opening a conversation builds a runtime,
 	// and a per-runtime cache would be cold on exactly the read a switch waits on.
 	wallets *billing.Store
 	// stance is the Ask/Auto/YOLO posture every pane this hub opens starts in.
-	stance *approvalStance
+	stance  *approvalStance
+	changes *Broadcaster
+	muxes   *eventMuxes
+	// dispatch remembers the panes a task was handed to; see dispatch.go.
+	dispatch dispatchBook
 }
 
 // approvalStance is the Ask/Auto/YOLO posture the frontend is in, held by the
@@ -115,7 +134,12 @@ type Runtime struct {
 
 // HubOptions carries what the embedding host decides for every runtime.
 type HubOptions struct {
-	Serve config.ServeConfig
+	ComputerDriver *computer.Driver
+	NativeSurfaces bool
+	// LogsDir is where the shell keeps its logs, when there is a shell. Empty
+	// means this kernel has no such place to report.
+	LogsDir string
+	Serve   config.ServeConfig
 	// Grant applies the host's capabilities (folder picking, provider edits) to
 	// each runtime, so a pane opened later can do what the first one could.
 	Grant func(*Server)
@@ -142,6 +166,9 @@ type HubOptions struct {
 	// Remote reaches workspaces on other machines. Nil refuses them: a server
 	// that dials onward on a request's say-so is someone else's way in.
 	Remote RemoteAttacher
+	// WSL lists the WSL distributions on this machine. Nil uses the system
+	// wsl.exe, which is absent anywhere but Windows.
+	WSL wsl.Runner
 	// Asks holds the questions a remote dial stops for. Nil leaves those routes
 	// unregistered and the link layer with nobody to ask, which is what makes
 	// the strict host-key path the default on a server with no window.
@@ -153,6 +180,9 @@ type HubOptions struct {
 	// the settings surface writes into. Nil leaves those routes unregistered:
 	// a kernel reached over the network would fire on its own machine.
 	Notifications *notify.Settings
+	// NotifySender delivers what the window asks to have announced; nil leaves
+	// that route unregistered.
+	NotifySender notify.Sender
 	// Tray is the window behind this hub, where there is one. Nil leaves the
 	// tray routes unregistered rather than answering for an icon that does not
 	// exist — a networked server has no window to put one on.
@@ -161,45 +191,35 @@ type HubOptions struct {
 	// can answer either: inside a bundle os.Executable() names the host binary,
 	// not the application. Nil makes the version routes refuse by name.
 	Install *update.Install
+	// NotesTransport and NotesDir say how release notes travel and where they
+	// are kept, never where they are read from. Unset, the notes route reads
+	// through the user's proxy into the user's cache.
+	NotesTransport http.RoundTripper
+	NotesDir       string
 	// Update is the desktop application this kernel runs inside, where it runs
 	// inside one. Nil leaves the update routes unregistered: owning the
 	// application is what makes replacing it this process's business.
 	Update UpdateHost
-}
-
-// OpenRequest asks for a runtime. An empty SessionPath opens a fresh session in
-// Root; a path that is already open focuses that runtime rather than binding a
-// second writer to one transcript.
-type OpenRequest struct {
-	Root        string `json:"root"`
-	SessionPath string `json:"sessionPath"`
-	Model       string `json:"model"`
-}
-
-// RuntimeView is what the frontend needs to address and label a pane.
-type RuntimeView struct {
-	ID          string `json:"id"`
-	Base        string `json:"base"`
-	Root        string `json:"root"`
-	Name        string `json:"name"`
-	SessionPath string `json:"sessionPath,omitempty"`
-	// Set only on a pane driven over SSH. Its absence is what tells the
-	// frontend the pane is this machine's own — the common case stays unmarked.
-	Host string `json:"host,omitempty"`
-	// Set on a pane whose conversation another window holds the write lease
-	// for. It reads like any other; what it cannot do is add to it — said here
-	// so the composer can say so before a line is typed, not after.
-	ReadOnly bool `json:"readOnly,omitempty"`
+	// Share is the window's door for paired devices. Nil leaves its routes
+	// unregistered: a networked server has no window to open one from.
+	Share *DeviceShare
 }
 
 // NewHub returns an empty hub. Adopt or Open publishes the first runtime.
 func NewHub(opts HubOptions) *Hub {
+	var notes func(context.Context, update.Install, string, bool) (update.VersionNotes, error)
+	if opts.NotesTransport != nil {
+		notes = update.NotesReaderOver(&http.Client{Transport: opts.NotesTransport}, opts.NotesDir)
+	}
 	return &Hub{
+		notes:    notes,
 		runtimes: map[string]*Runtime{},
 		opts:     opts,
 		auth:     newAuthGate(opts.Serve),
 		wallets:  &billing.Store{},
 		stance:   &approvalStance{},
+		changes:  NewBroadcaster(),
+		muxes:    newEventMuxes(),
 	}
 }
 
@@ -221,9 +241,13 @@ func (h *Hub) Adopt(srv *Server, bc *Broadcaster) (*Runtime, error) {
 	srv.stance = h.stance
 	srv.page = h.opts.Page
 	srv.resolver = h.opts.ProviderResolver
-	// The posture the host launched in, which is the one every later pane
-	// inherits until someone changes it on the composer.
-	h.stance.set(srv.Controller().ToolApprovalMode())
+	srv.siblings = h.sameRootServers
+	// A posture the person named is the one every later pane inherits until
+	// someone changes it on the composer. A default is read per folder, so each
+	// pane derives its own.
+	if !srv.Controller().Posture().Defaulted {
+		h.stance.set(srv.Controller().ToolApprovalMode())
+	}
 	if h.opts.Grant != nil {
 		h.opts.Grant(srv)
 	}
@@ -232,8 +256,26 @@ func (h *Hub) Adopt(srv *Server, bc *Broadcaster) (*Runtime, error) {
 		return nil, err
 	}
 	rt := &Runtime{ID: h.nextID(), Root: srv.Controller().WorkspaceRoot(), Server: srv, Events: bc, leases: leases}
-	h.publish(rt)
+	if err := h.publish(rt); err != nil {
+		if leases != nil {
+			_ = srv.SetSessionLeases(nil)
+			leases.Release()
+		}
+		return nil, err
+	}
 	return rt, nil
+}
+
+// sameRootServers lists the other local panes open on self's workspace.
+func (h *Hub) sameRootServers(self *Server) []*Server {
+	root := self.Controller().WorkspaceRoot()
+	var out []*Server
+	for _, rt := range h.localRuntimes() {
+		if rt.Server != nil && rt.Server != self && sameFolder(rt.Server.Controller().WorkspaceRoot(), root) {
+			out = append(out, rt.Server)
+		}
+	}
+	return out
 }
 
 // ownSession makes "a runtime owns the session it writes" true however the
@@ -268,6 +310,11 @@ func (h *Hub) ownSession(srv *Server) (keeper *control.SessionLeaseKeeper, err e
 // Open builds a runtime for req, or returns the one already driving that
 // session. The caller gets a runtime it can address immediately.
 func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
+	return h.openBound(ctx, req, nil)
+}
+
+func (h *Hub) openBound(ctx context.Context, req OpenRequest, inherited *agentcomposition.Binding) (*Runtime, error) {
+	defer backgroundwork.Shared.Foreground()()
 	if rt := h.findSession(req.SessionPath); rt != nil {
 		return rt, nil
 	}
@@ -275,23 +322,68 @@ func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
+	req.SessionPath = currentSessionPath(root, req.SessionPath)
+	settings, err := branchSettings(req.SessionPath)
+	if err != nil {
+		return nil, err
+	}
+	binding := inherited
+	if req.SessionPath != "" {
+		binding, err = loadOpenComposition(root, req.SessionPath)
+		if err != nil {
+			return nil, err
+		}
+	}
+	preset := ""
+	savedModel := ""
+	if settings != nil {
+		savedModel = strings.TrimSpace(settings.Model)
+		req.Model, preset = savedModel, settings.AgentPreset
+	}
 	bc := NewBroadcaster()
 	paneSink := h.decorateSink(bc)
-	built, err := boot.BuildRuntime(ctx, boot.Options{
-		Model:         strings.TrimSpace(req.Model),
-		WorkspaceRoot: root,
-		SessionDir:    SessionDirFor(root),
-		Sink:          paneSink,
-		Stderr:        os.Stderr,
-		StatsSource:   h.surface(),
-		BalanceStore:  h.wallets,
-
-		ProviderResolver: h.opts.ProviderResolver,
-	})
+	build := func(model string, fallback bool) (*boot.BuildResult, error) {
+		opts := boot.Options{
+			AgentComposition:         req.AgentComposition,
+			Composition:              binding,
+			ComputerDriver:           h.opts.ComputerDriver,
+			Model:                    strings.TrimSpace(model),
+			AgentPreset:              preset,
+			WorkspaceRoot:            root,
+			SessionDir:               SessionDirFor(root),
+			Sink:                     paneSink,
+			NativeSurfaces:           h.opts.NativeSurfaces,
+			Stderr:                   os.Stderr,
+			StatsSource:              h.surface(),
+			FeedbackSurface:          feedbackSurface(h.surface()),
+			AccountsURL:              accountsBaseURL(),
+			BalanceStore:             h.wallets,
+			OpenOnFallbackModel:      fallback,
+			ProviderResolver:         h.opts.ProviderResolver,
+			CleanupPendingReconciler: BackgroundCleanupReconciler,
+			NewConversation:          strings.TrimSpace(req.SessionPath) == "",
+		}
+		if inherited != nil {
+			return boot.BuildRuntime(ctx, opts)
+		}
+		return buildCompositionOrHistory(ctx, opts)
+	}
+	built, err := build(req.Model, settings == nil)
+	branchModelFallback := false
+	if err != nil && settings != nil && errors.Is(err, provider.ErrUnknownModel) {
+		built, err = build("", true)
+		branchModelFallback = err == nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", root, err)
 	}
+	if settings != nil {
+		built.Controller.SetPlanMode(settings.Mode == "plan")
+	}
 	srv := New(built.Controller, bc, h.opts.Serve)
+	if branchModelFallback {
+		srv.branchModelFallback = savedModel
+	}
 	srv.SetPaneSink(paneSink)
 	srv.AdoptRuntime(built)
 	srv.auth = h.auth
@@ -322,61 +414,24 @@ func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
 			return nil, keepRefusalStatus(status, err)
 		}
 	}
+	if err := addRememberedWorkspace(ctx, root); err != nil {
+		built.Controller.Close()
+		leases.Release()
+		return nil, err
+	}
 	rt := &Runtime{ID: h.nextID(), Root: root, Server: srv, Events: bc, leases: leases}
 	// Before publishing: Close reads rt.stop, and a pane must not be reachable
 	// before the fields its teardown depends on are set.
 	h.adoptHostDecisions(rt)
-	h.publish(rt)
-	rememberWorkspace(root)
+	if err := h.publish(rt); err != nil {
+		if rt.stop != nil {
+			rt.stop()
+		}
+		built.Controller.Close()
+		leases.Release()
+		return nil, err
+	}
 	return rt, nil
-}
-
-// Close retires a runtime: the conversation is persisted, the assembly torn
-// down, and the session file released for another window to open.
-func (h *Hub) Close(id string) error {
-	h.mu.Lock()
-	rt := h.runtimes[id]
-	if rt == nil {
-		h.mu.Unlock()
-		return fmt.Errorf("no runtime %s", id)
-	}
-	delete(h.runtimes, id)
-	h.order = removeString(h.order, id)
-	h.mu.Unlock()
-
-	if h.opts.OnClose != nil {
-		h.opts.OnClose(rt)
-	}
-	if rt.stop != nil {
-		rt.stop()
-	}
-	if rt.remote != nil {
-		// Retired before the forward that reaches it goes away: releasing first
-		// would strand a session lease over there, with nothing left that could
-		// reach the kernel holding it.
-		rt.closeFarRuntime()
-		if rt.remote.release != nil {
-			rt.remote.release()
-		}
-		return nil
-	}
-	if err := rt.Server.Controller().Snapshot(); err != nil {
-		slog.Warn("serve: snapshot before closing runtime", "id", id, "err", err)
-	}
-	rt.Server.Controller().Close()
-	if rt.leases != nil {
-		rt.leases.Release()
-	}
-	return nil
-}
-
-// Shutdown closes every runtime, newest first.
-func (h *Hub) Shutdown() {
-	for _, view := range h.List() {
-		if err := h.Close(view.ID); err != nil {
-			slog.Warn("serve: close runtime", "id", view.ID, "err", err)
-		}
-	}
 }
 
 // Get returns a runtime by ID, or nil.
@@ -444,12 +499,13 @@ func (rt *Runtime) view() RuntimeView {
 	}
 	ctrl := rt.Server.Controller()
 	return RuntimeView{
-		ID:          rt.ID,
-		Base:        runtimePrefix + rt.ID,
-		Root:        ctrl.WorkspaceRoot(),
-		Name:        fileutil.RootName(ctrl.WorkspaceRoot()),
-		SessionPath: ctrl.SessionPath(),
-		ReadOnly:    !rt.writable(),
+		AgentComposition: compositionControllerView(ctrl),
+		ID:               rt.ID,
+		Base:             runtimePrefix + rt.ID,
+		Root:             ctrl.WorkspaceRoot(),
+		Name:             fileutil.RootName(ctrl.WorkspaceRoot()),
+		SessionPath:      ctrl.SessionPath(),
+		ReadOnly:         !rt.writable(),
 	}
 }
 
@@ -459,6 +515,9 @@ func (rt *Runtime) view() RuntimeView {
 func (rt *Runtime) writable() bool {
 	if rt.Server == nil {
 		return true
+	}
+	if c, ok := rt.Server.Controller().(*control.Controller); ok && c.CompositionExecutionError() != nil {
+		return false
 	}
 	path := strings.TrimSpace(rt.Server.Controller().SessionPath())
 	if path == "" || rt.leases == nil {
@@ -475,28 +534,43 @@ func (h *Hub) Handler() http.Handler {
 	mux.HandleFunc("GET /runtimes", h.listRuntimes)
 	mux.HandleFunc("POST /runtimes", h.openRuntime)
 	mux.HandleFunc("POST /runtimes/{id}/close", h.closeRuntime)
-	mux.HandleFunc("POST /host/pick-folder", h.pickLocalFolderHTTP)
-	mux.HandleFunc("GET /remotes", h.listRemoteHosts)
-	mux.HandleFunc("POST /remotes", h.saveRemoteHost)
-	mux.HandleFunc("GET /remotes/candidates", h.remoteCandidates)
-	mux.HandleFunc("GET /remotes/{host}/tree", h.remoteTree)
-	mux.HandleFunc("POST /remotes/{host}/sessions/remove", h.removeRemoteSession)
-	mux.HandleFunc("GET /remotes/{host}/dirs", h.remoteDirs)
-	mux.HandleFunc("GET /remotes/{host}/probe", h.remoteProbe)
-	mux.HandleFunc("POST /remotes/{host}/workspaces", h.addRemoteWorkspace)
-	mux.HandleFunc("POST /remotes/{host}/workspaces/remove", h.removeRemoteWorkspace)
-	mux.HandleFunc("POST /remotes/remove", h.removeRemoteHost)
-	mux.HandleFunc("POST /remotes/open", h.openRemoteRuntime)
 	h.registerTreeRoutes(mux)
-	h.registerTrayRoutes(mux)
-	h.registerNotifyRoutes(mux)
-	h.registerBrowserHostRoutes(mux)
+	h.registerMuxRoutes(mux)
 	h.registerStudioVersionRoutes(mux)
-	h.registerUpdateRoutes(mux)
-	h.registerAskRoutes(mux)
+	mux.HandleFunc("GET /device", notADevice)
+	mux.HandleFunc("POST /device/leave", notADevice)
 	mux.HandleFunc(runtimePrefix+"{id}/", h.routeRuntime)
+	mux.HandleFunc("/host/settings/runtime/{runtime}/", h.localWorkspaceSettings)
+	mux.Handle("/host/settings/", http.StripPrefix("/host/settings", http.HandlerFunc(h.machineSettings)))
 	mux.HandleFunc("/", h.routeDefault)
-	return logMiddleware(h.auth.middleware(withPage(csrfGuard(mux), h.opts.Page)))
+	// What acts on the machine behind the window, or dials onward from it,
+	// stays the window's: a paired device reaches the rest.
+	hostMux := http.NewServeMux()
+	hostMux.HandleFunc("GET /host/capabilities", h.hostCapabilities)
+	hostMux.HandleFunc("POST /host/pick-folder", h.pickLocalFolderHTTP)
+	hostMux.HandleFunc("GET /host/workspaces/locate", h.locateWorkspace)
+	hostMux.HandleFunc("GET /remotes", h.listRemoteHosts)
+	hostMux.HandleFunc("POST /remotes", h.saveRemoteHost)
+	hostMux.HandleFunc("GET /remotes/candidates", h.remoteCandidates)
+	hostMux.HandleFunc("GET /remotes/wsl", h.remoteWSLDistros)
+	hostMux.HandleFunc("GET /remotes/{host}/tree", h.remoteTree)
+	h.registerRemoteSessionRoutes(hostMux)
+	hostMux.HandleFunc("GET /remotes/{host}/dirs", h.remoteDirs)
+	hostMux.HandleFunc("GET /remotes/{host}/probe", h.remoteProbe)
+	hostMux.HandleFunc("POST /remotes/{host}/workspaces", h.addRemoteWorkspace)
+	hostMux.HandleFunc("POST /remotes/{host}/workspaces/remove", h.removeRemoteWorkspace)
+	hostMux.HandleFunc("POST /remotes/{host}/place", h.placeRemoteHost)
+	hostMux.HandleFunc("POST /remotes/remove", h.removeRemoteHost)
+	hostMux.HandleFunc("POST /remotes/open", h.openRemoteRuntime)
+	h.registerTrayRoutes(hostMux)
+	h.registerNotifyRoutes(hostMux)
+	h.registerBrowserHostRoutes(hostMux)
+	h.registerUpdateRoutes(hostMux)
+	h.registerAskRoutes(hostMux)
+	h.registerShareRoutes(hostMux)
+	h.registerOpenWithRoutes(hostMux)
+	hostMux.HandleFunc("GET /studio/logs", h.readStudioLogs)
+	return logMiddleware(h.auth.middleware(h.auth.hostGuard(withPage(csrfGuard(h.auth.mutationGate(h.watchTreeWrites(hostOnly(hostMux, mux)))), h.opts.Page))))
 }
 
 func (h *Hub) listRuntimes(w http.ResponseWriter, _ *http.Request) {
@@ -521,8 +595,13 @@ func (h *Hub) openRuntime(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Hub) closeRuntime(w http.ResponseWriter, r *http.Request) {
-	if err := h.Close(r.PathValue("id")); err != nil {
-		writeErr(w, http.StatusNotFound, err)
+	id := r.PathValue("id")
+	if err := h.Close(id); err != nil {
+		if errors.Is(err, errRuntimeGone) {
+			notFound(w, "runtime", id)
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -561,10 +640,31 @@ func (h *Hub) routeDefault(w http.ResponseWriter, r *http.Request) {
 
 // publish registers a runtime and freezes the handler that serves it. The
 // prefix is stripped here so the runtime's own routes stay unprefixed.
-func (h *Hub) publish(rt *Runtime) {
+func (h *Hub) publish(rt *Runtime) error {
 	if rt.remote != nil {
-		rt.handler = http.StripPrefix(runtimePrefix+rt.ID, remoteProxy(rt.remote.ep))
+		rt.handler = http.StripPrefix(runtimePrefix+rt.ID, refuseDeviceBeforeForwarding(refuseLocalOnly(remoteProxy(rt.remote.ep))))
 	} else {
+		rt.Server.bindMu.Lock()
+		rt.Server.mu.Lock()
+		ctrl, concrete := rt.Server.ctrl.(*control.Controller)
+		if concrete {
+			rt.Server.currency = &h.currency
+		}
+		rt.Server.mu.Unlock()
+		if concrete {
+			if err := h.currency.Bind(nil, ctrl, rt.Events.SetDisplayCurrency); err != nil {
+				rt.Server.mu.Lock()
+				rt.Server.currency = nil
+				rt.Server.mu.Unlock()
+				rt.Server.bindMu.Unlock()
+				return err
+			}
+		}
+		if concrete {
+			ctrl.SetProjectDispatcher(h.dispatcherFor(rt))
+		}
+		rt.Server.bindMu.Unlock()
+		rt.Server.bc.observeTree(h.treeChanged)
 		// A local runtime a Hub publishes is driven by an interactive frontend,
 		// so that binding is completed here, not at whichever entry point made
 		// it — Adopt takes what the host built, and this is the half it cannot.
@@ -575,9 +675,11 @@ func (h *Hub) publish(rt *Runtime) {
 	h.runtimes[rt.ID] = rt
 	h.order = append(h.order, rt.ID)
 	h.mu.Unlock()
+	h.treeChanged()
 	if h.opts.OnOpen != nil {
 		h.opts.OnOpen(rt)
 	}
+	return nil
 }
 
 // findSession returns the runtime already driving path. Session paths reach us
@@ -599,39 +701,6 @@ func (h *Hub) findSession(path string) *Runtime {
 		}
 	}
 	return nil
-}
-
-// resolveRoot decides which folder a new runtime opens against: the one asked
-// for, the one that owns the session being opened, or the first runtime's.
-func (h *Hub) resolveRoot(req OpenRequest) (string, error) {
-	if root := strings.TrimSpace(req.Root); root != "" {
-		return resolveWorkspaceDir(root)
-	}
-	if path := strings.TrimSpace(req.SessionPath); path != "" {
-		if root := workspaceRootForSession(path); root != "" {
-			return root, nil
-		}
-	}
-	h.mu.RLock()
-	first := ""
-	if len(h.order) > 0 {
-		if rt := h.runtimes[h.order[0]]; rt != nil {
-			first = rt.Server.Controller().WorkspaceRoot()
-		}
-	}
-	h.mu.RUnlock()
-	if first != "" {
-		return first, nil
-	}
-	// Closing the last pane leaves nothing to infer from, and "open a session"
-	// is exactly what someone does next. Fall back to the remembered list, the
-	// same answer the window uses when it launches with no pane at all.
-	for _, dir := range Workspaces() {
-		if st, err := os.Stat(dir); err == nil && st.IsDir() {
-			return dir, nil
-		}
-	}
-	return "", refusal(http.StatusConflict, "workspace.none", errors.New("no workspace to open in — add a folder first"), nil)
 }
 
 func (h *Hub) nextID() string {

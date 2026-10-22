@@ -1,21 +1,36 @@
-import { createContext, useRef, useSyncExternalStore } from "react";
+import { createContext, useContext, useRef, useSyncExternalStore } from "react";
 import type { Item } from "./session_types";
 import { foldModes, onFoldModesChange, type Fold, type FoldMode, type FoldModes } from "./prefs";
+import { receiptPrefOf, type ReceiptPref, type ReceiptState } from "./receiptpref";
 
 export function useFoldModes(): FoldModes {
   return useSyncExternalStore(onFoldModesChange, foldModes, foldModes);
 }
 
+/** The receipt preference of the kernel this pane talks to; a transcript drawn
+ *  outside a pane reads the standalone one. */
+export const ReceiptPrefContext = createContext<ReceiptPref>(receiptPrefOf());
+
+export function useReceiptState(pref?: ReceiptPref): ReceiptState {
+  const own = useContext(ReceiptPrefContext);
+  const source = pref ?? own;
+  return useSyncExternalStore(source.subscribe, source.state, source.state);
+}
+
+export function useShowsReceipt(pref?: ReceiptPref): boolean {
+  return useReceiptState(pref) === "on";
+}
+
 /** Whether a part starts open under its mode, given whether it is still being
- *  written and whether it failed. */
-export function startsOpen(mode: FoldMode, live = false, failed = false): boolean {
-  return mode === "open" || (mode === "live" && live) || (mode === "failed" && failed);
+ *  written, whether it failed and whether it changed a file. */
+export function startsOpen(mode: FoldMode, live = false, failed = false, changed = false): boolean {
+  return mode === "open" || (mode === "live" && live) || (mode === "failed" && failed) || (mode === "changed" && changed);
 }
 
 /** How a block of this kind starts, recomputed as the part's state changes. A
  *  block the reader has opened or closed keeps that answer instead. */
-export function useStartsOpen(kind: Fold, live = false, failed = false): boolean {
-  return startsOpen(useFoldModes()[kind], live, failed);
+export function useStartsOpen(kind: Fold, live = false, failed = false, changed = false): boolean {
+  return startsOpen(useFoldModes()[kind], live, failed, changed);
 }
 
 const NONE: ReadonlySet<string> = new Set();

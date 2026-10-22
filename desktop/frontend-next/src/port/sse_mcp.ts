@@ -1,13 +1,14 @@
 import { SseProvider } from "./sse_provider";
-import type { CapabilityScope, McpCatalog, McpDraft, McpDraftServer, McpInstallResult, McpInstallScope, ScopeLayer } from "./port";
+import type { CapabilityScope, McpCatalog, McpDraft, McpDraftServer, McpInstallResult, McpInstallScope, McpLoad, ScopeLayer } from "./port";
 import { rootQuery } from "./sse_http";
 
 // External services and the project they answer for. A draft is parsed before it
 // is installed, because a paste that will not parse is the normal case while
 // typing and its message is the whole feedback.
 export class SseMcp extends SseProvider {
-  mcp(root?: string) {
-    return this.get<McpCatalog>("/mcp" + rootQuery(root));
+  async mcp(root?: string) {
+    const catalog = await this.get<McpCatalog>("/mcp" + rootQuery(root));
+    return { ...catalog, servers: catalog.servers ?? [] };
   }
   capabilityScope() {
     return this.get<CapabilityScope>("/capability-scope");
@@ -21,6 +22,26 @@ export class SseMcp extends SseProvider {
   // whole point of the button, so it is read rather than thrown away.
   // 502 carries the diagnosis in the body — the reason the retry failed is the
   // whole point of the button, so it is read rather than thrown away.
+  async trustMcp(name: string, digest: string) {
+    const res = await fetch(this.base + "/mcp/trust", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ name, digest }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { state?: string; tools?: number | unknown[]; error?: string };
+    if (!res.ok && !body.error) throw new Error(`/mcp/trust: ${res.status}`);
+    return { state: body.state ?? (res.ok ? "ready" : "failed"), tools: typeof body.tools === "number" ? body.tools : body.tools?.length, error: body.error };
+  }
+  signinMcp(name: string) {
+    return this.post0<{ name: string; state: string; host?: string; tools?: number }>("/mcp/signin", { name });
+  }
+  upgradeMcp(name: string) {
+    return this.post0<{ name: string; state: string; host?: string; tools?: number }>("/mcp/upgrade", { name });
+  }
+  followMcp(name: string, follow: boolean) {
+    return this.post0<{ name: string; follow: boolean; tools?: number }>("/mcp/follow", { name, follow });
+  }
   async reconnectMcp(name: string) {
     const res = await fetch(this.base + "/mcp/reconnect", {
       method: "POST",
@@ -37,6 +58,9 @@ export class SseMcp extends SseProvider {
   }
   clearMcpOverride(name: string, root?: string) {
     return this.post("/mcp/enabled", { name, clear: true, scope: "project", root });
+  }
+  setMcpLoad(name: string, load: McpLoad) {
+    return this.post("/mcp/load", { name, load });
   }
 
   // A parse failure is the normal case while typing, and its message is the

@@ -18,7 +18,7 @@ import (
 func steeringTurn(t *testing.T) (*Controller, *agent.Agent, *sessionstore.Session, *inboxSteerProvider, chan event.Event) {
 	t.Helper()
 	dir := testenv.TempDir(t)
-	prov := &inboxSteerProvider{started: make(chan struct{}), release: make(chan struct{})}
+	prov := newInboxSteerProvider()
 	sess := sessionstore.NewSession("sys")
 	exec := agent.New(prov, tool.NewRegistry(), sess, agent.Options{}, event.Discard)
 	sink, done, _ := collectSink()
@@ -29,11 +29,17 @@ func steeringTurn(t *testing.T) (*Controller, *agent.Agent, *sessionstore.Sessio
 		SessionDir:  dir,
 		SessionPath: filepath.Join(dir, "s.jsonl"),
 	})
-	t.Cleanup(c.autosaveWG.Wait)
+	// The first round waits on release, so a test that fails before releasing it
+	// would leave this wait, and with it the whole package, blocked forever.
+	t.Cleanup(func() { prov.unblock(); c.autosaveWG.Wait() })
 	c.Submit("initial turn")
+	// Opening a turn is a chain of fsyncs; on a loaded Windows runner that alone
+	// can pass a second. A turn that ends without reaching the model says so.
 	select {
 	case <-prov.started:
-	case <-time.After(10 * time.Second):
+	case e := <-done:
+		t.Fatalf("the turn ended before it reached the provider: %+v", e)
+	case <-time.After(testenv.Budget(t)):
 		t.Fatal("the turn never started")
 	}
 	return c, exec, sess, prov, done
@@ -64,7 +70,7 @@ func TestCancellingAQueuedSteerNeverReachesTheModel(t *testing.T) {
 		t.Fatalf("cancel a queued steer: %v", err)
 	}
 
-	close(prov.release)
+	prov.unblock()
 	waitForDoneWithin(t, done, 60*time.Second)
 
 	kept, cancelled := 0, 0
@@ -95,6 +101,29 @@ func TestCancellingAfterTheTurnReadItSaysSo(t *testing.T) {
 		t.Fatalf("cancel after the read = %v, want ErrSteerApplied", err)
 	}
 
-	close(prov.release)
+	prov.unblock()
 	waitForDoneWithin(t, done, 60*time.Second)
+}
+
+// Taking a line back and sending another must leave the model with the second
+// line only: nothing of the withdrawn one may ride the next admission.
+func TestSendingAfterATakeBackDeliversOnlyTheNewLine(t *testing.T) {
+	c, _, sess, prov, done := steeringTurn(t)
+	first := acceptedSteer(t, c, "the first wording")
+	if err := c.DeleteInboxItem(first); err != nil {
+		t.Fatalf("take the first line back: %v", err)
+	}
+	acceptedSteer(t, c, "the second wording")
+
+	prov.unblock()
+	waitForDoneWithin(t, done, 60*time.Second)
+
+	var firstN, secondN int
+	for _, m := range sess.Snapshot() {
+		firstN += strings.Count(m.Content, "the first wording")
+		secondN += strings.Count(m.Content, "the second wording")
+	}
+	if firstN != 0 || secondN != 1 {
+		t.Fatalf("transcript carries the withdrawn line %d times and the new one %d, want 0 and 1", firstN, secondN)
+	}
 }

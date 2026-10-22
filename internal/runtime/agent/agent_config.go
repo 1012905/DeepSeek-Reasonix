@@ -9,10 +9,15 @@ type agentConfig struct {
 	maxSteps           int
 	maxStepsKey        string
 	reasoningByteLimit int
-	maxOutputTokens    int
-	temperature        float64
-	usageSource        string
-	modelRef           string
+	// perseverationGuard enables the loop detector (on by default);
+	// perseverationMaxRetries is the cut-and-retry budget (0 = report only,
+	// >0 = cut and nudge).
+	perseverationGuard      bool
+	perseverationMaxRetries int
+	maxOutputTokens         int
+	temperature             float64
+	usageSource             string
+	modelRef                string
 	// workspaceID is a prompt-cache lineage component, so it must not move
 	// while an agent lives — a change would silently rekey the cache.
 	workspaceID string
@@ -22,14 +27,23 @@ type agentConfig struct {
 	classifierTaskText string
 	// writeWorkspaceRoot scopes write reservations when writeScheduler is set.
 	writeWorkspaceRoot string
+	// observeRoot is the workspace an unclassified call's effect is observed in.
+	observeRoot string
+	// extraRoots are granted folders that are workspace beside the root.
+	extraRoots []string
+	// workspaceScanLimit bounds the observation walk; zero means workspaceScanLimit.
+	workspaceScanLimit int
 	// renderRoot opens written pages for a look; empty owes no look.
 	renderRoot string
 	// workspaceVCS rides the turn block; in the prefix it would diverge it.
 	workspaceVCS string
+	// workspaceUnversioned: the host found no version-control root around the workspace.
+	workspaceUnversioned bool
 	// subagentDepth caps delegation; at maxSubagentDepth the recursive
 	// agent/skill tools are excluded.
 	subagentDepth    int
 	maxSubagentDepth int
+	providerRetries  int
 	// contextWindow and compactRatio decide when at most one provider-visible
 	// checkpoint is installed; recentKeep and archiveDir shape what it keeps.
 	contextWindow int

@@ -2,7 +2,7 @@
 // PreToolUse / PostToolUse fire around each tool call, PermissionRequest fires
 // before a tool approval prompt is shown, UserPromptSubmit before a turn, Stop
 // after it. Hooks come from settings.json — a project
-// (.reasonix/settings.json, only when the project is trusted) and a global
+// (.reasonix/settings.json, unless LoadOptions.Scopes leaves it out) and a global
 // (<Reasonix home>/settings.json) file. A hook's exit
 // code is its verdict: 0 = pass, 2 = block (only on the gating events), other =
 // warn. The payload is delivered as JSON on stdin; output is captured (capped)
@@ -22,7 +22,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -55,22 +54,23 @@ const (
 	// non-zero exit or empty stdout leaves the reasoning unchanged.
 	PostLLMCall Event = "PostLLMCall"
 	// SessionStart fires once when a session becomes active (fresh, resumed, or
-	// after /new). SessionEnd fires when it is closed or rotated. SubagentStop
-	// fires when a `task` sub-agent finishes. Notification fires when the agent
-	// needs the user's attention (e.g. a pending approval). PreCompact fires just
-	// before a compaction pass; its stdout is injected as extra summary guidance.
-	SessionStart Event = "SessionStart"
-	SessionEnd   Event = "SessionEnd"
-	SubagentStop Event = "SubagentStop"
-	Notification Event = "Notification"
-	PreCompact   Event = "PreCompact"
+	// after /new). SessionEnd fires when it is closed or rotated. SubagentStart
+	// and SubagentStop (non-blocking, paired by callId) bracket only a
+	// foreground `task` call. Notification fires when the agent needs the user's
+	// attention. PreCompact's stdout becomes extra compaction summary guidance.
+	SessionStart  Event = "SessionStart"
+	SessionEnd    Event = "SessionEnd"
+	SubagentStart Event = "SubagentStart"
+	SubagentStop  Event = "SubagentStop"
+	Notification  Event = "Notification"
+	PreCompact    Event = "PreCompact"
 )
 
 // Events is every event, in a stable order — drives loading and `/hooks`.
 var Events = []Event{
 	PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest, UserPromptSubmit, Stop, StopFailure,
 	PostLLMCall,
-	SessionStart, SessionEnd, SubagentStop, Notification, PreCompact,
+	SessionStart, SessionEnd, SubagentStart, SubagentStop, Notification, PreCompact,
 }
 
 // IsBlocking reports whether a non-zero/exit-2 (or timed-out) hook on this event
@@ -163,9 +163,11 @@ type Settings struct {
 // ResolvedHook is a loaded hook with its origin baked in.
 type ResolvedHook struct {
 	HookConfig
-	Event  Event
-	Scope  Scope
-	Source string // absolute path to the settings.json it came from
+	Event         Event
+	Scope         Scope
+	Source        string                 // absolute path to the settings.json it came from
+	approval      *config.ProjectProgram // the approval a project hook runs under
+	retainedCheck func() error
 }
 
 func (h ResolvedHook) timeout() time.Duration {
@@ -223,9 +225,20 @@ type LoadOptions struct {
 	// settings and plugin hooks so Windows %APPDATA%/reasonix and REASONIX_HOME
 	// isolation stay consistent across hook/doctor/capdiag (#7411, #7331).
 	ReasonixHomeDir string
-	// Trusted is retained for source compatibility. Project hooks are enabled
-	// automatically now, so callers no longer need to set it.
+	// Trusted is retained for source compatibility and ignored: project hooks
+	// run only once approved (see ProjectHooksProgram).
 	Trusted bool
+	// Scopes limits which sources load; nil loads every scope. ProjectRoot still
+	// reaches plugin hooks' environment when ScopeProject is left out.
+	Scopes []Scope
+}
+
+// UserScopes are the sources the user configured under the Reasonix home, and
+// none the workspace can write.
+var UserScopes = []Scope{ScopePlugin, ScopeGlobal}
+
+func (o LoadOptions) loads(scope Scope) bool {
+	return o.Scopes == nil || slices.Contains(o.Scopes, scope)
 }
 
 // Load resolves hooks: project first, then global; within a scope,
@@ -233,14 +246,19 @@ type LoadOptions struct {
 // — a typo shouldn't take down the CLI).
 func Load(opts LoadOptions) []ResolvedHook {
 	var out []ResolvedHook
-	if opts.ProjectRoot != "" {
+	if opts.ProjectRoot != "" && opts.loads(ScopeProject) {
 		p := ProjectSettingsPath(opts.ProjectRoot)
 		if s := readSettings(p); s != nil {
-			appendResolved(&out, s, ScopeProject, p)
+			appendApprovedProjectHooks(&out, opts, p, s)
 		}
 	}
 	reasonixHomeDir := reasonixHomeForOptions(opts)
-	appendPluginHooks(&out, reasonixHomeDir, opts.ProjectRoot)
+	if opts.loads(ScopePlugin) {
+		appendPluginHooks(&out, reasonixHomeDir, opts.ProjectRoot)
+	}
+	if !opts.loads(ScopeGlobal) {
+		return out
+	}
 	g := filepath.Join(reasonixHomeDir, SettingsFilename)
 	if reasonixHomeDir == "" {
 		g = GlobalSettingsPath(opts.HomeDir)
@@ -463,27 +481,6 @@ func cloneEnv(in map[string]string) map[string]string {
 		}
 	}
 	return out
-}
-
-// MatchesTool reports whether a hook applies to toolName. The match field is an
-// anchored regex; non-tool events always match. A malformed regex never fires
-// (safer than firing on everything).
-func MatchesTool(h ResolvedHook, toolName string) bool {
-	if !UsesToolMatcher(h.Event) {
-		return true
-	}
-	m := h.Match
-	if m == "" || m == "*" {
-		return true
-	}
-	re, err := regexp.Compile("^(?:" + m + ")$")
-	if err != nil {
-		return false
-	}
-	if h.PayloadFormat != "claude" {
-		return re.MatchString(toolName)
-	}
-	return slices.ContainsFunc(claudeMatchNames(toolName), re.MatchString)
 }
 
 // claudeToolNames maps Reasonix's own tool names to the *current* Claude Code
@@ -832,6 +829,7 @@ type Payload struct {
 	Event            Event           `json:"event"`
 	SessionID        string          `json:"sessionId,omitempty"`
 	Cwd              string          `json:"cwd"`
+	CallID           string          `json:"callId,omitempty"` // SubagentStart/Stop: pairs the two
 	ToolName         string          `json:"toolName,omitempty"`
 	ToolArgs         json.RawMessage `json:"toolArgs,omitempty"`
 	Subject          string          `json:"subject,omitempty"`
@@ -856,7 +854,7 @@ const (
 	DecisionPass  Decision = "pass"
 	DecisionBlock Decision = "block"
 	DecisionWarn  Decision = "warn"
-	DecisionError Decision = "error" // spawn failed (ENOENT, EACCES, …)
+	DecisionError Decision = "error" // could not be evaluated or run (ENOENT, EACCES, bad matcher, …)
 )
 
 // Outcome records one hook invocation.
@@ -869,6 +867,8 @@ type Outcome struct {
 	TimedOut  bool
 	Truncated bool
 	Duration  time.Duration
+	Refusal   error // why the host refused to run it, when it did
+	Cause     error // why it could not be evaluated: wraps an Err* sentinel
 }
 
 // Report aggregates the outcomes of running an event's hooks.
@@ -960,6 +960,9 @@ func decideOutcome(h ResolvedHook, r SpawnResult) Decision {
 	blocking := IsBlocking(h.Event) || claudePermissionBlocking(h)
 	switch {
 	case r.SpawnErr != nil:
+		if blocking {
+			return DecisionBlock
+		}
 		return DecisionError
 	case r.TimedOut:
 		if blocking {
@@ -1012,21 +1015,6 @@ type SpawnInput struct {
 	Env     map[string]string
 	Stdin   string
 	Timeout time.Duration
-}
-
-// RuntimeOptions carries resolved host dependencies into Hook execution.
-// It is runtime-only and never changes persisted Hook configuration.
-type RuntimeOptions struct {
-	BashPath string
-}
-
-// RuntimeOptionsForShell carries an explicitly configured Bash path into Hook
-// execution while leaving other interpreter preferences independent.
-func RuntimeOptionsForShell(prefer, path string) RuntimeOptions {
-	if !strings.EqualFold(strings.TrimSpace(prefer), "bash") {
-		return RuntimeOptions{}
-	}
-	return RuntimeOptions{BashPath: strings.TrimSpace(path)}
 }
 
 // RuntimeIssue identifies one plugin Hook whose host dependency is unavailable.
@@ -1082,15 +1070,31 @@ func Run(ctx context.Context, payload Payload, hooks []ResolvedHook, spawner Spa
 	event := payload.Event
 	report := Report{Event: event}
 	for _, h := range hooks {
-		if h.Event != event || !MatchesTool(h, payload.ToolName) {
+		if h.Event != event {
+			continue
+		}
+		matched, matchErr := matchTool(h, payload.ToolName)
+		if matchErr != nil && recordUnevaluable(&report, h, matchErr) {
+			break
+		}
+		if !matched {
 			continue
 		}
 		cwd := h.Cwd
 		if cwd == "" {
 			cwd = payload.Cwd
 		}
+		if refuseChangedHook(&report, h) {
+			continue
+		}
 		timeout := h.timeout()
-		stdin := marshalPayload(payload, h.PayloadFormat)
+		stdin, marshalErr := marshalPayload(payload, h.PayloadFormat)
+		if marshalErr != nil {
+			if recordUnevaluable(&report, h, fmt.Errorf("%w: %w", ErrPayloadUnserializable, marshalErr)) {
+				break
+			}
+			continue
+		}
 		input := SpawnInput{
 			Command: h.Command,
 			Args:    h.Argv,
@@ -1129,6 +1133,7 @@ func Run(ctx context.Context, payload Payload, hooks []ResolvedHook, spawner Spa
 			TimedOut:  r.TimedOut,
 			Truncated: r.Truncated,
 			Duration:  time.Since(start),
+			Cause:     spawnCause(r),
 		})
 		if decision == DecisionBlock {
 			report.Blocked = true
@@ -1138,8 +1143,9 @@ func Run(ctx context.Context, payload Payload, hooks []ResolvedHook, spawner Spa
 	return report
 }
 
-func marshalPayload(payload Payload, format string) string {
+func marshalPayload(payload Payload, format string) (string, error) {
 	var body []byte
+	var err error
 	if format == "claude" {
 		claude := map[string]any{
 			"hook_event_name":        payload.Event,
@@ -1158,11 +1164,17 @@ func marshalPayload(payload Payload, format string) string {
 			"error":                  payload.Error,
 			"is_interrupt":           payload.IsInterrupt,
 		}
-		body, _ = json.Marshal(claude)
+		if payload.CallID != "" {
+			claude["tool_use_id"] = payload.CallID
+		}
+		body, err = json.Marshal(claude)
 	} else {
-		body, _ = json.Marshal(payload)
+		body, err = json.Marshal(payload)
 	}
-	return string(body) + "\n"
+	if err != nil {
+		return "", err
+	}
+	return string(body) + "\n", nil
 }
 
 // claudeToolResponse adapts a Reasonix tool result to the tool_response a

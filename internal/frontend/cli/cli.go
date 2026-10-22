@@ -12,14 +12,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"math"
 	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"reasonix/internal/state/sessionstore"
 	"slices"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -31,6 +29,7 @@ import (
 	"reasonix/internal/contract/ablation"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
+	"reasonix/internal/frontend/termrender"
 	"reasonix/internal/platform/notify"
 	"reasonix/internal/platform/telemetry"
 	"reasonix/internal/session/control"
@@ -64,29 +63,12 @@ func RunWithBuildInfo(args []string, info BuildInfo) int {
 	// welcome banner) come through localized. Env-only first; if a config
 	// exists and pins a language, that wins.
 	i18n.DetectLanguage("")
-	cmd := ""
-	if len(args) > 0 {
-		cmd = args[0]
-	}
-	if cmd == "--acp" {
-		cmd = "acp"
-	}
-	// -p/--print is one-shot print mode. reasonix has no interactive -p, so a
-	// print flag anywhere in a leading flag run (no explicit subcommand) routes
-	// the whole set to `run --print` — `reasonix --model X -p "task"` works, not
-	// only `reasonix -p ...`.
-	if cmd == "-p" || cmd == "--print" || (isDefaultInteractiveFlag(cmd) && hasLeadingPrintFlag(args)) {
-		args = append([]string{"run", "--print"}, stripLeadingPrintFlag(args)...)
-		cmd = "run"
-	}
-	if len(args) > 0 && isDefaultInteractiveFlag(cmd) {
-		cmd = ""
-	}
+	cmd, args := normalizeCommand(args)
 	doctorRepair := isDoctorRepairCommand(args)
 	if shouldMigrateLegacyConfigForCLI(cmd) && !doctorRepair {
 		migrateLegacyConfigForCLI()
 	}
-	if !doctorRepair {
+	if readsLanguageFromConfig(cmd, doctorRepair) {
 		if cfg, err := config.Load(); err == nil {
 			if cfg.Language != "" {
 				i18n.DetectLanguage(cfg.Language)
@@ -94,13 +76,14 @@ func RunWithBuildInfo(args []string, info BuildInfo) int {
 		}
 	}
 
-	// No interactive session to fall into: this binary is what Studio installs
-	// on a machine nobody is sitting at, so bare argv is a usage error rather
-	// than an invitation.
 	if len(args) == 0 || cmd == "" {
-		configureCLIThemeFromConfigForTTYOutput()
-		usage()
-		return 2
+		// A bare reasonix, or one given only session options, is the chat a
+		// person opens in a terminal, as it was in 1.x; without a terminal
+		// there is no one to chat with, so it prints how to run a task.
+		if term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) {
+			return runTUI(args, version)
+		}
+		return bareUsage(len(args) == 0)
 	}
 
 	rest := args[1:]
@@ -109,55 +92,59 @@ func RunWithBuildInfo(args []string, info BuildInfo) int {
 		return runAgent(rest, version)
 	case "serve":
 		return runServe(rest, version)
+	case "tui", "chat", "code":
+		return runTUI(rest, version)
 	case "web":
 		return runWebCommand(rest, version)
 	case "setup":
-		configureCLIThemeFromConfigForTTYOutput()
+		configureThemeForTTYOutput()
 		return setupConfig(rest)
 	case "config":
-		configureCLIThemeFromConfig()
+		termrender.ConfigureThemeFromConfig()
 		return configCommand(rest)
 	case "init":
-		configureCLIThemeFromConfig()
+		termrender.ConfigureThemeFromConfig()
 		return initHint()
 	case "acp":
-		configureCLIThemeFromConfig()
+		termrender.ConfigureThemeFromConfig()
 		return acpCommand(rest, version)
 	case "mcp":
-		configureCLIThemeFromConfig()
+		termrender.ConfigureThemeFromConfig()
 		return mcpCommand(rest)
 	case "login", "whoami", "logout":
 		return accountCommand(cmd, rest, version)
 	case "remote":
-		configureCLIThemeFromConfig()
+		termrender.ConfigureThemeFromConfig()
 		return remoteCommand(rest, version)
 	case "plugin":
-		configureCLIThemeFromConfig()
+		termrender.ConfigureThemeFromConfig()
 		return pluginCommand(rest)
 	case "subagent":
-		configureCLIThemeFromConfigForTTYOutput()
+		configureThemeForTTYOutput()
 		return subagentCommand(rest)
 	case "doctor":
 		if !doctorRepair {
-			configureCLIThemeFromConfig()
+			termrender.ConfigureThemeFromConfig()
 		}
 		return doctorCommand(rest, version)
 	case "report":
-		configureCLIThemeFromConfig()
+		termrender.ConfigureThemeFromConfig()
 		return reportCommand(rest)
 	case "session", "sessions", "catalogs":
 		return runSessionOrCatalogCommand(cmd, rest)
 	case "hook", "hooks":
-		configureCLIThemeFromConfig()
+		termrender.ConfigureThemeFromConfig()
 		return hookCommand(rest)
+	case "trust":
+		return trustCommand(rest)
 	case "task":
-		configureCLIThemeFromConfig()
+		termrender.ConfigureThemeFromConfig()
 		return taskCommand(rest)
 	case "review":
-		configureCLIThemeFromConfig()
+		termrender.ConfigureThemeFromConfig()
 		return reviewCommand(rest)
 	case "upgrade", "update":
-		configureCLIThemeFromConfig()
+		termrender.ConfigureThemeFromConfig()
 		return upgradeCommand(rest, version)
 	case "version":
 		// Detailed identity: version --verbose / --json. Top-level --version/-v
@@ -173,9 +160,7 @@ func RunWithBuildInfo(args []string, info BuildInfo) int {
 		usage()
 		return 0
 	default:
-		fmt.Fprintf(os.Stderr, i18n.M.UnknownCommandFmt+"\n\n", cmd)
-		usage()
-		return 2
+		return unknownCommand(cmd, rest)
 	}
 }
 
@@ -185,7 +170,7 @@ func isDoctorRepairCommand(args []string) bool {
 
 func isDefaultInteractiveFlag(arg string) bool {
 	switch arg {
-	case "--model", "--max-steps", "--continue", "-c", "--resume", "-r", "--copy", "--dangerously-skip-permissions", "--yolo", "--permission-mode", "--effort", "--dir", "--add-dir", "--allowed-tools", "--allowedTools", "--profile":
+	case "--model", "--max-steps", "--continue", "-c", "--resume", "-r", "--copy", "--dangerously-skip-permissions", "--yolo", "--permission-mode", "--effort", "--dir", "--add-dir", "--allowed-tools", "--allowedTools", "--profile", "--preset", "--agent-composition":
 		return true
 	}
 	if name, _, ok := strings.Cut(arg, "="); ok && isDefaultInteractiveFlag(name) {
@@ -220,23 +205,9 @@ func migrateMCPConfigForCLIWorkspace() {
 	}
 }
 
-func configureCLIThemeFromConfig() {
-	if cfg, err := config.Load(); err == nil {
-		configureCLIThemeWithStyle(cfg.UITheme(), cfg.UIThemeStyle())
-		cliCursorShape = cfg.UICursorShape()
-	} else {
-		configureCLITheme("auto")
-		cliCursorShape = "bar"
-	}
-}
-
-func configureCLIThemeFromConfigForTTYOutput() {
-	if isTTY(os.Stdout) {
-		withTerminalProbe(configureCLIThemeFromConfig)
-		return
-	}
-	configureCLIThemeFromConfig()
-}
+// configureThemeForTTYOutput is the one theme setup that may probe the
+// terminal; metadata commands must never reach it.
+var configureThemeForTTYOutput = termrender.ConfigureThemeFromConfigForTTYOutput
 
 // setupProfile builds a ready-to-drive Controller from config via boot.Build.
 // The assembly (model resolution, tool registry, permission gate, two-model
@@ -258,11 +229,16 @@ type cliPermissionMode struct {
 	allow    []string
 }
 
+// parsePermissionMode also reads 1.x's three names, so a 1.x command line
+// keeps working: workspace-write is Auto, danger-full-access is Yolo, and
+// read-only refuses every write.
 func parsePermissionMode(value string) (cliPermissionMode, error) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "", "default", "ask":
 		return cliPermissionMode{approval: control.ToolApprovalAsk}, nil
-	case "auto":
+	case "read-only", "readonly":
+		return cliPermissionMode{approval: control.ToolApprovalReadOnly}, nil
+	case "auto", "workspace-write":
 		return cliPermissionMode{approval: control.ToolApprovalAuto}, nil
 	case "acceptedits", "accept-edits":
 		return cliPermissionMode{approval: control.ToolApprovalAsk, allow: []string{
@@ -274,35 +250,11 @@ func parsePermissionMode(value string) (cliPermissionMode, error) {
 		return cliPermissionMode{approval: control.ToolApprovalDontAsk}, nil
 	case "plan":
 		return cliPermissionMode{approval: control.ToolApprovalAsk, plan: true}, nil
-	case "bypasspermissions", "bypass-permissions", "yolo":
+	case "bypasspermissions", "bypass-permissions", "yolo", "danger-full-access":
 		return cliPermissionMode{approval: control.ToolApprovalYolo}, nil
 	default:
-		return cliPermissionMode{}, fmt.Errorf("unknown permission mode %q (want manual, ask, auto, acceptEdits, dontAsk, plan, or bypassPermissions)", value)
+		return cliPermissionMode{}, fmt.Errorf("unknown permission mode %q (want read-only, manual, ask, auto, acceptEdits, dontAsk, plan, or bypassPermissions; 1.x's workspace-write and danger-full-access also work)", value)
 	}
-}
-
-func resolveRunPermissionMode(value string, auto, modeExplicit bool) (string, error) {
-	if !auto {
-		return value, nil
-	}
-	if modeExplicit {
-		return "", errors.New("--auto/-y cannot be combined with --permission-mode")
-	}
-	return "auto", nil
-}
-
-// resolveCLISessionDir returns the session dir for CLI invocations. When the
-// current working directory maps to a project session dir, the project dir is
-// used so /resume shows project history. Falls back to the global session dir.
-func resolveCLISessionDir() string {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return config.SessionDir()
-	}
-	if projDir := config.ProjectSessionDir(cwd); projDir != "" && projDir != config.SessionDir() {
-		return projDir
-	}
-	return config.SessionDir()
 }
 
 func parseRuntimeProfile(value string) (string, error) {
@@ -316,7 +268,7 @@ func parseRuntimeProfile(value string) (string, error) {
 	case boot.TokenModeDelivery, "deliver", "quality":
 		return boot.TokenModeDelivery, nil
 	default:
-		return "", fmt.Errorf("unknown execution setting %q (want light, balanced, or delivery; legacy: economy, full)", value)
+		return "", fmt.Errorf("unknown execution setting %q (want %s; legacy: economy, full)", value, livePresets(" or "))
 	}
 }
 
@@ -334,38 +286,8 @@ func chdirTo(dir string) int {
 	return 0
 }
 
-// workspaceRootForDir returns the explicit project root to pin when --dir was
-// given. It runs after chdirTo has already switched into dir, so the process
-// working directory is the resolved root. An empty dir means no override (fall
-// back to git-root detection). A Getwd failure is returned rather than swallowed:
-// silently reverting to "" would re-trigger git-root/default resolution and break
-// the explicit --dir guarantee, so the caller must fail loudly instead.
-func workspaceRootForDir(dir string) (string, error) {
-	if dir == "" {
-		return "", nil
-	}
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("resolve --dir workspace root: %w", err)
-	}
-	return wd, nil
-}
-
 func modelForResumePath(modelName, resumePath string, cfg *config.Config) string {
-	if strings.TrimSpace(modelName) != "" || strings.TrimSpace(resumePath) == "" {
-		return modelName
-	}
-	sessionModel, ok := sessionstore.LoadSessionModel(resumePath)
-	if !ok {
-		return modelName
-	}
-	if cfg == nil {
-		return sessionModel
-	}
-	if _, ok := cfg.ResolveModel(sessionModel); !ok {
-		return modelName
-	}
-	return sessionModel
+	return boot.ModelForResume(modelName, resumePath, cfg)
 }
 
 func loadResumableSession(path string) (*sessionstore.Session, error) {
@@ -380,79 +302,85 @@ func loadResumableSession(path string) (*sessionstore.Session, error) {
 // registers "c" as a long flag name, which leaves "-c" unparseable
 // ("unknown shorthand flag: 'c' in -c") while accidentally accepting "--c".
 func registerContinueFlag(fs *pflag.FlagSet) *bool {
-	return fs.BoolP("continue", "c", false, "resume the most recent saved session")
+	return fs.BoolP("continue", "c", false, "resume the most recent saved session, or start a fresh one when none exists")
+}
+
+// applyRunCopy applies --copy to a resolved resume path: it duplicates the
+// session and prints where the copy lives, returning the path to continue in
+// and a non-zero exit code to stop the run. A --continue that found no session
+// starts fresh (startedFresh), so there is nothing to duplicate and --copy is
+// skipped; --copy with no session to duplicate is a usage error.
+func applyRunCopy(resumePath string, startedFresh, copySession bool, format runOutputFormat, printOnly bool) (string, int) {
+	if !copySession || resumePath == "" {
+		if copySession && !startedFresh {
+			fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, "--copy requires --resume or --continue")
+			return "", 2
+		}
+		return resumePath, 0
+	}
+	copied, err := copySessionForWriting(resumePath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
+		return "", 1
+	}
+	// Keep structured (json/stream-json) and --print stdout a single
+	// machine-readable payload: the human copy notice goes to stderr there.
+	// Plain text runs keep it on stdout, where callers scrape the copied path.
+	if format == runOutputText && !printOnly {
+		fmt.Printf("continuing in a session copy: %s\n", copied)
+	} else {
+		fmt.Fprintf(os.Stderr, "continuing in a session copy: %s\n", copied)
+	}
+	return copied, 0
 }
 
 func runAgent(args []string, version string) int {
 	defer closeCLIUsageCatalogs()
-	fs := pflag.NewFlagSet("run", pflag.ContinueOnError)
-	fs.SetInterspersed(true)
-	model := fs.String("model", "", "provider name (default: config default_model)")
-	profileFlag := fs.String("profile", "", "deprecated: use --preset (economy|balanced|delivery)")
-	presetFlag := fs.String("preset", "balanced", "agent execution setting: light | balanced | delivery")
-	maxSteps := fs.Int("max-steps", 0, "one-off max tool-call rounds (0 = automatic)")
-	showThinking := fs.Bool("show-thinking", false, "show thinking text instead of the collapsed thinking marker")
-	metricsPath := fs.String("metrics", "", "write a JSON token/cache/cost summary of the run to this path")
-	trajectoryPath := fs.String("trajectory", "", "append a timestamped JSONL trajectory of the run's full event stream (tool calls, reasoning, decisions) to this path")
-	ablateFlag, foldIndexFlag := registerArmFlags(fs)
-	dir := fs.String("dir", "", "change to this directory first (project root); config, sandbox and file tools resolve from here")
-	cont := registerContinueFlag(fs)
-	resume := fs.String("resume", "", "resume by session file path, session ID, or machine session ID (takes precedence over --continue)")
-	copySession := fs.Bool("copy", false, "with --resume/--continue: duplicate the session and continue in the copy (escape hatch when the original is held by another Reasonix process)")
-	effort := fs.String("effort", "", "session reasoning effort override")
-	permissionMode := fs.String("permission-mode", "ask", "permission mode: manual | ask | auto | acceptEdits | dontAsk | plan | bypassPermissions")
-	autoApprove := fs.BoolP("auto", "y", false, "explicitly auto-approve ordinary writer fallbacks (alias for --permission-mode auto)")
-	printOnly := fs.BoolP("print", "p", false, "print only the final response")
-	eventsJSONL := fs.Bool("events-jsonl", false, "emit a redacted structured event stream as JSONL")
-	outputFormat := fs.String("output-format", "text", "output format: text | json | stream-json")
-	var additionalDirs []string
-	fs.StringArrayVar(&additionalDirs, "add-dir", nil, "allow tool access to an additional directory (repeatable)")
-	var allowedToolValues []string
-	fs.StringArrayVar(&allowedToolValues, "allowed-tools", nil, "comma or space-separated permission rules to allow")
-	fs.StringArrayVar(&allowedToolValues, "allowedTools", nil, "alias for --allowed-tools")
+	f := newRunFlags()
+	fs := f.fs
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
-	resolvedPermissionMode, err := resolveRunPermissionMode(*permissionMode, *autoApprove, fs.Changed("permission-mode"))
+	resolvedPermissionMode, err := resolveRunPermissionMode(*f.permissionMode, *f.autoApprove, *f.yolo, fs.Changed("permission-mode"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 2
 	}
-	*permissionMode = resolvedPermissionMode
-	allowedTools, err := splitAllowedToolRules(allowedToolValues)
+	*f.permissionMode = resolvedPermissionMode
+	allowedTools, err := splitAllowedToolRules(f.allowedToolValues)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 2
 	}
-	format, err := parseRunOutputFormat(*outputFormat)
+	format, err := parseRunOutputFormat(*f.outputFormat)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 2
 	}
-	if *eventsJSONL {
+	if *f.eventsJSONL {
 		if fs.Changed("output-format") {
 			fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, "--events-jsonl cannot be combined with --output-format")
 			return 2
 		}
 		format = runOutputEventsJSONL
 	}
-	profileRaw := strings.TrimSpace(*profileFlag)
+	profileRaw := strings.TrimSpace(*f.profileFlag)
 	if profileRaw != "" {
-		fmt.Fprintln(os.Stderr, "warning: --profile is deprecated; use --preset light|balanced|delivery")
+		warnProfileDeprecated()
 	} else {
-		profileRaw = strings.TrimSpace(*presetFlag)
+		profileRaw = strings.TrimSpace(*f.presetFlag)
 	}
 	profile, err := parseRuntimeProfile(profileRaw)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 2
 	}
-	ablated, err := ablation.ParseArm(*ablateFlag, *foldIndexFlag)
+	ablated, err := ablation.ParseArm(*f.ablateFlag, *f.foldIndexFlag)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 2
 	}
-	permissions, err := parsePermissionMode(*permissionMode)
+	permissions, err := parsePermissionMode(*f.permissionMode)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 2
@@ -462,16 +390,16 @@ func runAgent(args []string, version string) int {
 		return 2
 	}
 	allowedTools = uniqueStrings(append(allowedTools, permissions.allow...))
-	if rc := chdirTo(*dir); rc != 0 {
+	if rc := chdirTo(*f.dir); rc != 0 {
 		return rc
 	}
-	workspaceRoot, err := workspaceRootForDir(*dir)
+	workspaceRoot, err := workspaceRootForDir(*f.dir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 1
 	}
 	cfg, _ := config.Load()
-	configureCLIThemeFromConfigForTTYOutput()
+	configureThemeForTTYOutput()
 
 	prompt := strings.TrimSpace(strings.Join(fs.Args(), " "))
 	if prompt == "" {
@@ -494,49 +422,33 @@ func runAgent(args []string, version string) int {
 	// handled before any heavy assembly. --resume takes precedence over
 	// --continue, matching the Resume call below. Accept file paths, branch
 	// IDs, preview text, and opaque machine session IDs (#7429).
-	resumePath := strings.TrimSpace(*resume)
+	resumePath, startedFresh := strings.TrimSpace(*f.resume), false
 	if resumePath != "" {
-		resolved, err := resolveSessionQuery(resolveCLISessionDir(), resumePath)
+		resolved, err := resolveSessionQuery(resolveCLISessionDirFor(workspaceRoot), resumePath)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
+			reportResumeQueryError(os.Stderr, err)
 			return 1
 		}
 		resumePath = resolved
 	}
-	if resumePath == "" && *cont {
-		sessionDir := resolveCLISessionDir()
+	if resumePath == "" && *f.cont {
+		sessionDir := resolveCLISessionDirFor(workspaceRoot)
 		reclaimCLIRecoveryBranches(sessionDir)
-		session, ok := mostRecentSession(sessionDir)
-		if !ok {
-			fmt.Fprintln(os.Stderr, i18n.M.NoSessionToResume)
-			return 1
-		}
-		resumePath = session.Path
-	}
-	if *copySession && resumePath == "" {
-		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, "--copy requires --resume or --continue")
-		return 2
-	}
-	if *copySession {
-		copied, err := copySessionForWriting(resumePath)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
-			return 1
-		}
-		// Keep structured (json/stream-json) and --print stdout a single
-		// machine-readable payload: the human copy notice goes to stderr there.
-		// Plain text runs keep it on stdout, where callers scrape the copied path.
-		if format == runOutputText && !*printOnly {
-			fmt.Printf("continuing in a session copy: %s\n", copied)
+		if session, ok := mostRecentSession(sessionDir); !ok {
+			fmt.Fprintln(os.Stderr, i18n.M.NoSessionToResumeStartingNew)
+			startedFresh = true
 		} else {
-			fmt.Fprintf(os.Stderr, "continuing in a session copy: %s\n", copied)
+			resumePath = session.Path
 		}
-		resumePath = copied
 	}
-	sessionMode := cliTelemetrySessionMode(*cont, strings.TrimSpace(*resume) != "", *copySession)
+	resumePath, rc := applyRunCopy(resumePath, startedFresh, *f.copySession, format, *f.printOnly)
+	if rc != 0 {
+		return rc
+	}
+	sessionMode := cliTelemetrySessionMode(resumePath != "", strings.TrimSpace(*f.resume) != "", *f.copySession)
 	reporter := startCLITelemetry(cfg, telemetry.Options{
 		Version: version, Interactive: false, CLIMode: "run", Profile: profile,
-		PermissionMode: *permissionMode, SessionMode: sessionMode,
+		PermissionMode: *f.permissionMode, SessionMode: sessionMode,
 	})
 
 	// Own the session file for the lifetime of this run so a desktop window (or
@@ -548,7 +460,7 @@ func runAgent(args []string, version string) int {
 	if resumePath != "" {
 		if err := leases.Rebind(resumePath); err != nil {
 			if errors.Is(err, sessionstore.ErrSessionLeaseHeld) {
-				fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, sessionLeaseResumeRefusal(err))
+				fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, sessionLeaseResumeRefusal(err, *f.takeover))
 			} else {
 				fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 			}
@@ -566,18 +478,18 @@ func runAgent(args []string, version string) int {
 	defer stop()
 	started := time.Now()
 
-	chain, err := buildRunSink(format, *printOnly, *showThinking, *metricsPath, *trajectoryPath, cfg, reporter)
+	chain, err := buildRunSink(format, *f.printOnly, *f.showThinking, *f.metricsPath, *f.trajectoryPath, cfg, reporter)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 1
 	}
 	sink, resultOutput, metrics := chain.sink, chain.resultOutput, chain.metrics
 	if resumePath != "" {
-		*model = modelForResumePath(*model, resumePath, cfg)
+		*f.model = modelForResumePath(*f.model, resumePath, cfg)
 	}
 	var effortOverride *string
-	if strings.TrimSpace(*effort) != "" {
-		effortOverride = effort
+	if strings.TrimSpace(*f.effort) != "" {
+		effortOverride = f.effort
 	}
 	// `reasonix run` is headless: there is no key loop to answer approval or ask
 	// prompts, and the approval timeout defaults to infinite. Installing the
@@ -586,13 +498,13 @@ func runAgent(args []string, version string) int {
 	// non-blocking headless gate instead — passed into boot.Build so every
 	// headless-only gate it constructs (task/read_only_task, writer-capable
 	// skill sub-agents, the planner runner) gets the same contract as the parent
-	// executor, not just the top-level one. Default/ask fails closed because no
-	// UI can answer; unattended writes require explicit --auto/-y,
-	// --permission-mode auto, or yolo.
-	overrides := runBuildOverrides(effortOverride, allowedTools, additionalDirs, workspaceRoot,
-		permissions.approval, cliSessionRecoveredHandler(leases), ablated)
+	// executor, not just the top-level one. Ask fails closed because no UI can
+	// answer; with no mode named, the build's sandbox claim and the folder's
+	// trust decide between that and auto once the controller exists.
+	overrides := runBuildOverrides(effortOverride, allowedTools, f.additionalDirs, workspaceRoot, permissions.approval, cliSessionRecoveredHandler(leases), ablated)
 	overrides.Version = version
-	ctrl, err := setupProfileWithOverrides(ctx, *model, *maxSteps, true, sink, profile, overrides)
+	overrides = withComposition(overrides, *f.agentComposition, resumeSession)
+	ctrl, err := setupProfileWithOverrides(ctx, *f.model, *f.maxSteps, true, sink, profile, overrides)
 	if err != nil {
 		if resultOutput != nil && format != runOutputText {
 			if encodeErr := resultOutput.Finalize("", started, err); encodeErr != nil {
@@ -605,17 +517,17 @@ func runAgent(args []string, version string) int {
 	}
 	defer ctrl.Close()
 	SetTaskJobKiller(ctrlKillerAdapter{ctrl})
-	ctrl.ApplyHeadlessApprovalMode(permissions.approval)
+	permissions.approval = chain.settlePosture(ctrl, strings.TrimSpace(*f.permissionMode) == "", permissions.approval)
 
 	if err := bindRunSession(ctrl, leases, resumeSession, resumePath); err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, control.SessionInUseMessage(err)+"; "+control.SessionLeaseCloseHint)
 		return 1
 	}
 
-	recordTrajectoryHeader(chain.trajectory, ctrl)
+	chain.begin(ctrl, version, prompt)
 	runErr := ctrl.Run(ctx, prompt)
 	reporter.RecordRecovery(ctrl.DrainRecoveryMetrics())
-	completion := classifyRunCompletion(runErr)
+	completion := classifyRunCompletion(runErr).withFolderRefusal(chain.refusedByFolderTrust(os.Stderr)).withFailOnUnverified(*f.failOnUnverified)
 	if cfg != nil {
 		notify.SendEvent(newNotificationSender(), i18n.M, cfg.Notifications, event.Event{
 			Kind:    event.TurnDone,
@@ -645,7 +557,7 @@ func runAgent(args []string, version string) int {
 				)
 			}
 		}
-		if err := writeMetrics(*metricsPath, final); err != nil {
+		if err := writeMetrics(*f.metricsPath, final); err != nil {
 			fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		}
 	}
@@ -679,7 +591,7 @@ func defaultConfigTarget() string {
 	if p := config.UserConfigPath(); p != "" {
 		return p
 	}
-	return "reasonix.toml"
+	return config.ProjectConfigPath(".")
 }
 
 // defaultEnvTarget is the display target for the reasonix-owned global
@@ -696,7 +608,7 @@ func resolveSetupTargets(args []string) setupTargets {
 	for _, a := range args {
 		switch a {
 		case "--local", "-l":
-			t.config = "reasonix.toml"
+			t.config = config.ProjectConfigPath(".")
 		default:
 			t.config = a
 		}
@@ -718,6 +630,9 @@ func displayPath(p string) string {
 // Project memory is a separate concern — the in-session `/init` skill generates
 // AGENTS.md (see initHint).
 func setupConfig(args []string) int {
+	if code, ok := setupArgsVerdict(args, os.Stdout, os.Stderr); !ok {
+		return code
+	}
 	t := resolveSetupTargets(args)
 	path := t.config
 	if _, err := os.Stat(path); err == nil {
@@ -734,7 +649,7 @@ func setupConfig(args []string) int {
 	if isInteractive() {
 		rc := interactiveSetup(t.config, t.env)
 		if rc == 0 {
-			fmt.Printf(i18n.M.TryHintFmt+"\n", bold("reasonix"))
+			fmt.Printf(i18n.M.TryHintFmt+"\n", termrender.Bold("reasonix"))
 		}
 		return rc
 	}
@@ -805,10 +720,10 @@ func interactiveSetup(configPath, envPath string) int {
 	// Now that the catalogue matches the user's choice, show the welcome banner
 	// in their language before any substantive prompt.
 	fmt.Println()
-	fmt.Print(boxed([]string{
-		accent("◆") + " " + fmt.Sprintf(i18n.M.WelcomeTitleFmt, bold("reasonix")),
+	fmt.Print(termrender.Boxed([]string{
+		termrender.Accent("◆") + " " + fmt.Sprintf(i18n.M.WelcomeTitleFmt, termrender.Bold("reasonix")),
 		"",
-		dim(i18n.M.NoConfigYet),
+		termrender.Dim(i18n.M.NoConfigYet),
 	}))
 	fmt.Println()
 
@@ -1110,7 +1025,7 @@ func promptAnthropicProviderManualWith(in *bufio.Scanner, baseURL, keyEnv, apiKe
 		Name: providerSlug("anthropic", baseURL), Kind: "anthropic", BaseURL: baseURL,
 		Model: modelName, APIKeyEnv: keyEnv, ContextWindow: askContextWindow(in, os.Stdout),
 	}
-	fmt.Printf("  %s\n", green(fmt.Sprintf(i18n.M.AnthropicAddedFmt, entry.Name+"/"+modelName)))
+	fmt.Printf("  %s\n", termrender.Green(fmt.Sprintf(i18n.M.AnthropicAddedFmt, entry.Name+"/"+modelName)))
 	return newProviderPromptResult([]config.ProviderEntry{entry}, keyEnv, apiKey), nil
 }
 
@@ -1130,19 +1045,19 @@ func promptAnthropicProviderFromURL() (providerPromptResult, error) {
 	keyEnv := promptAPIKeyEnvName(in, os.Stdout, i18n.M.AnthropicPromptKeyEnv, "ANTHROPIC_API_KEY")
 	apiKey := ask(in, os.Stdout, i18n.M.AnthropicPromptAPIKey, "")
 
-	fmt.Printf("  %s\n", dim(fmt.Sprintf(i18n.M.AnthropicFetchingModelsFmt, "anthropic")))
+	fmt.Printf("  %s\n", termrender.Dim(fmt.Sprintf(i18n.M.AnthropicFetchingModelsFmt, "anthropic")))
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	models, err := fetchModelListCompat(ctx, baseURL, apiKey)
 	if err != nil || len(models) == 0 {
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "  %s\n", dim(fmt.Sprintf(i18n.M.AnthropicFetchModelsFailedFmt, "anthropic", err)))
+			fmt.Fprintf(os.Stderr, "  %s\n", termrender.Dim(fmt.Sprintf(i18n.M.AnthropicFetchModelsFailedFmt, "anthropic", err)))
 		} else {
-			fmt.Fprintf(os.Stderr, "  %s\n", dim(i18n.M.AnthropicFetchEmpty))
+			fmt.Fprintf(os.Stderr, "  %s\n", termrender.Dim(i18n.M.AnthropicFetchEmpty))
 		}
 		return promptAnthropicProviderManualWith(in, baseURL, keyEnv, apiKey)
 	}
-	fmt.Printf("  %s\n", green(fmt.Sprintf(i18n.M.AnthropicFetchModelsSuccessFmt, len(models), "anthropic")))
+	fmt.Printf("  %s\n", termrender.Green(fmt.Sprintf(i18n.M.AnthropicFetchModelsSuccessFmt, len(models), "anthropic")))
 
 	items := make([]menuItem, len(models))
 	for i, m := range models {
@@ -1160,7 +1075,7 @@ func promptAnthropicProviderFromURL() (providerPromptResult, error) {
 		Name: providerSlug("anthropic", baseURL), Kind: "anthropic", BaseURL: baseURL,
 		Models: selected, Model: selected[0], APIKeyEnv: keyEnv, ContextWindow: askContextWindow(in, os.Stdout),
 	}
-	fmt.Printf("  %s\n", green(fmt.Sprintf(i18n.M.AnthropicAddedFmt, entry.Name+"/"+selected[0])))
+	fmt.Printf("  %s\n", termrender.Green(fmt.Sprintf(i18n.M.AnthropicAddedFmt, entry.Name+"/"+selected[0])))
 	return newProviderPromptResult([]config.ProviderEntry{entry}, keyEnv, apiKey), nil
 }
 
@@ -1274,7 +1189,7 @@ func configureKeys(selected []config.ProviderEntry, r io.Reader, w io.Writer) []
 					continue
 				}
 			}
-			fmt.Fprintf(w, "  %s %s\n", green("✓"), fmt.Sprintf(i18n.M.APIKeyAlreadySetFmt, p.APIKeyEnv))
+			fmt.Fprintf(w, "  %s %s\n", termrender.Green("✓"), fmt.Sprintf(i18n.M.APIKeyAlreadySetFmt, p.APIKeyEnv))
 			envLines = append(envLines, p.APIKeyEnv+"="+cur)
 			continue
 		}
@@ -1288,18 +1203,32 @@ func configureKeys(selected []config.ProviderEntry, r io.Reader, w io.Writer) []
 
 // ask prints a prompt to w and returns the entered line, or def if input is empty.
 func ask(in *bufio.Scanner, w io.Writer, label, def string) string {
+	answer, err := askAnswer(in, w, label, def)
+	if err != nil {
+		return def
+	}
+	return answer
+}
+
+// askAnswer is ask for a decision that must not default when nobody answered:
+// io.EOF or the reader's error says the input ended, an empty line is an answer
+// and takes def.
+func askAnswer(in *bufio.Scanner, w io.Writer, label, def string) (string, error) {
 	if def != "" {
 		fmt.Fprintf(w, "%s [%s]: ", label, def)
 	} else {
 		fmt.Fprintf(w, "%s: ", label)
 	}
 	if !in.Scan() {
-		return def
+		if err := in.Err(); err != nil {
+			return "", err
+		}
+		return "", io.EOF
 	}
 	if v := strings.TrimSpace(in.Text()); v != "" {
-		return v
+		return v, nil
 	}
-	return def
+	return def, nil
 }
 
 // isInteractive reports whether we're attached to a real terminal on both
@@ -1374,6 +1303,30 @@ func readStdin() string {
 	}
 	data, _ := io.ReadAll(os.Stdin)
 	return strings.TrimSpace(string(data))
+}
+
+// normalizeCommand names the subcommand argv asks for. Flags written before
+// `run` move after it only when the session flags and run's accept them
+// identically. A -p among the leading flags, up to the verb, is one-shot print
+// mode and routes the line to `run --print`; a -p after the verb is run's own.
+func normalizeCommand(args []string) (string, []string) {
+	cmd := ""
+	if len(args) > 0 {
+		cmd = args[0]
+	}
+	if cmd == "--acp" {
+		cmd = "acp"
+	}
+	if routed, ok := leadingFlagsIntoRun(args); ok {
+		return "run", routed
+	}
+	if cmd == "-p" || cmd == "--print" || (startsWithSessionFlag(cmd) && hasLeadingPrintFlag(flagsBeforeVerb(args))) {
+		return "run", append([]string{"run", "--print"}, stripLeadingPrintFlag(args)...)
+	}
+	if len(args) > 0 && isDefaultInteractiveFlag(cmd) {
+		cmd = ""
+	}
+	return cmd, args
 }
 
 func usage() {
@@ -1585,7 +1538,7 @@ func configReasoningLanguageCommand(args []string) int {
 	}
 	path := config.UserConfigPath()
 	if *local {
-		path = "reasonix.toml"
+		path = config.ProjectConfigPath(".")
 	}
 	if path == "" {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, "cannot resolve config path")
@@ -1648,16 +1601,15 @@ func configCompactRatioCommand(args []string) int {
 		fmt.Printf("compact_ratio = %s (%s)\n", formatCompactRatioPercent(cfg.Agent.CompactRatio), compactRatioSource())
 		return 0
 	}
-	percent, err := strconv.ParseFloat(strings.TrimSpace(rest[0]), 64)
-	if err != nil || math.IsNaN(percent) || math.IsInf(percent, 0) || percent < 65 || percent > 85 {
-		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, "compact ratio must be a percentage between 65 and 85")
+	ratio, err := parseCLICompactRatio(rest[0])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 2
 	}
-	ratio := percent / 100
 	path := config.UserConfigPath()
 	scope := "user"
 	if *local {
-		path = "reasonix.toml"
+		path = config.ProjectConfigPath(".")
 		scope = "project"
 	}
 	if path == "" {
@@ -1702,8 +1654,8 @@ func configCompactRatioCommand(args []string) int {
 }
 
 func compactRatioSource() string {
-	if config.ConfigFileDefinesCompactRatio("reasonix.toml") {
-		return "project: " + displayPath("reasonix.toml")
+	if path := config.ProjectConfigPath("."); config.ConfigFileDefinesCompactRatio(path) {
+		return "project: " + displayPath(path)
 	}
 	if path := config.UserConfigPath(); path != "" && config.ConfigFileDefinesCompactRatio(path) {
 		return "user: " + displayPath(path)
@@ -1717,12 +1669,12 @@ func formatCompactRatioPercent(ratio float64) string {
 }
 
 func configUsage() {
-	fmt.Print(`Usage:
+	fmt.Printf(`Usage:
   reasonix config reasoning-language [--local] [auto|zh|en]
-  reasonix config compact-ratio [--local] [65..85]
+  reasonix config compact-ratio [--local] [PERCENT] (%s)
   reasonix config currency [auto|CNY|USD]
   reasonix config telemetry [auto|on|off]
-`)
+`, compactRatioPercentageRequirement())
 }
 
 func configTelemetryUsage() {
@@ -1732,9 +1684,7 @@ func configTelemetryUsage() {
 }
 
 func configCompactRatioUsage() {
-	fmt.Print(`Usage:
-  reasonix config compact-ratio [--local] [65..85]
-`)
+	fmt.Printf("Usage:\n  reasonix config compact-ratio [--local] [PERCENT] (%s)\n", compactRatioPercentageRequirement())
 }
 
 func startCLITelemetry(cfg *config.Config, opts telemetry.Options) *telemetry.Reporter {
@@ -1758,8 +1708,12 @@ func startCLITelemetryWithIO(cfg *config.Config, opts telemetry.Options, in io.R
 	scanner := bufio.NewScanner(in)
 	mode := ""
 	for mode == "" {
-		answer := strings.ToLower(strings.TrimSpace(ask(scanner, out, i18n.M.CLITelemetryConsentPrompt, "Y/n")))
-		switch answer {
+		raw, err := askAnswer(scanner, out, i18n.M.CLITelemetryConsentPrompt, "Y/n")
+		if err != nil {
+			fmt.Fprintln(out)
+			return nil
+		}
+		switch strings.ToLower(strings.TrimSpace(raw)) {
 		case "y", "yes", "y/n":
 			mode = "auto"
 		case "n", "no":

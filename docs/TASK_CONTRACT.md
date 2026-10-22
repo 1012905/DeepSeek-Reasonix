@@ -1,12 +1,17 @@
+---
+owner: @esengine
+backup: @SivanCola
+status: active
+reviewed: 2026-09-29
+---
+
 # Task Contracts and Pause Policy
 
 <a href="./GUIDE.md">Guide</a>
 
-Reasonix works best when nontrivial work is described as a **task contract**:
-what the work is for, what action is requested, how the result should be
-delivered, what boundaries must be preserved, and when the agent should pause.
-Some prompt templates call the last section "Checkpoint"; Reasonix documents it
-as "Pause policy" to avoid confusion with Checkpoints/Rewind snapshots.
+Reasonix works best when nontrivial work is described as a **task contract**: what the work is for, what action is requested, how the result should be delivered, what boundaries must be preserved, and when the agent should pause.
+
+Some prompt templates call the last section "Checkpoint"; Reasonix documents it as "Pause policy" to avoid confusion with Checkpoints/Rewind snapshots.
 
 This is intentionally not a larger role prompt. Strong coding agents usually do
 not need step-by-step thinking instructions. They need clear boundaries and
@@ -72,7 +77,7 @@ Output format:
 After implementation, summarize changed files and verification results.
 
 Constraints:
-Do not change the Wails JSON contract.
+Do not change the desktop host JSON contract.
 Do not refactor unrelated composer state.
 If browser verification cannot run, say why.
 

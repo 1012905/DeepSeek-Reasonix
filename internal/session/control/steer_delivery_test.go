@@ -87,11 +87,13 @@ func TestSteerUnreadAtTurnEndIsDeliveredAsAFollowup(t *testing.T) {
 	ag := agent.New(prov, tool.NewRegistry(), sessionstore.NewSession(""), agent.Options{}, event.Discard)
 	c := New(Options{Runner: ag, Executor: ag, SessionPath: session, SessionDir: dir, Sink: event.Discard})
 	defer c.autosaveWG.Wait()
+	release := sync.OnceFunc(func() { close(prov.release) })
+	defer release()
 
 	c.Submit("write me something")
 	select {
 	case <-prov.started:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testenv.Budget(t)):
 		t.Fatal("the first turn never reached the provider")
 	}
 
@@ -107,10 +109,10 @@ func TestSteerUnreadAtTurnEndIsDeliveredAsAFollowup(t *testing.T) {
 		t.Fatalf("disposition = %s, want steer_accepted: the turn is still running", got.Disposition)
 	}
 
-	close(prov.release)
+	release()
 	waitIdleAdmission(t, c)
 
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(testenv.Budget(t))
 	for !prov.sawUserText("actually use plan B") {
 		if time.Now().After(deadline) {
 			meta, _, readErr := c.ReadInboxItem(rec.ItemID)

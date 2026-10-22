@@ -4,6 +4,15 @@
 // up: a single total would have to invent an exchange rate, and the rate a turn
 // was billed at is not the rate today. An empty list means the records carry no
 // cost for that span, which is not the same as having cost nothing.
+// A usage window is either a trailing day count or an explicit inclusive
+// calendar range. Keeping them separate prevents "from" from silently riding
+// on a days query and being ignored by older kernels.
+export const DEFAULT_USAGE_DAYS = 30;
+
+export type UsageQuery =
+  | { days: number; source?: string }
+  | { from: string; to: string; source?: string };
+
 export interface Money {
   amount: string;
   currency: string;
@@ -19,6 +28,8 @@ export interface UsageDay {
   cacheHit: number;
   cacheMiss: number;
   cost?: Money[];
+  // A subscription's API-priced estimate for the day: not money billed, never added to cost.
+  estimateCost?: Money[];
 }
 
 export interface UsageModel {
@@ -43,6 +54,9 @@ export interface UsageReport {
   cache_hit: number;
   cache_miss: number;
   cost?: Money[];
+  // What subscription-equivalent connections would have cost at API prices. It is
+  // an estimate of a plan's use, not a charge, and is kept out of cost.
+  estimateCost?: Money[];
   // Set when any folded quote was priced from a fallback rate card. The
   // total is then an estimate wearing a "paid" label unless the panel says so.
   costEstimated?: boolean;

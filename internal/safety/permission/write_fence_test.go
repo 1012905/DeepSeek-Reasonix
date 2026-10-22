@@ -118,6 +118,30 @@ func TestSessionGrantForAnInstallPlanNamesTheTicket(t *testing.T) {
 	}
 }
 
+// A session grant for one host must not answer for another, or approving a
+// harmless host first would open every host after it.
+func TestSessionGrantForMCPSignInNamesTheServerAndHost(t *testing.T) {
+	rule := SessionGrantRuleForScope(MCPSignIn, "figma → auth.example.test")
+	if !SessionGrantMatches(rule, MCPSignIn, "figma → auth.example.test") {
+		t.Errorf("rule %q does not cover the sign-in it was granted for", rule)
+	}
+	for _, other := range []string{"figma → evil.example", "other → auth.example.test"} {
+		if SessionGrantMatches(rule, MCPSignIn, other) {
+			t.Errorf("rule %q also covers %q", rule, other)
+		}
+	}
+}
+
+func TestSessionGrantForEgressNamesTheHost(t *testing.T) {
+	rule := SessionGrantRuleForScope(NetworkEgress, "pypi.org")
+	if !SessionGrantMatches(rule, NetworkEgress, "pypi.org") {
+		t.Errorf("rule %q does not cover the host it was granted for", rule)
+	}
+	if SessionGrantMatches(rule, NetworkEgress, "evil.example") {
+		t.Errorf("rule %q covers another host", rule)
+	}
+}
+
 // The guard over the single declaration. Membership carries three consequences
 // and nothing re-states them, so a tool cannot arrive with one and not the
 // others — what can still go wrong is an entry whose question is never true,
@@ -131,6 +155,9 @@ func TestEverySubjectSensitiveToolActuallyAsksSomething(t *testing.T) {
 	probes := map[string][]string{
 		ExtendWritePaths:  {"/ws/any/path"},
 		installSourceTool: {selfExtendHumanRisk + "sha256:abc"},
+		NetworkEgress:     {"pypi.org"},
+		PaidSearch:        {"deepseek_api"},
+		MCPSignIn:         {"figma → auth.example.test"},
 	}
 	for tool := range subjectSensitiveTools {
 		subjects, ok := probes[tool]
@@ -219,5 +246,16 @@ func TestALowRiskInstallPlanStillRunsUnattended(t *testing.T) {
 	}
 	if !allow {
 		t.Error("a low-risk plan was refused unattended; the grade exists so that it need not be")
+	}
+}
+
+// Agreeing to be charged by one backend must not answer for another.
+func TestSessionGrantForPaidSearchNamesTheBackend(t *testing.T) {
+	rule := SessionGrantRuleForScope(PaidSearch, "deepseek_api")
+	if !SessionGrantMatches(rule, PaidSearch, "deepseek_api") {
+		t.Errorf("rule %q does not cover the backend it was granted for", rule)
+	}
+	if SessionGrantMatches(rule, PaidSearch, "other_paid_backend") {
+		t.Errorf("rule %q covers another backend", rule)
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"path/filepath"
 	"reasonix/internal/state/sessionstore"
 	"strings"
 	"testing"
@@ -161,7 +163,7 @@ func TestE2ECrossTurnCanonicalGateBlocksThenClears(t *testing.T) {
 			Arguments: `{"step":"beta","result":"done","evidence":[{"kind":"manual","summary":"verified by inspection"}]}`}}},
 		testutil.Turn{Text: "all done now"},
 	)
-	a := New(mp, evidenceRegistry(), sess, Options{}, event.Discard)
+	a := New(mp, evidenceRegistry(), sess, Options{CheckTargetAccess: allowTestFileAccess}, event.Discard)
 	a.SetSession(sess) // rebuilds canonical {alpha in_progress, beta pending}
 
 	firstErr := a.Run(context.Background(), "finish up")
@@ -376,5 +378,27 @@ func TestE2ESigningOffAdvancesThePlanRevision(t *testing.T) {
 	}
 	if last.ProgressRevision != 1 {
 		t.Fatalf("progress revision = %d after one sign-off, want 1", last.ProgressRevision)
+	}
+}
+
+// The agent hands complete_step its workspace, so a relative citation of a file
+// the writer was given by absolute path is the same file.
+func TestE2ERelativeCitationOfAbsoluteWriteSignsOff(t *testing.T) {
+	root := t.TempDir()
+	written := filepath.Join(root, "pkg", "x.go")
+	mp := testutil.NewMock("m",
+		testutil.Turn{ToolCalls: []provider.ToolCall{{ID: "w1", Name: "write_file", Arguments: fmt.Sprintf(`{"path":%q}`, written)}}},
+		testutil.Turn{ToolCalls: []provider.ToolCall{{ID: "c1", Name: "complete_step",
+			Arguments: `{"step":"edit x","result":"x updated","evidence":[{"kind":"diff","summary":"changed x","paths":["pkg/x.go"]}]}`}}},
+		testutil.Turn{Text: "done"},
+	)
+	a := New(mp, evidenceRegistry(), sessionstore.NewSession("sys"), Options{WriteWorkspaceRoot: root}, event.Discard)
+
+	if err := a.Run(context.Background(), "edit x.go and sign it off"); err != nil &&
+		!strings.Contains(err.Error(), "readiness") {
+		t.Fatalf("Run: %v", err)
+	}
+	if sessionContains(a, "no matching successful writer") {
+		t.Fatal("a workspace-relative citation of the absolute write was rejected")
 	}
 }

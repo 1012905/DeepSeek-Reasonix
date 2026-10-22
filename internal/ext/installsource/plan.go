@@ -3,6 +3,7 @@ package installsource
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"net/url"
@@ -20,26 +21,29 @@ var githubAPIBaseURL = "https://api.github.com"
 
 // plan turns a request into a list of actions plus a warnings slice. It
 // does not touch the disk; the apply phase is responsible for side effects.
-func (t *installSourceTool) plan(ctx context.Context, req request) ([]action, []string, error) {
+func (t *Tool) plan(ctx context.Context, req request) ([]action, []string, error) {
 	if after, ok := strings.CutPrefix(req.Source, "git:github.com/"); ok {
 		req.Source = "https://github.com/" + after
 	}
 	if isURL(req.Source) {
 		return t.planURL(ctx, req)
 	}
+	if err := t.refuseNetworkSource(req.Source); err != nil {
+		return nil, nil, err
+	}
 	path := t.resolvePath(req.Source)
 	if info, err := os.Stat(path); err == nil {
 		return t.planLocal(req, path, info)
 	}
 	if req.Kind == "auto" || req.Kind == "mcp" {
-		if looksLikePackage(req.Source) {
+		if LooksLikePackage(req.Source) {
 			return []action{t.packageMCPAction(req)}, nil, nil
 		}
 	}
 	return nil, nil, newErr(ErrSourceUnreadable, "source %q is not a readable local path, URL, or supported package name", req.Source)
 }
 
-func (t *installSourceTool) planURL(ctx context.Context, req request) ([]action, []string, error) {
+func (t *Tool) planURL(ctx context.Context, req request) ([]action, []string, error) {
 	rawURL := rawGitHubBlobURL(req.Source)
 	if req.Kind == "auto" || req.Kind == "plugin" {
 		actions, warnings, err := t.planGitHubPluginPackage(ctx, req)
@@ -50,20 +54,27 @@ func (t *installSourceTool) planURL(ctx context.Context, req request) ([]action,
 			return nil, warnings, err
 		}
 	}
-	if req.Kind == "mcp" && !looksLikeMarkdownURL(rawURL) && !looksLikeMCPJSONURL(rawURL) {
+	manifestURL := looksLikeMarkdownURL(rawURL) || looksLikeMCPJSONURL(rawURL)
+	if req.Kind == "mcp" && !manifestURL {
 		return []action{t.remoteMCPAction(req, rawURL)}, nil, nil
 	}
-	if looksLikeMarkdownURL(rawURL) || looksLikeMCPJSONURL(rawURL) || rawURL != req.Source {
+	if manifestURL || rawURL != req.Source {
 		actions, warnings, err := t.planDownloadedURL(ctx, req, rawURL)
 		if err == nil && len(actions) > 0 {
 			return actions, warnings, nil
 		}
-		if req.Kind != "auto" {
+		// A GitHub tree may name a directory ending in .md or .mcp.json.
+		_, repoURL := parseGitHubRepoSource(req.Source)
+		if req.Kind != "auto" || (manifestURL && !repoURL) {
 			return nil, warnings, err
 		}
 	}
-	if gitActions, warnings := t.tryGitHubRepo(ctx, req); len(gitActions) > 0 {
-		return gitActions, warnings, nil
+	gitActions, gitWarnings, refused := t.tryGitHubRepo(ctx, req)
+	if len(gitActions) > 0 {
+		return gitActions, gitWarnings, nil
+	}
+	if refused != nil {
+		return nil, gitWarnings, refused
 	}
 	if req.Kind == "skill" {
 		return nil, nil, newErr(ErrUnsupportedKind, "URL %q is not a direct markdown skill file or GitHub SKILL.md", req.Source)
@@ -74,7 +85,7 @@ func (t *installSourceTool) planURL(ctx context.Context, req request) ([]action,
 	return []action{t.remoteMCPAction(req, req.Source)}, nil, nil
 }
 
-func (t *installSourceTool) planDownloadedURL(ctx context.Context, req request, sourceURL string) ([]action, []string, error) {
+func (t *Tool) planDownloadedURL(ctx context.Context, req request, sourceURL string) ([]action, []string, error) {
 	body, err := t.fetchText(ctx, sourceURL)
 	if err != nil {
 		return nil, nil, err
@@ -87,6 +98,8 @@ func (t *installSourceTool) planDownloadedURL(ctx context.Context, req request, 
 				actions = append(actions, t.mcpEntryAction(req, e, sourceURL))
 			}
 			return actions, warnings, nil
+		} else if looksLikeMCPJSONURL(sourceURL) {
+			return nil, nil, err
 		}
 	}
 	if req.Kind == "auto" || req.Kind == "skill" {
@@ -103,38 +116,43 @@ func (t *installSourceTool) planDownloadedURL(ctx context.Context, req request, 
 	return nil, nil, newErr(ErrUnsupportedKind, "downloaded URL did not contain a requested %s install source", req.Kind)
 }
 
-func (t *installSourceTool) tryGitHubRepo(ctx context.Context, req request) ([]action, []string) {
+// tryGitHubRepo plans a GitHub repository's root .mcp.json or skills. When
+// nothing plans, refused carries a .mcp.json that was fetched and failed
+// validation; a candidate that could not be fetched is only a warning.
+func (t *Tool) tryGitHubRepo(ctx context.Context, req request) (actions []action, warnings []string, refused error) {
 	if req.Kind != "auto" && req.Kind != "skill" && req.Kind != "mcp" {
-		return nil, nil
+		return nil, nil, nil
 	}
 	src, ok := parseGitHubRepoSource(req.Source)
 	if !ok {
-		return nil, nil
+		return nil, nil, nil
 	}
-	var warnings []string
 	for _, branch := range src.branches() {
 		if req.Kind == "auto" || req.Kind == "mcp" {
 			cand := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", src.Owner, src.Repo, branch, joinURLPath(src.Path, ".mcp.json"))
 			actions, _, err := t.planDownloadedURL(ctx, req, cand)
 			if err == nil && len(actions) > 0 {
-				return actions, warnings
+				return actions, warnings, nil
 			}
 			if err != nil {
-				warnings = append(warnings, fmt.Sprintf("%s: %s", cand, err.Error()))
+				warnings = append(warnings, fmt.Sprintf("%s: %s", hostLiteral(cand), err.Error()))
+			}
+			if refused == nil && errors.Is(err, ErrInvalidManifest) {
+				refused = err
 			}
 		}
 		if req.Kind == "auto" || req.Kind == "skill" {
 			actions, skillWarnings, err := t.planGitHubSkillRepo(ctx, req, src, branch)
 			warnings = append(warnings, skillWarnings...)
 			if err == nil && len(actions) > 0 {
-				return actions, warnings
+				return actions, warnings, nil
 			}
 			if err != nil {
 				warnings = append(warnings, fmt.Sprintf("github repo %s/%s@%s: %s", src.Owner, src.Repo, branch, err.Error()))
 			}
 		}
 	}
-	return nil, warnings
+	return nil, warnings, refused
 }
 
 type githubRepoSource struct {
@@ -178,11 +196,13 @@ func parseGitHubRepoSource(source string) (githubRepoSource, bool) {
 		}
 		parts = append(parts, part)
 	}
-	if len(parts) < 2 || !packageNameRe.MatchString(parts[0]) {
+	if len(parts) < 2 || !isPackageSegment(parts[0]) {
 		return githubRepoSource{}, false
 	}
 	repo := strings.TrimSuffix(parts[1], ".git")
-	if !packageNameRe.MatchString(repo) {
+	// Not isPackageSegment: GitHub allows repos with a leading dot (".github"),
+	// so only the dot-only names ("." and "..", e.g. from "...git") are refused.
+	if !packageNameRe.MatchString(repo) || strings.Trim(repo, ".") == "" {
 		return githubRepoSource{}, false
 	}
 	out := githubRepoSource{Owner: parts[0], Repo: repo}
@@ -215,7 +235,7 @@ type githubContentEntry struct {
 	DownloadURL string `json:"download_url"`
 }
 
-func (t *installSourceTool) planGitHubSkillRepo(ctx context.Context, req request, src githubRepoSource, branch string) ([]action, []string, error) {
+func (t *Tool) planGitHubSkillRepo(ctx context.Context, req request, src githubRepoSource, branch string) ([]action, []string, error) {
 	cands, warnings, err := t.scanGitHubSkills(ctx, req, src, branch)
 	if err != nil {
 		return nil, warnings, err
@@ -225,13 +245,20 @@ func (t *installSourceTool) planGitHubSkillRepo(ctx context.Context, req request
 	}
 	actions := make([]action, 0, len(cands))
 	for _, cand := range cands {
-		actions = append(actions, t.skillAction(req, cand, "copy"))
+		act := t.skillAction(req, cand, "copy")
+		// One address expanding into many skills is the install a person has
+		// to see listed first; high is the grade no blanket allow covers.
+		if len(cands) > 1 {
+			act.RiskLevel = RiskHigh
+			act.RiskReasons = append(act.RiskReasons, fmt.Sprintf("one source expands to %d skills; every one of them is installed", len(cands)))
+		}
+		actions = append(actions, act)
 	}
 	sort.Slice(actions, func(i, j int) bool { return actions[i].Name < actions[j].Name })
 	return actions, warnings, nil
 }
 
-func (t *installSourceTool) scanGitHubSkills(ctx context.Context, req request, src githubRepoSource, branch string) ([]skillCandidate, []string, error) {
+func (t *Tool) scanGitHubSkills(ctx context.Context, req request, src githubRepoSource, branch string) ([]skillCandidate, []string, error) {
 	var out []skillCandidate
 	var warnings []string
 	var walk func(path string, depth int) error
@@ -273,7 +300,7 @@ func (t *installSourceTool) scanGitHubSkills(ctx context.Context, req request, s
 	return out, warnings, err
 }
 
-func (t *installSourceTool) githubSkillCandidate(ctx context.Context, req request, entry githubContentEntry, repoName string) (skillCandidate, bool, string) {
+func (t *Tool) githubSkillCandidate(ctx context.Context, req request, entry githubContentEntry, repoName string) (skillCandidate, bool, string) {
 	if entry.DownloadURL == "" {
 		return skillCandidate{}, false, ""
 	}
@@ -305,7 +332,7 @@ func (t *installSourceTool) githubSkillCandidate(ctx context.Context, req reques
 	return cand, true, ""
 }
 
-func (t *installSourceTool) fetchGitHubContents(ctx context.Context, src githubRepoSource, branch, path string) ([]githubContentEntry, error) {
+func (t *Tool) fetchGitHubContents(ctx context.Context, src githubRepoSource, branch, path string) ([]githubContentEntry, error) {
 	apiURL, err := url.Parse(strings.TrimRight(githubAPIBaseURL, "/"))
 	if err != nil {
 		return nil, err
@@ -349,9 +376,10 @@ func joinURLPath(parts ...string) string {
 	return strings.Join(cleaned, "/")
 }
 
-func (t *installSourceTool) planLocal(req request, path string, info os.FileInfo) ([]action, []string, error) {
+func (t *Tool) planLocal(req request, path string, info os.FileInfo) ([]action, []string, error) {
 	var actions []action
 	var warnings []string
+	var mcpErr error
 	// An exported package arrives as an archive rather than a folder, and it can
 	// be nothing else — no skill file or .mcp.json is a zip — so this is the
 	// whole answer for one rather than a first guess to fall through from.
@@ -361,7 +389,7 @@ func (t *installSourceTool) planLocal(req request, path string, info os.FileInfo
 	if info.IsDir() && (req.Kind == "auto" || req.Kind == "plugin") {
 		pluginAction, pluginWarnings, err := t.localPluginPackageAction(req, path)
 		if err == nil {
-			return []action{pluginAction}, pluginWarnings, nil
+			return []action{t.localSourceRisk(pluginAction)}, pluginWarnings, nil
 		}
 		if req.Kind == "plugin" {
 			return nil, pluginWarnings, err
@@ -375,13 +403,20 @@ func (t *installSourceTool) planLocal(req request, path string, info os.FileInfo
 		}
 		if filepath.Base(mcpPath) == ".mcp.json" {
 			entries, mcpWarnings, err := readMCPJSON(mcpPath)
-			if err == nil && len(entries) > 0 {
+			// A folder may hold other installables, so its refused .mcp.json
+			// warns and one that declares nothing (or is absent) says nothing;
+			// a source that is the file itself has no other answer.
+			switch {
+			case err == nil && len(entries) > 0:
 				for _, e := range entries {
 					actions = append(actions, t.mcpEntryAction(req, e, mcpPath))
 				}
 				warnings = append(warnings, mcpWarnings...)
-			} else if req.Kind == "mcp" {
+			case req.Kind == "mcp" || !info.IsDir():
 				return nil, nil, err
+			case !errors.Is(err, ErrManifestMissing):
+				mcpErr = err
+				warnings = append(warnings, fmt.Sprintf("%s: %s", hostLiteral(mcpPath), err.Error()))
 			}
 		}
 		if !info.IsDir() && isExecutable(path, info) && filepath.Base(path) != ".mcp.json" {
@@ -399,6 +434,9 @@ func (t *installSourceTool) planLocal(req request, path string, info os.FileInfo
 		actions = append(actions, skillActions...)
 	}
 	if len(actions) == 0 {
+		if mcpErr != nil {
+			return nil, warnings, mcpErr
+		}
 		return nil, warnings, newErr(ErrManifestMissing, "no installable MCP server, skill, or plugin package found at %s", path)
 	}
 	sort.SliceStable(actions, func(i, j int) bool {
@@ -410,7 +448,7 @@ func (t *installSourceTool) planLocal(req request, path string, info os.FileInfo
 	return actions, warnings, nil
 }
 
-func (t *installSourceTool) localSkillActions(req request, path string, info os.FileInfo) ([]action, error) {
+func (t *Tool) localSkillActions(req request, path string, info os.FileInfo) ([]action, error) {
 	strict := req.strict()
 	if !info.IsDir() {
 		if !strings.EqualFold(filepath.Ext(path), ".md") {
@@ -439,7 +477,7 @@ func (t *installSourceTool) localSkillActions(req request, path string, info os.
 			if root == "" {
 				root = filepath.Dir(path)
 			}
-			return []action{t.skillRootAction(req, root, []string{cand.Name})}, nil
+			return []action{t.skillRootAction(req, root, []skillCandidate{cand})}, nil
 		}
 		return []action{t.skillAction(req, cand, modeForSingleSkill(req.Mode))}, nil
 	}
@@ -455,7 +493,7 @@ func (t *installSourceTool) localSkillActions(req request, path string, info os.
 			cand.Name = req.Name
 		}
 		if req.Mode == "register" {
-			return []action{t.skillRootAction(req, filepath.Dir(path), []string{cand.Name})}, nil
+			return []action{t.skillRootAction(req, filepath.Dir(path), []skillCandidate{cand})}, nil
 		}
 		return []action{t.skillAction(req, cand, modeForSingleSkill(req.Mode))}, nil
 	}
@@ -471,20 +509,18 @@ func (t *installSourceTool) localSkillActions(req request, path string, info os.
 		mode = "register"
 	}
 	if mode == "register" {
-		byRoot := map[string][]string{}
+		byRoot := map[string][]skillCandidate{}
 		for _, cand := range cands {
 			root := cand.RootPath
 			if root == "" {
 				root = path
 			}
-			byRoot[root] = append(byRoot[root], cand.Name)
+			byRoot[root] = append(byRoot[root], cand)
 		}
 		roots := slices.Sorted(maps.Keys(byRoot))
 		actions := make([]action, 0, len(roots))
 		for _, root := range roots {
-			rootNames := byRoot[root]
-			slices.Sort(rootNames)
-			actions = append(actions, t.skillRootAction(req, root, rootNames))
+			actions = append(actions, t.skillRootAction(req, root, byRoot[root]))
 		}
 		return actions, nil
 	}

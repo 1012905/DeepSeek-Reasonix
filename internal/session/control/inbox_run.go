@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"reasonix/internal/contract/surfacespec"
 	"reasonix/internal/state/sessioninbox"
 )
 
@@ -29,7 +30,7 @@ func (c *Controller) RunInboxTurn(ctx context.Context, id string) error {
 	}
 	if block != "" {
 		_ = st.SetState(id, sessioninbox.StateBlocked, block)
-		_ = st.SetPaused(true)
+		_ = st.Pause(sessioninbox.PauseReferenceBlocked)
 		return fmt.Errorf("%w: %s", sessioninbox.ErrInvalidState, block)
 	}
 	return c.runSynchronousTurn(ctx, func() error {
@@ -58,12 +59,15 @@ func (c *Controller) prepareInboxRun(env sessioninbox.PromptEnvelope, origin ses
 	}
 	display := firstNonEmptyStr(env.DisplayText, submit)
 	raw := firstNonEmptyStr(env.RawText, submit)
+	if env.Extra[surfacespec.ActionMessageName] != "" {
+		raw = submit
+	}
 	requests := controlInvocationsFromInbox(env)
 	if len(requests) == 0 {
 		return func(ctx context.Context) error {
-			return c.runTurnLoop(c.withTurnFormat(ctx, strings.TrimSpace(env.Format)), orchestratedTurn{
+			return c.runTurnLoop(c.withTurnTags(ctx, turnTags{format: strings.TrimSpace(env.Format), via: env.Via}), orchestratedTurn{
 				input: submit, raw: raw, display: display, images: c.frozenTurnImages(frozenImages),
-				synthetic: origin.IsHost(),
+				synthetic: origin.IsHost(), opensTurn: origin.IsHost(),
 			})
 		}, "", nil
 	}
@@ -72,7 +76,7 @@ func (c *Controller) prepareInboxRun(env sessioninbox.PromptEnvelope, origin ses
 		return nil, err.Error(), nil
 	}
 	return func(ctx context.Context) error {
-		return c.runPreparedInvocationTurn(c.withTurnFormat(ctx, strings.TrimSpace(env.Format)), prepared, submit, raw, display, frozenImages)
+		return c.runPreparedInvocationTurn(c.withTurnTags(ctx, turnTags{format: strings.TrimSpace(env.Format), via: env.Via}), prepared, submit, raw, display, frozenImages)
 	}, "", nil
 }
 

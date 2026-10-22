@@ -32,14 +32,14 @@ func TestACPRebuildSerializesCollaborationAndApprovalChanges(t *testing.T) {
 	}
 	sink := newUpdateSink(&fakeNotifier{}, "sess-axis-race")
 	sess := &acpSession{
-		id:               "sess-axis-race",
-		ctrl:             control.New(control.Options{}),
-		sink:             sink,
-		cwd:              testenv.TempDir(t),
-		model:            "fast",
-		runtimeProfile:   "balanced",
-		toolApprovalMode: control.ToolApprovalAsk,
-		modeID:           sessionModeNormal,
+		id:             "sess-axis-race",
+		ctrl:           control.New(control.Options{}),
+		sink:           sink,
+		cwd:            testenv.TempDir(t),
+		model:          "fast",
+		runtimeProfile: "balanced",
+		posture:        approvalPosture{mode: control.ToolApprovalAsk},
+		modeID:         sessionModeNormal,
 	}
 	svc := &service{factory: factory, sessions: map[string]*acpSession{sess.id: sess}}
 
@@ -437,7 +437,7 @@ func TestACPCtrlReadPathsDoNotRaceWithRebuild(t *testing.T) {
 		}
 		_ = svc.sessionDir()
 		svc.sendAvailableCommands(sess)
-		if got := svc.resolveSlashPrompt(context.Background(), sess, "/no-such-command args"); got != "/no-such-command args" {
+		if got, _ := svc.resolveSlashPrompt(context.Background(), sess, "/no-such-command args"); got != "/no-such-command args" {
 			t.Fatalf("resolveSlashPrompt rewrote unknown command to %q", got)
 		}
 	}
@@ -729,7 +729,7 @@ func TestACPApplyPendingClaimsStateBeforeResolving(t *testing.T) {
 	}
 	sess := &acpSession{
 		id:             "sess-pending-order",
-		ctrl:           control.New(control.Options{}),
+		ctrl:           control.New(control.Options{ModelRef: "fast", Effort: "auto", ProviderFingerprint: "test:fast:auto"}),
 		sink:           newUpdateSink(&fakeNotifier{}, "sess-pending-order"),
 		cwd:            testenv.TempDir(t),
 		model:          "fast",
@@ -791,6 +791,42 @@ func TestACPApplyPendingClaimsStateBeforeResolving(t *testing.T) {
 	}
 	if got := sess.runtimeProfile; got != "delivery" {
 		t.Fatalf("runtime profile = %q, want pending different-axis value delivery preserved", got)
+	}
+}
+
+func TestACPSameSelectionSwitchCancelsOlderPendingDelta(t *testing.T) {
+	factory := &configurableFactory{}
+	sink := newUpdateSink(&fakeNotifier{}, "sess-same-selection-pending")
+	sess := &acpSession{
+		id:             "sess-same-selection-pending",
+		ctrl:           control.New(control.Options{ModelRef: "fast", Effort: "auto", ProviderFingerprint: "test:fast:auto"}),
+		sink:           sink,
+		cwd:            testenv.TempDir(t),
+		model:          "fast",
+		runtimeProfile: "balanced",
+	}
+	svc := &service{factory: factory, sessions: map[string]*acpSession{sess.id: sess}}
+
+	if _, _, ok := sess.begin(context.Background()); !ok {
+		t.Fatal("begin failed")
+	}
+	if _, err := svc.switchSessionEffort(context.Background(), sess, "high"); err != nil {
+		t.Fatalf("queue effort high: %v", err)
+	}
+	if _, err := svc.switchSessionEffort(context.Background(), sess, "auto"); err != nil {
+		t.Fatalf("restore effort auto: %v", err)
+	}
+
+	sess.mu.Lock()
+	queued := len(sess.pendingConfig)
+	sess.mu.Unlock()
+	if queued != 0 {
+		t.Fatalf("pending config entries = %d, want the later same-selection request to cancel the queued delta", queued)
+	}
+
+	svc.finishTurn(context.Background(), sess)
+	if got := factory.buildCount(); got != 0 {
+		t.Fatalf("factory builds = %d, want no rebuild after the later selection restored the running value", got)
 	}
 }
 
@@ -860,13 +896,13 @@ func TestACPFailedRebuildStillDrainsNewerPendingConfig(t *testing.T) {
 func TestACPReportPendingConfigFailureRestoresClientState(t *testing.T) {
 	notifier := &fakeNotifier{}
 	sess := &acpSession{
-		id:               "sess-pending-failure-update",
-		ctrl:             control.New(control.Options{}),
-		sink:             newUpdateSink(notifier, "sess-pending-failure-update"),
-		cwd:              testenv.TempDir(t),
-		model:            "fast",
-		runtimeProfile:   "balanced",
-		toolApprovalMode: control.ToolApprovalAsk,
+		id:             "sess-pending-failure-update",
+		ctrl:           control.New(control.Options{}),
+		sink:           newUpdateSink(notifier, "sess-pending-failure-update"),
+		cwd:            testenv.TempDir(t),
+		model:          "fast",
+		runtimeProfile: "balanced",
+		posture:        approvalPosture{mode: control.ToolApprovalAsk},
 	}
 	svc := &service{factory: &configurableFactory{}, sessions: map[string]*acpSession{sess.id: sess}}
 

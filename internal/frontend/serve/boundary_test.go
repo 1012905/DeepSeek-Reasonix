@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"runtime"
+	"slices"
 	"testing"
 
 	"reasonix/internal/contract/config"
@@ -29,15 +31,80 @@ func readJSON[T any](t *testing.T, base, path string) T {
 	return out
 }
 
+func TestRevokeRememberedProjectRuleRebuildsWithoutChangingOtherGrants(t *testing.T) {
+	workspace := t.TempDir()
+	s := newProviderEditServer(t, workspace)
+	store := config.NewProjectGrantStore(config.Roots{}.Home())
+	if err := store.Update(workspace, func(g config.ProjectGrant) (config.ProjectGrant, error) {
+		g.Allow = []string{"Bash(go test:*)", "Bash(git status:*)"}
+		g.AllowWrite = []string{t.TempDir()}
+		return g, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before := s.Controller().(*control.Controller)
+	before.RestoreSessionAuthorizations(control.SessionAuthorizations{Grants: []string{"Bash(go test:*)", "Bash(git status:*)"}})
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+	resp := postProvider(t, srv.URL, "/permissions/remembered/revoke", `{"rule":"Bash(go test:*)"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := readAllString(resp)
+		t.Fatalf("revoke = %d: %s", resp.StatusCode, body)
+	}
+	if s.Controller() == before {
+		t.Fatal("grant removed on disk without rebuilding the active runtime")
+	}
+	rebuilt := s.Controller().(*control.Controller)
+	if !slices.Equal(rebuilt.SessionAuthorizations().Grants, []string{"Bash(git status:*)"}) {
+		t.Fatalf("rebuilt controller retained revoked session grant: %+v", rebuilt.SessionAuthorizations())
+	}
+	grant, err := store.Grant(workspace)
+	if err != nil || !slices.Equal(grant.Allow, []string{"Bash(git status:*)"}) || len(grant.AllowWrite) != 1 {
+		t.Fatalf("remaining grant = %+v, %v", grant, err)
+	}
+	got := readJSON[control.PermissionRules](t, srv.URL, "/permissions")
+	if !slices.Equal(got.Remembered, grant.Allow) {
+		t.Fatalf("reloaded rules = %+v, want %+v", got, grant)
+	}
+}
+
+func TestRevokeRememberedProjectRuleReportsUnavailableStoreByCode(t *testing.T) {
+	workspace := t.TempDir()
+	s := newProviderEditServer(t, workspace)
+	s.Controller().(*control.Controller).RestoreSessionAuthorizations(control.SessionAuthorizations{Grants: []string{"Bash(go test:*)"}})
+	store := config.NewProjectGrantStore(config.Roots{}.Home())
+	if err := os.WriteFile(store.Path(), []byte("broken JSON"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+	resp := postProvider(t, srv.URL, "/permissions/remembered/revoke", `{"rule":"Bash(go test:*)"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("malformed grant store status = %d, want 409", resp.StatusCode)
+	}
+	var refusal struct{ Code string }
+	if err := json.NewDecoder(resp.Body).Decode(&refusal); err != nil {
+		t.Fatal(err)
+	}
+	if refusal.Code != "project_grants.unavailable" {
+		t.Fatalf("malformed grant store refusal = %+v", refusal)
+	}
+	if !slices.Equal(s.Controller().(*control.Controller).SessionAuthorizations().Grants, []string{"Bash(go test:*)"}) {
+		t.Fatal("failed persistent revoke removed the session grant")
+	}
+}
+
 // Widening what the agent may do to this machine is a write to this machine, so
 // both routes ride the provider-edit grant. Without it a networked client could
 // hand itself the boundary it is supposed to be held by.
 func TestBoundaryWritesRefusedWithoutGrant(t *testing.T) {
 	s := newProviderEditServer(t)
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
-	for _, path := range []string{"/permissions", "/sandbox"} {
+	for _, path := range []string{"/permissions", "/sandbox", "/browser-tools", "/subagent-claims", "/write-lease", "/plan-approval"} {
 		resp := postProvider(t, srv.URL, path, `{}`)
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusForbidden {
@@ -49,7 +116,7 @@ func TestBoundaryWritesRefusedWithoutGrant(t *testing.T) {
 func TestSavePermissionsPersistsAllThreeLists(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	body := `{"mode":"deny","deny":["bash(git push:*)"],"ask":["bash(rm:*)"],"allow":["bash(go test:*)"]}`
@@ -88,7 +155,7 @@ func TestSavePermissionsPersistsAllThreeLists(t *testing.T) {
 func TestSavePermissionsRejectsUnparsableRule(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp := postProvider(t, srv.URL, "/permissions", `{"mode":"ask","deny":["(no tool name)"]}`)
@@ -110,7 +177,7 @@ func TestSavePermissionsRejectsUnparsableRule(t *testing.T) {
 func TestSavePermissionsReplacesRatherThanAppends(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	first := postProvider(t, srv.URL, "/permissions", `{"mode":"ask","deny":["bash(rm:*)","bash(git push:*)"]}`)
@@ -130,7 +197,7 @@ func TestSavePermissionsReplacesRatherThanAppends(t *testing.T) {
 func TestSandboxSettingsReportWhatTheConfinerWillUse(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp := postProvider(t, srv.URL, "/sandbox", `{"bash":"off","network":false,"allowWrite":["/tmp/scratch"," "]}`)
@@ -171,7 +238,7 @@ func TestSandboxSettingsReportWhatTheConfinerWillUse(t *testing.T) {
 func TestSandboxSettingsReportTheModeThatWillRun(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	want := "enforce"
@@ -198,7 +265,7 @@ func TestSaveSandboxRefusesEnforceWithoutABackendByCode(t *testing.T) {
 	}
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp := postProvider(t, srv.URL, "/sandbox", `{"bash":"enforce"}`)
@@ -226,12 +293,206 @@ func TestSaveSandboxRefusesEnforceWithoutABackendByCode(t *testing.T) {
 func TestSaveSandboxRejectsUnknownBashMode(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp := postProvider(t, srv.URL, "/sandbox", `{"bash":"maybe"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("POST /sandbox with an unknown mode = %d, want 400", resp.StatusCode)
+	}
+}
+
+// The switch lands in the user file, not in the runtime alone, and reads back
+// from there; a body that does not say on or off changes nothing.
+func TestSaveBrowserToolsPersists(t *testing.T) {
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+
+	if got := readJSON[control.BrowserToolsSettings](t, srv.URL, "/browser-tools"); !got.Enabled {
+		t.Fatalf("unset switch reads %+v, want on", got)
+	}
+	empty := postProvider(t, srv.URL, "/browser-tools", `{}`)
+	empty.Body.Close()
+	if empty.StatusCode != http.StatusBadRequest {
+		t.Fatalf("POST /browser-tools without enabled = %d, want 400", empty.StatusCode)
+	}
+	resp := postProvider(t, srv.URL, "/browser-tools", `{"enabled":false}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		got, _ := readAllString(resp)
+		t.Fatalf("POST /browser-tools = %d: %s", resp.StatusCode, got)
+	}
+	if config.LoadForEdit(config.UserConfigPath()).Tools.BrowserToolsEnabled() {
+		t.Fatal("turning it off did not reach the config file")
+	}
+	if got := readJSON[control.BrowserToolsSettings](t, srv.URL, "/browser-tools"); got.Enabled {
+		t.Fatalf("read back = %+v, want off", got)
+	}
+}
+
+func TestSavePermissionsRefusesARuleNamingNoToolByCode(t *testing.T) {
+	s := newProviderEditServer(t, t.TempDir())
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+	resp := postProvider(t, srv.URL, "/permissions", `{"mode":"ask","allow":[],"ask":["rm"],"deny":["Bash(git push:*)"]}`)
+	defer resp.Body.Close()
+	var got Reason
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusBadRequest || got.Code != "permissions.rule_unknown_tool" ||
+		got.Params["list"] != "ask" || got.Params["rule"] != "rm" || got.Params["tool"] != "rm" {
+		t.Fatalf("save = %d %+v", resp.StatusCode, got)
+	}
+	if rules := readJSON[control.PermissionRules](t, srv.URL, "/permissions"); len(rules.Ask) != 0 || len(rules.Deny) != 0 {
+		t.Fatalf("a refused save wrote %+v", rules.PermissionLists)
+	}
+	ok := postProvider(t, srv.URL, "/permissions", `{"mode":"ask","allow":[],"ask":["Bash(rm:*)"],"deny":["mcp__later__tool"]}`)
+	defer ok.Body.Close()
+	if ok.StatusCode != http.StatusOK {
+		t.Fatalf("valid save = %d", ok.StatusCode)
+	}
+}
+
+func TestPermissionsListsRulesAlreadyInTheFileThatNameNoTool(t *testing.T) {
+	s := newProviderEditServer(t, t.TempDir())
+	s.AllowProviderEdit()
+	cfg := config.LoadForEdit(config.UserConfigPath())
+	cfg.Permissions.Ask = []string{"rm", "bash"}
+	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+	rules := readJSON[control.PermissionRules](t, srv.URL, "/permissions")
+	if len(rules.Dormant) != 1 || rules.Dormant[0].List != "ask" || rules.Dormant[0].Rule != "rm" {
+		t.Fatalf("dormant = %+v", rules.Dormant)
+	}
+	same := postProvider(t, srv.URL, "/permissions", `{"mode":"deny","allow":[],"ask":["rm","bash"],"deny":[]}`)
+	defer same.Body.Close()
+	if same.StatusCode != http.StatusOK {
+		t.Fatalf("changing the mode with the old rule kept = %d", same.StatusCode)
+	}
+}
+
+// The default is strict and changing it is a deliberate write to the user file;
+// a body that does not say which changes nothing.
+func TestSaveSubagentClaimsPersists(t *testing.T) {
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+
+	if got := readJSON[control.SubagentClaimsSettings](t, srv.URL, "/subagent-claims"); got.Optimistic {
+		t.Fatalf("unset choice reads %+v, want the strict default", got)
+	}
+	empty := postProvider(t, srv.URL, "/subagent-claims", `{}`)
+	empty.Body.Close()
+	if empty.StatusCode != http.StatusBadRequest {
+		t.Fatalf("POST /subagent-claims without a choice = %d, want 400", empty.StatusCode)
+	}
+	resp := postProvider(t, srv.URL, "/subagent-claims", `{"optimistic":true}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		got, _ := readAllString(resp)
+		t.Fatalf("POST /subagent-claims = %d: %s", resp.StatusCode, got)
+	}
+	if !config.LoadForEdit(config.UserConfigPath()).SubagentClaimsOptimistic() {
+		t.Fatal("choosing optimistic did not reach the config file")
+	}
+	if got := readJSON[control.SubagentClaimsSettings](t, srv.URL, "/subagent-claims"); !got.Optimistic {
+		t.Fatalf("read back = %+v, want optimistic", got)
+	}
+	back := postProvider(t, srv.URL, "/subagent-claims", `{"optimistic":false}`)
+	back.Body.Close()
+	if config.LoadForEdit(config.UserConfigPath()).SubagentClaimsOptimistic() {
+		t.Fatal("returning to strict did not reach the config file")
+	}
+}
+
+// The same choice for the main session's own lease. Strict is the default, the
+// write goes to the user file only, and a body that does not say which changes
+// nothing. The running session keeps the lease it was built with, so the answer
+// says that instead of rebuilding a runtime that would adopt the same lease.
+func TestSaveWriteLeasePersistsAndSaysWhenItTakesEffect(t *testing.T) {
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+
+	if got := readJSON[control.WriteLeaseSettings](t, srv.URL, "/write-lease"); got.Optimistic {
+		t.Fatalf("unset choice reads %+v, want the strict default", got)
+	}
+	empty := postProvider(t, srv.URL, "/write-lease", `{}`)
+	empty.Body.Close()
+	if empty.StatusCode != http.StatusBadRequest {
+		t.Fatalf("POST /write-lease without a choice = %d, want 400", empty.StatusCode)
+	}
+	resp := postProvider(t, srv.URL, "/write-lease", `{"optimistic":true}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		got, _ := readAllString(resp)
+		t.Fatalf("POST /write-lease = %d: %s", resp.StatusCode, got)
+	}
+	if !config.LoadForEdit(config.UserConfigPath()).WriteLeaseOptimistic() {
+		t.Fatal("choosing optimistic did not reach the config file")
+	}
+	if got := readJSON[control.WriteLeaseSettings](t, srv.URL, "/write-lease"); !got.Optimistic {
+		t.Fatalf("read back = %+v, want optimistic", got)
+	}
+	wait := postProvider(t, srv.URL, "/write-lease", `{"maxWaitMinutes":45}`)
+	wait.Body.Close()
+	if got := readJSON[control.WriteLeaseSettings](t, srv.URL, "/write-lease"); got.MaxWaitMinutes != 45 || !got.Optimistic {
+		t.Fatalf("after saving only the wait, read back = %+v, want 45 and optimistic untouched", got)
+	}
+	negative := postProvider(t, srv.URL, "/write-lease", `{"maxWaitMinutes":-1}`)
+	negative.Body.Close()
+	if negative.StatusCode != http.StatusBadRequest {
+		t.Fatalf("a negative wait = %d, want 400", negative.StatusCode)
+	}
+	back := postProvider(t, srv.URL, "/write-lease", `{"optimistic":false}`)
+	back.Body.Close()
+	if config.LoadForEdit(config.UserConfigPath()).WriteLeaseOptimistic() {
+		t.Fatal("returning to strict did not reach the config file")
+	}
+}
+
+// The origin switch is saved through the rules endpoint and survives the rebuild
+// that endpoint triggers; a save that omits it leaves it alone.
+func TestPermissionsEndpointCarriesTheOriginSwitchThroughARebuild(t *testing.T) {
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+	post := func(body string) {
+		resp := postProvider(t, srv.URL, "/permissions", body)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			text, _ := readAllString(resp)
+			t.Fatalf("POST /permissions %s = %d: %s", body, resp.StatusCode, text)
+		}
+	}
+	on := func() bool {
+		v := readJSON[control.PermissionRules](t, srv.URL, "/permissions").AskOnExternalOrigin
+		return v != nil && *v
+	}
+	if on() {
+		t.Fatal("on before anything was saved")
+	}
+	post(`{"mode":"ask","allow":[],"ask":[],"deny":[],"askOnExternalOrigin":true}`)
+	if !on() {
+		t.Fatal("the switch did not survive its save")
+	}
+	post(`{"mode":"ask","allow":[],"ask":[],"deny":[]}`)
+	if !on() {
+		t.Fatal("a save without the field turned the switch off")
+	}
+	post(`{"mode":"ask","allow":[],"ask":[],"deny":[],"askOnExternalOrigin":false}`)
+	if on() {
+		t.Fatal("the switch did not turn off")
 	}
 }

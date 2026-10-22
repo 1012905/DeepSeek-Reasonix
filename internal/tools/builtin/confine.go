@@ -2,7 +2,9 @@ package builtin
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -89,6 +91,7 @@ func RebindBashWriteRoots(tl tool.Tool, roots []string) (tool.Tool, bool) {
 	}
 	spec := b.sb
 	spec.WriteRoots = rs
+	spec.Pins = spec.Pins.With(rs)
 	// Sub-agent claims are strict capability boundaries. Do not add the normal
 	// build-cache and temporary-directory allowances outside the claimed roots.
 	spec.MinimalWrites = true
@@ -105,6 +108,10 @@ func RebindBashWriteRoots(tl tool.Tool, roots []string) (tool.Tool, bool) {
 // settings while preserving its SSRF-guarded dialer.
 func ConfineWebFetch(proxySpec netclient.ProxySpec) tool.Tool {
 	return webFetch{proxySpec: proxySpec}
+}
+
+func ConfineWebImage(roots []string, guard SessionDataGuard, proxySpec netclient.ProxySpec, receipt func(string, bool, []byte)) tool.Tool {
+	return webImage{roots: realRoots(roots), guard: guard, proxySpec: proxySpec, receipt: receipt}
 }
 
 // ConfineWriters returns the file-writing built-ins (write_file, edit_file,
@@ -163,6 +170,11 @@ func confineRead(forbidRoots []string, target string) bool {
 	if err != nil {
 		return false // can't resolve -> let the caller's normal error path handle it
 	}
+	return confineResolved(forbidRoots, abs, protect)
+}
+
+// confineResolved is confineRead for a path already free of symlinks.
+func confineResolved(forbidRoots []string, abs string, protect bool) bool {
 	if secrets.CredentialReadPath(abs) {
 		return true
 	}
@@ -179,15 +191,8 @@ func confineRead(forbidRoots []string, target string) bool {
 
 func sensitiveReadPath(abs string) bool {
 	clean := filepath.Clean(abs)
-	name := strings.ToLower(filepath.Base(clean))
-	switch name {
-	case ".env", ".git-credentials", ".netrc":
+	if secrets.SensitiveFileName(filepath.Base(clean)) {
 		return true
-	}
-	for _, ext := range []string{".pem", ".key", ".p12", ".pfx"} {
-		if strings.HasSuffix(name, ext) {
-			return true
-		}
 	}
 	for _, dir := range secrets.SensitiveHomeDirs() {
 		if withinFold(dir, clean) {
@@ -195,6 +200,54 @@ func sensitiveReadPath(abs string) bool {
 		}
 	}
 	return false
+}
+
+// CodeReadOutsideScope identifies a read refused for resolving outside every
+// read root. The read tools enforce it on every platform, symlinks resolved.
+const CodeReadOutsideScope = "workspace.read_outside_scope"
+
+// readOutsideScope reports whether target resolves outside every scope root.
+// An empty scope is unconfined. A path that cannot be resolved counts as outside.
+func readOutsideScope(scope []string, target string) bool {
+	if len(scope) == 0 {
+		return false
+	}
+	abs, err := realPath(target)
+	if err != nil {
+		return true
+	}
+	for _, r := range scope {
+		if within(r, abs) {
+			return false
+		}
+	}
+	return true
+}
+
+// confineOpened re-checks the scope against the file that was actually opened.
+// The check made before opening resolved a name; this one reads the open file,
+// so a link swapped in between cannot carry the read outside. Where the
+// platform cannot report an open file's path the earlier check stands alone.
+func confineOpened(scope []string, f *os.File) error {
+	if len(scope) == 0 {
+		return nil
+	}
+	real, ok := openedPath(f)
+	if !ok {
+		return nil
+	}
+	return confineScope(scope, real)
+}
+
+// confineScope is readOutsideScope with the typed refusal a read tool returns.
+func confineScope(scope []string, target string) error {
+	if !readOutsideScope(scope, target) {
+		return nil
+	}
+	return tool.Refusal{Code: CodeReadOutsideScope, Message: fmt.Sprintf(
+		"read refused: `%s` is outside the folders this run may read (%s), after following symlinks. "+
+			"This run is read-only and limited to its workspace; nothing else can be read from it",
+		target, strings.Join(scope, ", "))}
 }
 
 // realRoots resolves each root to an absolute, symlink-free path, dropping any
@@ -210,11 +263,19 @@ func realRoots(roots []string) []string {
 	return out
 }
 
+// CodeWriteOutsideScope identifies a file-tool write refused for landing outside
+// workspace_root and allow_write. The file tools enforce it on every platform,
+// whether or not an OS sandbox exists, so it is never a sandbox refusal.
+const CodeWriteOutsideScope = "workspace.write_outside_scope"
+
 // confine reports an error when target resolves outside every root. An empty
 // roots slice is unconfined (returns nil) — the safe default for the built-in
-// templates before a run configures the workspace. The error text is written
-// for the model: it names the boundary and how the user can widen it.
+// templates before a run configures the workspace. The refusal carries
+// CodeWriteOutsideScope; its text names the path, the roots and the setting.
 func confine(roots []string, target string) error {
+	if err := refuseNetworkPath(target, roots); err != nil {
+		return err
+	}
 	if len(roots) == 0 {
 		return nil
 	}
@@ -227,9 +288,14 @@ func confine(roots []string, target string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("path %q is outside the writable roots (writes are confined to %s); "+
-		"write inside the workspace or a configured allow_write root, or widen [sandbox] workspace_root / allow_write in reasonix.toml",
-		target, strings.Join(roots, ", "))
+	// The path is printed verbatim, never Go-quoted: %q doubles every Windows
+	// backslash and names a file that does not exist as written.
+	return tool.Refusal{Code: CodeWriteOutsideScope, Message: fmt.Sprintf(
+		"write refused: `%s` is outside the workspace write scope; file tools may write only under %s. "+
+			"This scope is enforced by Reasonix's file tools on every platform: it is not an OS sandbox, and it does not depend on whether shell commands are sandboxed. "+
+			"Write inside those directories, or ask the user to add the target's directory to the extra writable directories "+
+			"(Settings > Sandbox > Also writable, stored as allow_write under [sandbox] in reasonix.toml) or to move workspace_root",
+		target, strings.Join(roots, ", "))}
 }
 
 // confineWrite is the write-tool boundary check: workspace confinement first,
@@ -243,6 +309,9 @@ func confineWrite(ctx context.Context, roots []string, guard SessionDataGuard, m
 	confineErr := confine(roots, target)
 	if confineErr == nil || underSessionTemp(temp, target) {
 		return guard.Check(target)
+	}
+	if isNetworkRefusal(confineErr) {
+		return confineErr
 	}
 	if !managed.Match(target) {
 		return withSessionTempAlternative(temp, confineErr)
@@ -260,7 +329,13 @@ func withSessionTempAlternative(temp *sessiontemp.Manager, err error) error {
 	if dir == "" {
 		return err
 	}
-	return fmt.Errorf("%w; scratch files may also go under $TMPDIR (%s)", err, dir)
+	suffix := fmt.Sprintf("; scratch files may also go under $TMPDIR (%s)", dir)
+	var refusal tool.Refusal
+	if errors.As(err, &refusal) {
+		refusal.Message += suffix
+		return refusal
+	}
+	return fmt.Errorf("%w%s", err, suffix)
 }
 
 // underSessionTemp reports whether target sits in the session's own temporary
@@ -284,35 +359,58 @@ func confinePreview(roots []string, guard SessionDataGuard, managed ManagedConfi
 	if confineErr == nil || underSessionTemp(temp, target) {
 		return guard.Check(target)
 	}
-	if !managed.Match(target) {
+	if isNetworkRefusal(confineErr) || !managed.Match(target) {
 		return confineErr
 	}
 	return guard.Check(target)
 }
 
-// realPath resolves path to an absolute, symlink-free form. Because a write
-// target need not exist yet (write_file creates it), it resolves the deepest
-// existing ancestor with EvalSymlinks and re-appends the not-yet-existing tail.
-// This stops a symlinked directory from smuggling a write outside a root.
+// lookupExisting is the filesystem lookup realPath makes; tests count its calls.
+var lookupExisting = resolveExisting
+
+// realPath resolves path as the system would when opening it, links and (on
+// Windows) junctions followed, re-appending a tail that does not exist yet. A
+// POSIX path is not cleaned first: a `..` after a link names the target's parent.
 func realPath(path string) (string, error) {
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
+	abs := path
+	if runtime.GOOS == "windows" || !filepath.IsAbs(path) {
+		var err error
+		if abs, err = filepath.Abs(path); err != nil {
+			return "", err
+		}
 	}
-	abs = filepath.Clean(abs)
-	tail := ""
+	var tail []string
 	cur := abs
 	for {
-		if real, err := filepath.EvalSymlinks(cur); err == nil {
-			return filepath.Join(real, tail), nil
+		if real, err := lookupExisting(cur); err == nil {
+			return filepath.Join(append([]string{real}, tail...)...), nil
 		}
-		parent := filepath.Dir(cur)
-		if parent == cur {
-			return abs, nil // nothing along the path exists; use the cleaned abs
+		parent, last := splitLastComponent(cur)
+		if parent == "" || parent == cur {
+			return filepath.Clean(abs), nil // nothing along the path exists
 		}
-		tail = filepath.Join(filepath.Base(cur), tail)
+		tail = append([]string{last}, tail...)
 		cur = parent
 	}
+}
+
+// splitLastComponent drops the final path element without cleaning what is left.
+func splitLastComponent(p string) (parent, last string) {
+	trimmed := strings.TrimRight(p, `/\`)
+	if runtime.GOOS != "windows" {
+		trimmed = strings.TrimRight(p, "/")
+	}
+	i := strings.LastIndexAny(trimmed, pathSeparators)
+	if i < 0 {
+		return "", trimmed
+	}
+	if i == 0 {
+		return trimmed[:1], trimmed[1:]
+	}
+	if runtime.GOOS == "windows" && i == 2 && trimmed[1] == ':' {
+		return trimmed[:3], trimmed[3:]
+	}
+	return trimmed[:i], trimmed[i+1:]
 }
 
 // within reports whether path is at or below root. Both must be absolute,

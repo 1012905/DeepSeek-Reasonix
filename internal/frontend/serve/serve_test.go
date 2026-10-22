@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -52,9 +53,7 @@ func (s *titleUsageSink) Emit(e event.Event) { s.events = append(s.events, e) }
 func TestGenerateTitleRecordsUsageWithModelIdentity(t *testing.T) {
 	sink := &titleUsageSink{}
 	s := &Server{
-		titleProv:      titleUsageProvider{},
-		titleModelRef:  "deepseek/deepseek-v4-flash",
-		titleUsageSink: sink,
+		titleModel: titleProviderState{prov: titleUsageProvider{}, ref: "deepseek/deepseek-v4-flash", sink: sink},
 	}
 	if got := s.generateTitle(context.Background(), "hello"); got != "Short title" {
 		t.Fatalf("title = %q", got)
@@ -112,7 +111,7 @@ func TestServeSubmitRunsAndBroadcastsTurnDone(t *testing.T) {
 	bc := NewBroadcaster()
 	got := make(chan string, 1)
 	ctrl := control.New(control.Options{Runner: fakeRunner{got: got}, Sink: bc})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	sub, cancel := bc.Subscribe() // observe the broadcast deterministically
@@ -153,7 +152,7 @@ func TestServeSubmitRunsAndBroadcastsTurnDone(t *testing.T) {
 func TestServeEndpoints(t *testing.T) {
 	bc := NewBroadcaster()
 	ctrl := control.New(control.Options{Sink: bc}) // no runner needed for these
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	if resp, err := http.Get(srv.URL + "/history"); err != nil || resp.StatusCode != http.StatusOK {
@@ -216,7 +215,7 @@ func TestServeSubmitRejectsShellShortcut(t *testing.T) {
 	bc := NewBroadcaster()
 	got := make(chan string, 1)
 	ctrl := control.New(control.Options{Runner: fakeRunner{got: got}, Sink: bc})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/submit", "application/json", strings.NewReader(`{"input":"!echo nope"}`))
@@ -238,7 +237,7 @@ func TestServeSubmitValidatesFormat(t *testing.T) {
 	bc := NewBroadcaster()
 	got := make(chan string, 1)
 	ctrl := control.New(control.Options{Runner: fakeRunner{got: got}, Sink: bc})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	post := func(body string) int {
@@ -363,7 +362,7 @@ func TestSessionsListPreviewSeesEventLogTurns(t *testing.T) {
 func TestServeCancelEndpoint(t *testing.T) {
 	bc := NewBroadcaster()
 	ctrl := control.New(control.Options{Sink: bc})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/cancel", "application/json", nil)
@@ -383,7 +382,7 @@ func TestServeCancelEndpoint(t *testing.T) {
 func TestServeGoalEndpointSetsAndClears(t *testing.T) {
 	bc := NewBroadcaster()
 	ctrl := control.New(control.Options{Sink: bc})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/goal", "application/json", strings.NewReader(`{"goal":"ship the release"}`))
@@ -414,7 +413,7 @@ func TestServeGoalEndpointSetsAndClears(t *testing.T) {
 func TestServeApproveMissingID(t *testing.T) {
 	bc := NewBroadcaster()
 	ctrl := control.New(control.Options{Sink: bc})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	// Missing id should return 400.
@@ -438,7 +437,7 @@ func TestServeApproveMissingID(t *testing.T) {
 func TestServeNewSessionEndpoint(t *testing.T) {
 	bc := NewBroadcaster()
 	ctrl := control.New(control.Options{Sink: bc})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/new", "application/json", nil)
@@ -454,7 +453,7 @@ func TestServeNewSessionEndpoint(t *testing.T) {
 func TestServeCompactEndpoint(t *testing.T) {
 	bc := NewBroadcaster()
 	ctrl := control.New(control.Options{Sink: bc})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/compact", "application/json", nil)
@@ -478,7 +477,7 @@ func TestServeModelsMarksActiveByModelRef(t *testing.T) {
 		Label:    "shared-chat",
 		ModelRef: "alternate/shared-chat",
 	})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/models")
@@ -528,7 +527,7 @@ func TestServeModelsIncludesExtensionProviderCatalog(t *testing.T) {
 		}},
 		},
 	})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/models")
@@ -676,7 +675,7 @@ func TestResumeRequiresSessionPathInsideSessionDir(t *testing.T) {
 
 	bc := NewBroadcaster()
 	ctrl := control.New(control.Options{Sink: bc, SessionDir: dir, SessionPath: active})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	post := func(path string) int {
@@ -721,7 +720,7 @@ func TestResumeRejectsCleanupPendingSession(t *testing.T) {
 
 	bc := NewBroadcaster()
 	ctrl := control.New(control.Options{Sink: bc, SessionDir: dir, SessionPath: active})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	body, err := json.Marshal(map[string]string{"path": pending})
@@ -756,7 +755,7 @@ func TestSessionsSkipsCleanupPending(t *testing.T) {
 
 	bc := NewBroadcaster()
 	ctrl := control.New(control.Options{Sink: bc, SessionDir: dir, SessionPath: active})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/sessions")
@@ -805,7 +804,7 @@ func TestDeleteSessionRequiresSessionNameInsideSessionDir(t *testing.T) {
 
 	bc := NewBroadcaster()
 	ctrl := control.New(control.Options{Sink: bc, SessionDir: dir, SessionPath: active})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	post := func(body string) int {
@@ -872,7 +871,7 @@ func writeServeSubagentArtifact(t *testing.T, dir, ref, parentSession string) {
 func TestServeSubmitMalformedJSON(t *testing.T) {
 	bc := NewBroadcaster()
 	ctrl := control.New(control.Options{Sink: bc})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/submit", "application/json", strings.NewReader(`{not json`))
@@ -888,7 +887,7 @@ func TestServeSubmitMalformedJSON(t *testing.T) {
 func TestServePlanMalformedJSON(t *testing.T) {
 	bc := NewBroadcaster()
 	ctrl := control.New(control.Options{Sink: bc})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/plan", "application/json", strings.NewReader(`{bad`))
@@ -904,7 +903,7 @@ func TestServePlanMalformedJSON(t *testing.T) {
 func TestServeContextEndpoint(t *testing.T) {
 	bc := NewBroadcaster()
 	ctrl := control.New(control.Options{Sink: bc})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/context")
@@ -935,7 +934,7 @@ func TestServeEventsReplaysPendingAskOnAttach(t *testing.T) {
 	bc := NewBroadcaster()
 	ctrl := control.New(control.Options{Sink: bc})
 	ctrl.EnableInteractiveApproval()
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	firstSub, cancelFirst := bc.Subscribe()
@@ -1010,6 +1009,118 @@ func TestServeEventsReplaysPendingAskOnAttach(t *testing.T) {
 	}
 }
 
+func TestServeEventsFirstWindowReceivesStartupNotice(t *testing.T) {
+	bc := NewBroadcaster()
+	ctrl := control.New(control.Options{Sink: bc})
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
+	defer srv.Close()
+
+	bc.Emit(event.Event{Kind: event.Notice, Code: "startup-test", Text: "startup warning"})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("/events status = %d", resp.StatusCode)
+	}
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		if strings.Contains(scanner.Text(), `"code":"startup-test"`) {
+			return
+		}
+	}
+	t.Fatalf("first window missed startup notice: %v", scanner.Err())
+}
+
+func TestServeEventsSecondWindowWithoutCursorDoesNotReplayStartupNotice(t *testing.T) {
+	bc := NewBroadcaster()
+	ctrl := control.New(control.Options{Sink: bc})
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
+	defer srv.Close()
+
+	bc.Emit(event.Event{Kind: event.Notice, Code: "startup-test", Text: "startup warning"})
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	firstReq, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := http.DefaultClient.Do(firstReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstScanner := bufio.NewScanner(first.Body)
+	for firstScanner.Scan() {
+		if strings.Contains(firstScanner.Text(), `"code":"startup-test"`) {
+			break
+		}
+	}
+	if err := firstScanner.Err(); err != nil {
+		first.Body.Close()
+		t.Fatal(err)
+	}
+	first.Body.Close()
+
+	secondReq, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := http.DefaultClient.Do(secondReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Body.Close()
+	bc.Emit(event.Event{Kind: event.TurnDone})
+	secondScanner := bufio.NewScanner(second.Body)
+	for secondScanner.Scan() {
+		if line := secondScanner.Text(); strings.HasPrefix(line, "data: ") {
+			if !strings.Contains(line, `"kind":"turn_done"`) {
+				t.Fatalf("second window replayed old notice: %s", line)
+			}
+			return
+		}
+	}
+	t.Fatalf("second window missed live event: %v", secondScanner.Err())
+}
+
+func TestServeEventsExplicitZeroCursorDoesNotReplayNotice(t *testing.T) {
+	bc := NewBroadcaster()
+	ctrl := control.New(control.Options{Sink: bc})
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
+	defer srv.Close()
+
+	bc.Emit(event.Event{Kind: event.Notice, Text: "before subscribe"})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/events?lastEventId=0", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	bc.Emit(event.Event{Kind: event.TurnDone})
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		if line := scanner.Text(); strings.HasPrefix(line, "data: ") {
+			if !strings.Contains(line, `"kind":"turn_done"`) {
+				t.Fatalf("explicit cursor replayed old event: %s", line)
+			}
+			return
+		}
+	}
+	t.Fatalf("no live event arrived: %v", scanner.Err())
+}
+
 // TestServeEventsReplayHandoffSerializesPromptEmission proves the controller's
 // attach handoff can register a subscriber and replay while prompt emission is
 // serialized, so a prompt cannot land between those two operations.
@@ -1067,7 +1178,7 @@ func TestServeEventsReplaysPendingApprovalOnAttach(t *testing.T) {
 		Policy:   permission.New("ask", nil, nil, nil),
 	})
 	ctrl.EnableInteractiveApproval()
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	runDone := make(chan error, 1)

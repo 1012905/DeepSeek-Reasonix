@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"reasonix/internal/runtime/langpref"
+	"reasonix/internal/runtime/usecap"
 	"reasonix/internal/state/sessionstore"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -48,12 +50,6 @@ const maxStreamRecoveries = 5
 const maxSamplingAttempts = maxStreamRecoveries + 1
 const maxExecutorHandoffNudges = 1
 
-const defaultReasoningByteLimit = 128 * 1024
-
-const finishReasonClientReasoningLimit = "client_reasoning_limit"
-
-var errReasoningByteLimitExceeded = errors.New("reasoning output exceeded client byte limit")
-
 // Renderer redraws the assistant's final-answer text as styled output. It is
 // applied only after a turn's text stream completes, so the user sees raw
 // markdown stream live, then a single redraw replaces it with formatted
@@ -66,8 +62,8 @@ type Renderer interface {
 // Asker puts structured multiple-choice questions to the user and blocks for the
 // answers. The agent consults it for the `ask` tool. It is interface-shaped so
 // the agent stays independent of the frontend; a nil asker means no interactive
-// user (headless runs), where `ask` returns a "decide for yourself" result. The
-// interactive frontends wire the controller in as the Asker.
+// user (headless runs), where `ask` returns an unresolved result and never an
+// answer. The interactive frontends wire the controller in as the Asker.
 type Asker interface {
 	Ask(ctx context.Context, questions []event.AskQuestion) ([]event.AskAnswer, error)
 }
@@ -221,6 +217,31 @@ func NormalizeMaxSubagentDepth(depth int) int {
 	return depth
 }
 
+// UnlimitedSubagentDepth is the depth a user who set max_subagent_depth to 0
+// asked for: no layer count stops delegation, only cost does.
+const UnlimitedSubagentDepth = 1 << 20
+
+// SubagentDepthFromConfig reads the user's max_subagent_depth: 0 removes the
+// limit, a negative value reads as the single-layer boundary.
+func SubagentDepthFromConfig(depth int) int {
+	if depth == 0 {
+		return UnlimitedSubagentDepth
+	}
+	return NormalizeMaxSubagentDepth(depth)
+}
+
+// ProviderRetriesFromConfig reads the user's max_provider_retries: 0 removes
+// the limit, a negative value keeps the provider default.
+func ProviderRetriesFromConfig(retries int) int {
+	switch {
+	case retries == 0:
+		return provider.RetriesUntilCancelled
+	case retries < 0:
+		return 0
+	}
+	return retries
+}
+
 // ToolHooks fires user-configured shell hooks around each tool call. PreToolUse
 // runs before the call and may block it (block=true; message is the reason fed
 // back to the model); PostToolUse runs after and only surfaces output to the
@@ -237,10 +258,10 @@ type ToolHooks interface {
 	// streaming reasoning live when none is wired up.
 	PostLLMCall(ctx context.Context, reasoning string, turn int) string
 	HasPostLLMCall() bool
-	// SubagentStop fires when a `task` sub-agent finishes (foreground). PreCompact
-	// fires just before a compaction pass and returns extra summary guidance (its
-	// hooks' stdout) to fold into the summary prompt; "" when no hook contributes.
-	SubagentStop(ctx context.Context, last string)
+	// SubagentStart/Stop bracket a foreground `task`. PreCompact returns its hooks'
+	// stdout as summary guidance for the next compaction; "" when none contributes.
+	SubagentStart(ctx context.Context, callID string, args json.RawMessage)
+	SubagentStop(ctx context.Context, callID, last string, err error)
 	PreCompact(ctx context.Context, trigger string) string
 }
 
@@ -250,6 +271,8 @@ type Agent struct {
 	agentConfig
 	// svc are the collaborators this agent talks to; see services.go.
 	svc agentServices
+	// stops lets one running call be ended without ending the turn.
+	stops callStops
 	// role is what this agent is; see agent_role.go.
 	role agentRole
 	// eventSource names this agent as the producer of its own frames.
@@ -258,6 +281,7 @@ type Agent struct {
 	// sessionstate.go.
 	sess              sessionRuntime
 	responseLanguage  atomic.Value // string: auto|zh|en
+	progressWatch     atomic.Pointer[ProgressWatch]
 	reasoningLanguage atomic.Value // string: auto|zh|en
 
 	// unwrittenResolve is the resolve watermark a failed state write still owes.
@@ -381,7 +405,7 @@ func (a *Agent) SetTools(tools *tool.Registry) {
 	if a == nil {
 		return
 	}
-	a.svc.tools = tools
+	a.svc.setTools(tools)
 }
 
 // SetReasoningLanguage updates the visible reasoning language preference for
@@ -409,7 +433,7 @@ func (a *Agent) SetGate(g Gate) {
 	if nilutil.IsNil(g) {
 		g = nil
 	}
-	a.svc.gate = g
+	a.svc.setGate(g)
 }
 
 // SetExtensions installs the extension dispatcher after construction. Boot
@@ -420,7 +444,7 @@ func (a *Agent) SetExtensions(d *dispatch.Dispatcher) {
 	if a == nil {
 		return
 	}
-	a.svc.extensions = d
+	a.svc.setExtensions(d)
 }
 
 // SetRecoveryGate installs Auto Guard. Safe to call before the run loop starts;
@@ -471,6 +495,15 @@ func (a *Agent) SetConfigWriteApprover(g tool.ConfigWriteApprover) {
 	a.svc.configWrite = g
 }
 
+// SetPaidSearchApprover installs the path that asks the user before web_search
+// uses a backend the vendor charges for. Without it no paid backend is called.
+func (a *Agent) SetPaidSearchApprover(g tool.PaidSearchApprover) {
+	if nilutil.IsNil(g) {
+		g = nil
+	}
+	a.svc.paidSearch = g
+}
+
 func (a *Agent) withTurnPreferences(input string) string {
 	if a == nil {
 		return input
@@ -490,14 +523,14 @@ func (a *Agent) withTurnPreferences(input string) string {
 		}
 	}
 	input = langpref.WithReasoningLanguage(input, lang)
-	input = WithWorkspace(input, a.writeWorkspaceRoot, a.workspaceVCS)
+	input = WithWorkspace(input, a.writeWorkspaceRoot, a.workspaceVCS, a.extraRoots)
 	// The frozen role setting rides the per-turn <execution-policy>, not a marker.
 	return input
 }
 
 // SetAsker installs the asker the `ask` tool uses to question the user.
 // Interactive frontends wire one in; headless runs leave it nil.
-func (a *Agent) SetAsker(as Asker) { a.svc.asker = as }
+func (a *Agent) SetAsker(as Asker) { a.svc.setAsker(as) }
 
 // SetMemoryQueue installs the sink the remember/forget tools use to apply a
 // memory change in the current session. The controller wires itself in.
@@ -548,6 +581,7 @@ func (a *Agent) Session() *sessionstore.Session {
 // running turn (it only fires while idle); sessMu guards the pointer swap itself.
 func (a *Agent) SetSession(s *sessionstore.Session) {
 	a.sess.reset(s)
+	a.replayTouchedPaths(s)
 	// The replaced conversation's task is over, but the ledger and the bill
 	// answer to beginRunTurn's scope check rather than to this seam.
 	if s != nil {
@@ -569,7 +603,7 @@ func (a *Agent) SessionCache() (hit, miss int) {
 
 // ContextWindow returns the configured context-window size in tokens. 0
 // means compaction is disabled for this agent.
-func (a *Agent) ContextWindow() int { return a.effectiveContextWindow() }
+func (a *Agent) ContextWindow() int { return a.window().effectiveContextWindow() }
 
 // SetSink replaces the agent's event sink. Controllers use this to wrap the
 // sink after construction (e.g. durable inbox observation) without rebuilding
@@ -593,7 +627,7 @@ func (a *Agent) CompactRatio() float64 { return a.compactRatio }
 // fold has to be worth, so a context nothing was added to is declined rather
 // than summarized a second time. Only IgnoreEconomics waives that.
 func (a *Agent) CompactNow(ctx context.Context, req CompactRequest) (CompactVerdict, error) {
-	prepared, err := a.contextManager().Prepare(ctx, ContextPreparePolicy{
+	prepared, err := a.window().contextManager().Prepare(ctx, ContextPreparePolicy{
 		Trigger:         CompactionTriggerManual,
 		Instructions:    req.Instructions,
 		IgnoreThreshold: true,
@@ -651,44 +685,45 @@ func New(prov provider.Provider, tools *tool.Registry, session *sessionstore.Ses
 	if reasoningByteLimit == 0 {
 		reasoningByteLimit = defaultReasoningByteLimit
 	}
+	perseverationGuard, perseverationMaxRetries := resolvePerseverationGuard(opts.MaxPerseverationRetries)
 	a := &Agent{
 		svc: newAgentServices(prov, tools, sink, gate,
 			sandboxEscapeApprover, configWriteApprover, hooks, opts),
 		agentConfig: agentConfig{
-			maxSteps:           opts.MaxSteps,
-			maxStepsKey:        maxStepsKey,
-			reasoningByteLimit: reasoningByteLimit,
-			maxOutputTokens:    opts.MaxOutputTokens,
-			temperature:        opts.Temperature,
-			usageSource:        usageSourceOrDefault(opts.UsageSource, event.UsageSourceExecutor),
-			modelRef:           strings.TrimSpace(opts.ModelRef),
-			workspaceID:        strings.TrimSpace(opts.WorkspaceID),
-			classifierTaskText: opts.ClassifierTaskText,
-			writeWorkspaceRoot: strings.TrimSpace(opts.WriteWorkspaceRoot),
-			renderRoot:         strings.TrimSpace(opts.RenderRoot),
-			workspaceVCS:       strings.TrimSpace(opts.WorkspaceVCS),
-			subagentDepth:      subagentDepth,
-			maxSubagentDepth:   maxSubagentDepth,
-			contextWindow:      opts.ContextWindow,
-			compactRatio:       opts.CompactRatio,
-			recentKeep:         opts.RecentKeep,
-			budgets:            opts.CompactionBudgets,
-			archiveDir:         opts.ArchiveDir,
+			maxSteps:                opts.MaxSteps,
+			maxStepsKey:             maxStepsKey,
+			reasoningByteLimit:      reasoningByteLimit,
+			perseverationGuard:      perseverationGuard,
+			perseverationMaxRetries: perseverationMaxRetries,
+			maxOutputTokens:         opts.MaxOutputTokens,
+			temperature:             opts.Temperature,
+			usageSource:             usageSourceOrDefault(opts.UsageSource, event.UsageSourceExecutor),
+			modelRef:                strings.TrimSpace(opts.ModelRef),
+			workspaceID:             strings.TrimSpace(opts.WorkspaceID),
+			classifierTaskText:      opts.ClassifierTaskText,
+			writeWorkspaceRoot:      strings.TrimSpace(opts.WriteWorkspaceRoot),
+			observeRoot:             opts.observeRoot(),
+			extraRoots:              slices.Clone(opts.ExtraWorkspaceRoots),
+			workspaceScanLimit:      opts.WorkspaceScanLimit,
+			renderRoot:              strings.TrimSpace(opts.RenderRoot),
+			workspaceVCS:            strings.TrimSpace(opts.WorkspaceVCS),
+			workspaceUnversioned:    opts.WorkspaceUnversioned,
+			subagentDepth:           subagentDepth,
+			maxSubagentDepth:        maxSubagentDepth,
+			providerRetries:         opts.ProviderRetries,
+			contextWindow:           opts.ContextWindow,
+			compactRatio:            opts.CompactRatio,
+			recentKeep:              opts.RecentKeep,
+			budgets:                 opts.CompactionBudgets,
+			archiveDir:              opts.ArchiveDir,
 		},
 		sess: sessionRuntime{
 			conversation: session,
 			path:         strings.TrimSpace(opts.SessionPath),
-			cacheState:   CacheStateUnknown,
+			win:          windowState{cacheState: CacheStateUnknown},
 		},
-		task: taskRuntime{
-			ledger: evidence.NewLedger(),
-			budget: runBudget{limit: normalizeTaskBudget(opts.TaskBudget)},
-		},
-		role: agentRole{
-			requireVisibleFinal: opts.RequireVisibleFinal,
-			readOnlyExecution:   opts.ReadOnlyExecution,
-			plannerMCPExecution: opts.PlannerMCPExecution,
-		},
+		task:        newTaskRuntime(opts.TaskBudget),
+		role:        newAgentRole(opts),
 		eventSource: opts.EventSource,
 		recovery: recoveryIdentity{
 			agentID: strings.TrimSpace(opts.RecoveryAgentID),
@@ -714,6 +749,8 @@ func New(prov provider.Provider, tools *tool.Registry, session *sessionstore.Ses
 	a.SetAgentPreset(preset)
 	a.SetResponseLanguage(opts.ResponseLanguage)
 	a.SetReasoningLanguage(opts.ReasoningLanguage)
+	a.SetProgressWatch(opts.ProgressWatch)
+	a.SetRequestEffort(opts.RequestEffort)
 	return a
 }
 
@@ -781,16 +818,19 @@ func missingReasoningWarnStateFor(dir string) *missingReasoningWarnState {
 // reserveParentWrite holds write claims for the duration of a parent-agent
 // write tool call. Returns a no-op release when reservation is not needed
 // (subagent, read-only, no scheduler, or non-write tool).
-func (a *Agent) reserveParentWrite(runTool tool.Tool, args json.RawMessage, readOnly bool) (release func(), err error) {
+func (a *Agent) reserveParentWrite(runTool tool.Tool, args json.RawMessage, readOnly bool, declared []string) (release func(), err error) {
 	noop := func() {}
 	if a == nil || a.svc.writeScheduler == nil || a.subagentDepth > 0 || readOnly || runTool == nil {
 		return noop, nil
+	}
+	if len(declared) > 0 {
+		return a.reserveDeclaredWrite(declared)
 	}
 	name := runTool.Name()
 	if !parentWriteGuardTarget(name) {
 		return noop, nil
 	}
-	claim, err := parentWriteReservation(a.writeWorkspaceRoot, name, args)
+	claim, err := a.parentToolWriteReservation(runTool, args)
 	if err != nil {
 		return noop, err
 	}
@@ -803,6 +843,8 @@ func (a *Agent) reserveParentWrite(runTool tool.Tool, args json.RawMessage, read
 // in hours or tokens rather than a round count, and every such budget ships off.
 // Turn policy lives in beginRunTurn / runToolLoop / handleFinalResponse.
 func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
+	ctx = a.compositionContext(ctx)
+	ctx, report := takeRunTimeSink(ctx)
 	runMaxSteps := a.maxSteps
 	runMaxStepsKey := a.maxStepsKey
 	runLimitHostOwned := false
@@ -860,7 +902,9 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 	state.runMaxStepsKey = runMaxStepsKey
 	state.runLimitHostOwned = runLimitHostOwned
 	state.workDurationMs = workDurationMs
-	return a.runToolLoop(ctx, state)
+	err := a.runToolLoop(ctx, state)
+	report(state.answeredMs, err)
+	return err
 }
 
 func boolInt(v bool) int {
@@ -919,6 +963,7 @@ func (a *Agent) updateDeliveryCheckpoint(runErr error) {
 	if runErr == nil && cp.PendingMutation && a.deliveryMutationCheckpointReady() {
 		cp.PendingMutation = false
 	}
+	a.carryProof(&cp)
 	a.task.checkpoint = cp
 }
 
@@ -989,7 +1034,7 @@ func (a *Agent) rebuildTodoState(msgs []provider.Message) {
 			if tc.Name != "todo_write" || !successful[tc.ID] {
 				continue
 			}
-			rec := evidence.ReceiptFromToolCall(tc.Name, json.RawMessage(tc.Arguments), true, evidence.ToolFacts{ReadOnly: true})
+			rec := evidence.ReceiptFromToolCall(tc.Name, json.RawMessage(tc.ExecutionArguments()), true, evidence.ToolFacts{ReadOnly: true})
 			// A successful empty todo_write is an explicit clear. Preserve it as the
 			// latest base so history reloads do not resurrect an older non-empty list.
 			todos = evidence.NormalizeSerialTodos(rec.Todos)
@@ -1005,7 +1050,7 @@ func (a *Agent) rebuildTodoState(msgs []provider.Message) {
 			if tc.Name != "complete_step" || !successful[tc.ID] {
 				continue
 			}
-			rec := evidence.ReceiptFromToolCall(tc.Name, json.RawMessage(tc.Arguments), true, evidence.ToolFacts{ReadOnly: true})
+			rec := evidence.ReceiptFromToolCall(tc.Name, json.RawMessage(tc.ExecutionArguments()), true, evidence.ToolFacts{ReadOnly: true})
 			if m, ok := evidence.MatchStep(rec.Step, todos); ok {
 				evidence.AdvanceSerialTodo(todos, m.Index-1)
 			}
@@ -1096,10 +1141,6 @@ func reasoningOnlyFinishHonoured(p provider.Provider, u *provider.Usage, reasoni
 	return strings.TrimSpace(reasoning) != ""
 }
 
-func emptyFinalRetryMessage() string {
-	return "The previous assistant response finished without any visible answer text. Continue the same task now and provide a concise visible answer to the user. Do not send reasoning only."
-}
-
 func emptyFinalNotice() string {
 	return "No visible answer was produced; asking the assistant to respond again."
 }
@@ -1133,9 +1174,7 @@ func (a *Agent) stream(ctx context.Context, turn int, sink event.Sink) streamedT
 }
 
 func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink, frozen *samplingRequest, attemptID string) streamedTurn {
-	ctx = provider.WithRetryNotify(ctx, func(info provider.RetryInfo) {
-		sink.Emit(event.Event{Kind: event.Retrying, RetryAttempt: info.Attempt, RetryMax: info.Max, RetryScope: event.RetryScopeHeaders})
-	})
+	ctx = withHeaderRetries(ctx, sink, a.providerRetries)
 	// Reuse a parent attempt counter when present so stream retries accumulate
 	// into one RequestCount; otherwise install a fresh counter for this call.
 	ctx = provider.WithRequestAttemptCounter(ctx)
@@ -1159,6 +1198,7 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 	}
 	// Host stream cancels on generation drain (OpenAI/Anthropic HTTP reads).
 	defer TrackPublishedHostStream(ctx, cancel)()
+	thought := thoughtClock{begin: time.Now()}
 	ch, err := a.streamProviderRequest(ctx, req)
 	if err != nil {
 		return streamedTurn{usage: provider.UsageWithRequestAttemptCount(ctx, nil), err: err}
@@ -1171,6 +1211,7 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 	transformReasoning := a.svc.hooks != nil && a.svc.hooks.HasPostLLMCall()
 
 	var text, reasoning strings.Builder
+	var reasoningBytes int                  // streamed, including what the retention limit dropped
 	var signature string                    // provider-issued proof for the reasoning (Anthropic thinking)
 	var reasoningID, reasoningStatus string // Responses reasoning item id/status (meta chunk)
 	var calls []provider.ToolCall
@@ -1180,15 +1221,15 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 	var partialToolStarted bool
 	var maxArgChars int
 	var lastArgProgress time.Time
-	// collect packages the stream state accumulated so far; stored is the
-	// finishReasoning output that becomes the round-tripped reasoning.
+	perseveration, perseverationDetected := newPerseverationGuards(), false
+	// collect packages the accumulated stream state; stored is the round-tripped reasoning.
 	collect := func(stored string, err error) streamedTurn {
 		return streamedTurn{
-			text: text.String(), reasoning: stored, signature: signature,
+			text: text.String(), reasoning: stored, signature: signature, thoughtMs: thought.ms(), firstTokenMs: thought.firstMs(),
 			reasoningID: reasoningID, reasoningStatus: reasoningStatus,
 			calls: calls, responsesItems: responsesItems, usage: usage,
 			partialToolStarted: partialToolStarted, partialCalls: partialCalls,
-			maxArgChars: maxArgChars, err: err,
+			maxArgChars: maxArgChars, err: err, perseverationDetected: perseverationDetected,
 		}
 	}
 	finishReasoning := func() (stored, display string) {
@@ -1212,14 +1253,14 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 		select {
 		case <-ctx.Done():
 			stored, _ := finishReasoning()
-			usage = bestEffortStreamUsage(usage, text.Len(), reasoning.Len(), "interrupted")
+			usage = bestEffortStreamUsage(usage, text.Len(), reasoningBytes, "interrupted")
 			usage = provider.UsageWithRequestAttemptCount(ctx, usage)
 			return collect(stored, ctx.Err())
 		case c, ok := <-ch:
 			if !ok {
 				if err := ctx.Err(); err != nil {
 					stored, _ := finishReasoning()
-					usage = bestEffortStreamUsage(usage, text.Len(), reasoning.Len(), "interrupted")
+					usage = bestEffortStreamUsage(usage, text.Len(), reasoningBytes, "interrupted")
 					usage = provider.UsageWithRequestAttemptCount(ctx, usage)
 					return collect(stored, err)
 				}
@@ -1245,28 +1286,24 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 					// and what the closing Message event re-renders must agree.
 					display = finalReasoning
 				}
-				if finalText != "" || display != "" {
-					sink.Emit(event.Event{
-						Kind:      event.Message,
-						Text:      DisplayAssistantText(finalText),
-						Reasoning: display,
-					})
-				}
+				emitAssistantMessage(sink, finalText, display, thought.ms())
 				usage = provider.UsageWithRequestAttemptCount(ctx, usage)
 				// A clean terminal never reports partialToolStarted: the calls
 				// slice is now authoritative and the partial cards were merged.
 				return streamedTurn{
-					text: finalText, reasoning: finalReasoning, signature: signature,
+					text: finalText, reasoning: finalReasoning, signature: signature, thoughtMs: thought.ms(), firstTokenMs: thought.firstMs(),
 					reasoningID: reasoningID, reasoningStatus: reasoningStatus,
 					calls: calls, responsesItems: responsesItems, usage: usage,
-					partialCalls: partialCalls, maxArgChars: maxArgChars,
+					partialCalls: partialCalls, maxArgChars: maxArgChars, perseverationDetected: perseverationDetected,
 				}
 			}
 			chunk = c
 		}
+		thought.observe(chunk, time.Now())
 		switch chunk.Type {
 		case provider.ChunkReasoning:
-			reasoning.WriteString(chunk.Text)
+			retainReasoning(&reasoning, chunk.Text, reasoningBytes, a.reasoningByteLimit)
+			reasoningBytes += len(chunk.Text)
 			if chunk.Signature != "" {
 				signature = chunk.Signature
 			}
@@ -1280,13 +1317,6 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 			}
 			if chunk.Text != "" && !transformReasoning {
 				sink.Emit(event.Event{Kind: event.Reasoning, Text: chunk.Text})
-			}
-			if a.reasoningByteLimit > 0 && reasoning.Len() > a.reasoningByteLimit {
-				stored, _ := finishReasoning()
-				usage = bestEffortStreamUsage(usage, text.Len(), reasoning.Len(), finishReasonClientReasoningLimit)
-				usage = provider.UsageWithRequestAttemptCount(ctx, usage)
-				a.storeLatestRequestUsage(usage)
-				return collect(stored, errReasoningByteLimitExceeded)
 			}
 		case provider.ChunkText:
 			text.WriteString(chunk.Text)
@@ -1340,7 +1370,7 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 		case provider.ChunkError:
 			if provider.IsStreamInterrupted(chunk.Err) {
 				stored, _ := finishReasoning()
-				usage = bestEffortStreamUsage(usage, text.Len(), reasoning.Len(), "interrupted")
+				usage = bestEffortStreamUsage(usage, text.Len(), reasoningBytes, "interrupted")
 				usage = provider.UsageWithRequestAttemptCount(ctx, usage)
 				st := collect(stored, chunk.Err)
 				st.interrupted = true
@@ -1348,10 +1378,14 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 			}
 			stored, _ := finishReasoning()
 			if errors.Is(chunk.Err, context.Canceled) || errors.Is(chunk.Err, context.DeadlineExceeded) {
-				usage = bestEffortStreamUsage(usage, text.Len(), reasoning.Len(), "interrupted")
+				usage = bestEffortStreamUsage(usage, text.Len(), reasoningBytes, "interrupted")
 			}
 			usage = provider.UsageWithRequestAttemptCount(ctx, usage)
 			return collect(stored, chunk.Err)
+		}
+		if cut := a.perseverationStep(perseveration, chunk, sink, &perseverationDetected, perseverationAbort{ctx: ctx, sink: sink,
+			finishReasoning: finishReasoning, collect: collect, reasoningBytes: reasoningBytes, thoughtMs: thought.ms(), firstTokenMs: thought.firstMs()}); cut != nil {
+			return *cut
 		}
 	}
 }
@@ -1409,7 +1443,7 @@ func upsertPartialToolCall(calls []provider.ToolCall, call provider.ToolCall) []
 	return append(calls, call)
 }
 
-func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provider.ToolCall, pending bool, workDurationMs int64) {
+func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provider.ToolCall, pending bool, workDurationMs int64, cause provider.StreamFailureCause) {
 	displayCalls := make([]provider.ToolCall, 0, len(calls))
 	interrupted := make([]string, 0, len(calls))
 	seen := make(map[string]struct{}, len(calls))
@@ -1436,6 +1470,7 @@ func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provide
 		LocalOnly:        true,
 		InterruptedTurn: &provider.InterruptedTurnRecovery{
 			Pending:                 pending,
+			StreamFailure:           cause,
 			InterruptedTools:        interrupted,
 			DroppedPartialText:      strings.TrimSpace(text) != "",
 			DroppedPartialReasoning: strings.TrimSpace(reasoning) != "",
@@ -1515,15 +1550,10 @@ func toProviderToolExecution(in *tool.ShellExecution) *provider.ToolExecution {
 func (a *Agent) emitFullToolDispatch(ctx context.Context, c provider.ToolCall, refreshed bool) {
 	t, _, ambiguous := a.svc.tools.ResolveCall(c.Name)
 	ok := t != nil && len(ambiguous) == 0
-	ev := event.Tool{ID: c.ID, Name: c.Name, Args: c.Arguments, ReadOnly: ok && t.ReadOnly(), Refreshed: refreshed, Issuer: event.IssuedByModel}
+	ev := event.Tool{ID: c.ID, Name: c.Name, Args: c.ExecutionArguments(), ArgumentNormalization: c.ArgumentNormalization, ReadOnly: ok && t.ReadOnly(), Refreshed: refreshed, Issuer: event.IssuedByModel}
 	ev.FileDiff = event.FileDiff{Diff: c.Diff, Added: c.Added, Removed: c.Removed}
-	if ok && ev.Diff == "" && ev.Added == 0 && ev.Removed == 0 {
-		if ch, ok := tool.PreviewChange(ctx, t, json.RawMessage(c.Arguments)); ok {
-			ev.FileDiff = event.FileDiff{Diff: ch.Diff, Added: ch.Added, Removed: ch.Removed}
-		}
-	}
 	if ok {
-		ev.Profile = delegationProfile(t, json.RawMessage(c.Arguments))
+		ev.Profile = delegationProfile(t, json.RawMessage(c.ExecutionArguments()))
 	}
 	a.svc.sink.Emit(event.Event{Kind: event.ToolDispatch, Tool: ev})
 }
@@ -1536,72 +1566,13 @@ func (a *Agent) emitResolvedToolDispatch(c provider.ToolCall, profile *event.Pro
 		return
 	}
 	if c.ResolvedName != "" && c.ResolvedName != c.Name {
-		EmitProxyAudit(a.svc.sink, tool.ResolvedCall{
+		usecap.EmitProxyAudit(a.svc.sink, tool.ResolvedCall{
 			DisplayName:  c.Name,
 			TargetName:   c.ResolvedName,
 			CapabilityID: c.CapabilityID,
 		})
 	}
-	a.svc.sink.Emit(event.Event{Kind: event.ToolDispatch, Tool: event.Tool{
-		ID:           c.ID,
-		Name:         c.Name,
-		Args:         c.Arguments,
-		ResolvedName: c.ResolvedName,
-		CapabilityID: c.CapabilityID,
-		ReadOnly:     *c.ResolvedReadOnly,
-		Refreshed:    true,
-		Issuer:       event.IssuedByModel,
-		Profile:      profile,
-		FileDiff: event.FileDiff{
-			Diff: c.Diff, Added: c.Added, Removed: c.Removed,
-		},
-	}})
-}
-
-// refreshCurrentFileDiff recomputes a writer preview against the state left by
-// earlier successful writers in the same provider batch. Preview failures clear
-// any stale initial diff; a later Execute will then fail or ask for recovery
-// without presenting the user with a preview that no longer describes disk.
-func refreshCurrentFileDiff(ctx context.Context, t tool.Tool, call provider.ToolCall) (provider.ToolCall, bool) {
-	pv, ok := t.(tool.Previewer)
-	if !ok {
-		return call, false
-	}
-	refreshed := call
-	refreshed.Diff = ""
-	refreshed.Added = 0
-	refreshed.Removed = 0
-	if change, err := pv.Preview(ctx, json.RawMessage(call.Arguments)); err == nil {
-		refreshed.Diff = change.Diff
-		refreshed.Added = change.Added
-		refreshed.Removed = change.Removed
-	}
-	changed := refreshed.Diff != call.Diff || refreshed.Added != call.Added || refreshed.Removed != call.Removed
-	return refreshed, changed
-}
-
-func (a *Agent) withPreviewFileDiffs(ctx context.Context, calls []provider.ToolCall) []provider.ToolCall {
-	if len(calls) == 0 {
-		return calls
-	}
-	out := make([]provider.ToolCall, len(calls))
-	copy(out, calls)
-	for i := range out {
-		if out[i].Diff != "" || out[i].Added != 0 || out[i].Removed != 0 {
-			continue
-		}
-		t, _, ambiguous := a.svc.tools.ResolveCall(out[i].Name)
-		ok := t != nil && len(ambiguous) == 0
-		if !ok {
-			continue
-		}
-		if ch, ok := tool.PreviewChange(ctx, t, json.RawMessage(out[i].Arguments)); ok {
-			out[i].Diff = ch.Diff
-			out[i].Added = ch.Added
-			out[i].Removed = ch.Removed
-		}
-	}
-	return out
+	a.emitRefreshedDispatch(c, profile)
 }
 
 // completedMCPConnect recognizes a synthetic cache-miss connect call whose
@@ -1708,7 +1679,7 @@ func (a *Agent) readOnlyExecutionBlock(visible tool.Tool, resolved *tool.Resolve
 	}
 	if resolved == nil {
 		if a.role.plannerMCPExecution && isMCPExecutionTarget(visible, "") {
-			if !mcpServerAuthorized(visible) {
+			if !tool.IsMCPServerAuthorized(visible) {
 				return block("execute an MCP capability from an unauthorized server")
 			}
 			if readOnlyExecutionMCPDestructive(visible) {
@@ -1722,7 +1693,7 @@ func (a *Agent) readOnlyExecutionBlock(visible tool.Tool, resolved *tool.Resolve
 			}
 			return block("execute a state-changing tool")
 		}
-		if isInstalledMCPTool(visible) && !mcpServerAuthorized(visible) {
+		if isInstalledMCPTool(visible) && !tool.IsMCPServerAuthorized(visible) {
 			return block("execute a reader from an unauthorized MCP server")
 		}
 		if readOnlyExecutionMCPDestructive(visible) {
@@ -1734,18 +1705,19 @@ func (a *Agent) readOnlyExecutionBlock(visible tool.Tool, resolved *tool.Resolve
 		return toolOutcome{}, false
 	}
 
-	switch resolved.ProxyAction {
-	case "list", "inspect":
-		if !resolved.SkipExecute || resolved.Target != nil || !resolved.ReadOnly {
+	if usecap.IsCatalogReadAction(resolved.ProxyAction) {
+		if !isHostResolvedCatalogRead(resolved) {
 			return block("execute a malformed dynamic inspection")
 		}
 		return toolOutcome{}, false
-	case "decline":
+	}
+	switch resolved.ProxyAction {
+	case usecap.ActionDecline:
 		return block("decline a capability decision")
-	case "call":
+	case usecap.ActionCall:
 		if resolved.Target == nil {
 			if a.role.plannerMCPExecution && resolved.HostCompleted && resolved.SkipExecute && resolved.ReadOnly && !resolved.Unavailable {
-				if _, ok := parseMCPServerCapabilityID(resolved.CapabilityID); ok {
+				if _, ok := usecap.ParseMCPServerCapabilityID(resolved.CapabilityID); ok {
 					return toolOutcome{}, false
 				}
 			}
@@ -1756,7 +1728,7 @@ func (a *Agent) readOnlyExecutionBlock(visible tool.Tool, resolved *tool.Resolve
 				if !plannerMCPConnectAllowed(resolved.Target) {
 					return block("start an unauthorized MCP server")
 				}
-			} else if !mcpServerAuthorized(resolved.Target) {
+			} else if !tool.IsMCPServerAuthorized(resolved.Target) {
 				return block("execute an MCP capability from an unauthorized server")
 			}
 			if readOnlyExecutionMCPDestructive(resolved.Target) {
@@ -1774,7 +1746,7 @@ func (a *Agent) readOnlyExecutionBlock(visible tool.Tool, resolved *tool.Resolve
 			}
 			return block("execute a state-changing dynamic capability")
 		}
-		if isInstalledMCPTool(resolved.Target) && !mcpServerAuthorized(resolved.Target) {
+		if isInstalledMCPTool(resolved.Target) && !tool.IsMCPServerAuthorized(resolved.Target) {
 			return block("execute a dynamic reader from an unauthorized MCP server")
 		}
 		if readOnlyExecutionMCPDestructive(resolved.Target) {
@@ -1785,19 +1757,25 @@ func (a *Agent) readOnlyExecutionBlock(visible tool.Tool, resolved *tool.Resolve
 		}
 		return toolOutcome{}, false
 	default:
-		return block("execute an unknown dynamic capability action")
+		return block(fmt.Sprintf("execute dynamic capability action %q; allowed: %s, %s", resolved.ProxyAction, strings.Join(usecap.CatalogReadActions, ", "), usecap.ActionCall+" on a read-only target"))
 	}
 }
 
+// isHostResolvedCatalogRead is the structural shape of a catalog read: answered
+// by the host, no target, no deferred state transition (decline has a Commit).
+func isHostResolvedCatalogRead(rc *tool.ResolvedCall) bool {
+	return rc.SkipExecute && rc.Target == nil && rc.ReadOnly && rc.Commit == nil
+}
+
 func readOnlyExecutionMCPDestructive(t tool.Tool) bool {
-	return mcpDestructiveHint(t)
+	return tool.HasMCPDestructiveHint(t)
 }
 
 func readOnlyExecutionAllowsMCPStartup(t tool.Tool) bool {
 	if t == nil || !t.ReadOnly() || readOnlyExecutionMCPDestructive(t) {
 		return false
 	}
-	if !mcpServerAuthorized(t) {
+	if !tool.IsMCPServerAuthorized(t) {
 		return false
 	}
 	meta, ok := t.(tool.MCPMetadata)
@@ -1844,7 +1822,7 @@ func plannerMCPConnectAllowed(t tool.Tool) bool {
 	if life, ok := t.(mcpLifecycleConnect); ok {
 		return life.MCPServerAuthorized()
 	}
-	return mcpServerAuthorized(t)
+	return tool.IsMCPServerAuthorized(t)
 }
 
 func isInstalledMCPTool(t tool.Tool) bool {
@@ -1856,21 +1834,11 @@ func isMCPExecutionTarget(t tool.Tool, name string) bool {
 	return isInstalledMCPTool(t) || strings.HasPrefix(strings.TrimSpace(name), "mcp__")
 }
 
-func mcpServerAuthorized(t tool.Tool) bool {
-	authority, ok := t.(tool.MCPServerAuthorization)
-	return ok && authority.MCPServerAuthorized()
-}
-
-func mcpDestructiveHint(t tool.Tool) bool {
-	annotations, ok := t.(tool.MCPAnnotations)
-	return ok && annotations.MCPDestructiveHint()
-}
-
 func (a *Agent) staleAnchorEditBlock(call provider.ToolCall) (string, bool) {
 	if a.task.ledger == nil || !anchorBasedEditTool(call.Name) {
 		return "", false
 	}
-	rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), true, a.toolFactsFor(call.Name))
+	rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.ExecutionArguments()), true, a.toolFactsFor(call.Name))
 	if len(rec.Paths) == 0 {
 		return "", false
 	}
@@ -2004,8 +1972,6 @@ func finishReasonMessage(u *provider.Usage) (string, bool) {
 	switch u.FinishReason {
 	case "length":
 		return "response truncated: hit max output tokens", true
-	case finishReasonClientReasoningLimit:
-		return "response stopped: hit the client reasoning safety limit", true
 	case "content_filter":
 		return "response blocked by content filter", true
 	case "repetition_truncation":

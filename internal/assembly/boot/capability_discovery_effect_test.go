@@ -13,7 +13,7 @@ import (
 
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
-	"reasonix/internal/runtime/agent"
+	"reasonix/internal/runtime/usecap"
 )
 
 // capabilityProbeProvider issues one scripted use_capability call per round,
@@ -96,6 +96,7 @@ name = "test-model"
 kind = "`+kind+`"
 model = "x"
 `)
+	approveWorkspace(t, dir)
 	ctrl, err := Build(context.Background(), Options{Sink: sink})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -112,12 +113,12 @@ model = "x"
 // exactly that way — call accepted it while inspect denied it — so a subagent
 // harness looked absent and the work ran inline instead.
 func TestEffectDescribedCapabilityIDsAreDiscoverable(t *testing.T) {
-	calls := make([]string, 0, len(agent.CapabilityIDExamples))
-	for _, id := range agent.CapabilityIDExamples {
+	calls := make([]string, 0, len(usecap.CapabilityIDExamples))
+	for _, id := range usecap.CapabilityIDExamples {
 		calls = append(calls, `{"action":"inspect","capability_id":"`+id+`"}`)
 	}
 	results := probeCapabilities(t, "boot-capability-probe-inspect", calls)
-	for i, id := range agent.CapabilityIDExamples {
+	for i, id := range usecap.CapabilityIDExamples {
 		if strings.Contains(results[i], "unknown capability_id") {
 			t.Errorf("the description names %q but inspect denies it exists: %s", id, results[i])
 		}

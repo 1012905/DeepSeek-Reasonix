@@ -8,6 +8,8 @@ import { RemoteHosts } from "./RemoteHosts";
 import type { RemoteHost } from "../port/remote";
 import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
 
+vi.mock("../port/host", () => ({ host: () => ({ revealsFiles: () => true }) }));
+
 afterEach(cleanup);
 
 const host: RemoteHost = { name: "gpu", target: "ada@10.0.0.4", status: "connected", workspaces: ["/home/ada/training"] };
@@ -15,6 +17,11 @@ const path = "/home/ada/training/s1.jsonl";
 const tree: Record<string, TreeWorkspace[] | null> = {
   gpu: [{ root: "/home/ada/training", name: "training", sessions: [{ path, name: "s1", title: "跑通构建" }] }],
 };
+
+async function askDelete() {
+  await userEvent.pointer({ target: screen.getByRole("treeitem", { name: "跑通构建" }), keys: "[MouseRight]" });
+  await userEvent.click(screen.getByRole("menuitem", { name: "删除会话" }));
+}
 
 function draw(runtimes: RuntimeView[] = [], live: string[] = []) {
   const order: string[] = [];
@@ -43,10 +50,24 @@ function draw(runtimes: RuntimeView[] = [], live: string[] = []) {
   return { removeRemoteSession, readTree, onClose, order };
 }
 
+describe("a project on another machine", () => {
+  it("offers no way to show it in this machine's file manager", () => {
+    draw();
+    expect(document.querySelector('[data-action="workspace.reveal"]')).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /在文件管理器中显示/ })).toBeNull();
+  });
+});
+
 describe("a conversation on another machine", () => {
+  it("returns keyboard focus to its row after cancelling deletion", async () => {
+    draw();
+    await askDelete();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("treeitem", { name: "跑通构建" })));
+  });
   it("is deleted on that machine after a confirmation, and its list is read again", async () => {
     const { removeRemoteSession, order } = draw();
-    await userEvent.click(screen.getByRole("button", { name: "删除会话：跑通构建" }));
+    await askDelete();
     expect(removeRemoteSession).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByRole("button", { name: "删除" }));
@@ -57,7 +78,7 @@ describe("a conversation on another machine", () => {
   it("closes the pane holding it before asking that machine to erase it", async () => {
     const pane = { id: "rt-1", sessionPath: path, host: "gpu" } as unknown as RuntimeView;
     const { onClose, order } = draw([pane]);
-    await userEvent.click(screen.getByRole("button", { name: "删除会话：跑通构建" }));
+    await askDelete();
     await userEvent.click(screen.getByRole("button", { name: "删除" }));
     await waitFor(() => expect(order).toEqual(["close", "remove", "read"]));
     expect(onClose).toHaveBeenCalledWith(["rt-1"]);
@@ -68,7 +89,7 @@ describe("a running conversation on another machine", () => {
   it("is not closed to make way for its deletion; the far kernel answers for it", async () => {
     const pane = { id: "rt-1", sessionPath: path, host: "gpu" } as unknown as RuntimeView;
     const { onClose, removeRemoteSession } = draw([pane], ["rt-1"]);
-    await userEvent.click(screen.getByRole("button", { name: "删除会话：跑通构建" }));
+    await askDelete();
     expect(screen.getByText(/正在运行，停止后才能删除/)).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "删除" }));
     await waitFor(() => expect(removeRemoteSession).toHaveBeenCalled());

@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"os"
 	osuser "os/user"
@@ -202,6 +203,10 @@ func acquireConfigEditLockPathWithTimeout(lockPath string, timeout time.Duration
 	return acquireConfigEditLockPath(ctx, lockPath)
 }
 
+// ErrLockDirWrongOwner reports that the config edit lock directory belongs to
+// another user, so it cannot be secured and is not used.
+var ErrLockDirWrongOwner = errors.New("lock directory is owned by another user")
+
 func acquireConfigEditLockPath(ctx context.Context, lockPath string) (func(), error) {
 	lockDir := filepath.Dir(lockPath)
 	if err := os.MkdirAll(lockDir, 0o700); err != nil {
@@ -213,6 +218,9 @@ func acquireConfigEditLockPath(ctx context.Context, lockPath string) (func(), er
 	}
 	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 		return nil, fmt.Errorf("lock config edits: unsafe lock directory")
+	}
+	if owner, foreign := lockDirForeignOwner(info); foreign {
+		return nil, fmt.Errorf("lock config edits: lock directory %s is owned by uid %d, not the current user: %w", lockDir, owner, ErrLockDirWrongOwner)
 	}
 	if err := os.Chmod(lockDir, 0o700); err != nil {
 		return nil, fmt.Errorf("lock config edits: secure lock directory: %w", err)
@@ -254,7 +262,7 @@ func resolveConfigEditTarget(path string) (configEditTarget, error) {
 }
 
 func configFileEditLockPathResolved(resolved string) (string, error) {
-	lockDir, err := configEditLockRegistryDir()
+	lockDir, err := configEditLockRegistryDirFor(resolved)
 	if err != nil {
 		return "", err
 	}
@@ -264,6 +272,55 @@ func configFileEditLockPathResolved(resolved string) (string, error) {
 	}
 	digest := sha256.Sum256([]byte(lockKey))
 	return filepath.Join(lockDir, fmt.Sprintf("%x.lock", digest)), nil
+}
+
+// configEditLockRegistryDirFor keeps a file's lock inside the explicitly
+// isolated Reasonix home that holds the file: a self-contained runtime writes
+// nothing outside its home. Every other file, and every default launch, locks
+// under the OS account's home as before.
+func configEditLockRegistryDirFor(resolved string) (string, error) {
+	if home := IsolatedHomeDir(); home != "" && homeHolds(home, resolved) {
+		identity, err := configEditLockIdentity()
+		if err != nil {
+			return "", err
+		}
+		digest := sha256.Sum256([]byte(identity))
+		return filepath.Join(filepath.Clean(home), "locks", fmt.Sprintf("config-edits-%x", digest[:8])), nil
+	}
+	return configEditLockRegistryDir()
+}
+
+// homeHolds reports whether resolved, an already symlink-resolved path, is
+// inside home as the environment spelled it or as the filesystem resolves it.
+func homeHolds(home, resolved string) bool {
+	if pathWithin(home, resolved) {
+		return true
+	}
+	real, err := filepath.EvalSymlinks(home)
+	return err == nil && pathWithin(real, resolved)
+}
+
+func pathWithin(dir, path string) bool {
+	rel, err := filepath.Rel(filepath.Clean(dir), filepath.Clean(path))
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+}
+
+func configEditLockIdentity() (string, error) {
+	current, err := osuser.Current()
+	if err != nil {
+		return "", fmt.Errorf("lock config edits: resolve OS user: %w", err)
+	}
+	identity := strings.TrimSpace(current.Uid)
+	if identity == "" {
+		identity = strings.TrimSpace(current.Username)
+	}
+	if identity == "" {
+		identity = strings.TrimSpace(current.HomeDir)
+	}
+	if identity == "" {
+		return "", fmt.Errorf("lock config edits: OS user identity unavailable")
+	}
+	return identity, nil
 }
 
 func configEditLockRegistryDir() (string, error) {
@@ -282,15 +339,15 @@ func configEditLockRegistryDir() (string, error) {
 		return "", fmt.Errorf("lock config edits: OS user identity unavailable")
 	}
 	digest := sha256.Sum256([]byte(identity))
-	if runtime.GOOS != "windows" {
-		// The OS-wide temporary root is invariant across process-specific TMPDIR
-		// overrides. The per-user directory is verified and forced to mode 0700
-		// before the advisory lock file is opened.
-		return filepath.Join(string(filepath.Separator), "tmp", fmt.Sprintf("reasonix-config-locks-%x", digest[:8])), nil
-	}
+	// Per-user home from the account database, not $HOME or TMPDIR; a shared
+	// /tmp path let another identity pre-create it. The owner check backs this up.
 	home := strings.TrimSpace(current.HomeDir)
 	if home == "" {
-		return "", fmt.Errorf("lock config edits: OS user home unavailable")
+		if runtime.GOOS == "windows" {
+			return "", fmt.Errorf("lock config edits: OS user home unavailable")
+		}
+		// No home recorded: fall back to a /tmp directory named by uid.
+		return filepath.Join(string(filepath.Separator), "tmp", fmt.Sprintf("reasonix-config-locks-%x", digest[:8])), nil
 	}
 	return filepath.Join(filepath.Clean(home), ".reasonix", "locks", fmt.Sprintf("config-edits-%x", digest[:8])), nil
 }

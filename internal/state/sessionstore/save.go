@@ -270,8 +270,8 @@ func (s *Session) saveLocked(path string, mode sessionSaveMode) error {
 	if err != nil {
 		return err
 	}
-	if probe.futureSchema {
-		return fmt.Errorf("session event log for %s uses schema %d; this build supports up to %d", path, probe.schemaVersion, sessionEventSchemaVersion)
+	if err := probeRefusesSave(path, probe, msgs); err != nil {
+		return err
 	}
 	if probe.native && probe.size > 0 {
 		// Drop any torn tail a crashed or disk-full append left behind before
@@ -337,7 +337,7 @@ func (s *Session) saveLocked(path string, mode sessionSaveMode) error {
 				return err
 			}
 			displayModelCurrent, err = appendSessionDisplayReadModel(path, msgs, decision.appendFrom, decision.revision)
-		case sessionEventLogOversized(logSize, contentBytes):
+		case sessionEventLogOversized(logSize, contentBytes, msgs):
 			// Fold history into one replace event and refresh the random-read
 			// model atomically. Normal appends keep it current below too.
 			if err := compactSessionEventLog(path, msgs, digest, decision.revision, "compact"); err != nil {
@@ -411,7 +411,7 @@ func (s *Session) saveLocked(path string, mode sessionSaveMode) error {
 		if err := compactSessionEventLog(path, msgs, digest, baseRevision, reason); err != nil {
 			return err
 		}
-	case repairLog, sessionEventLogOversized(logSize, contentBytes):
+	case repairLog, compositionRemoved(probe.schemaVersion, msgs), sessionEventLogOversized(logSize, contentBytes, msgs):
 		if err := compactSessionEventLog(path, msgs, digest, baseRevision, reason); err != nil {
 			return err
 		}
@@ -445,6 +445,9 @@ func (s *Session) saveLocked(path string, mode sessionSaveMode) error {
 }
 
 func writeSessionMessages(path string, msgs []provider.Message) error {
+	if err := refuseDegradedCheckpointRewrite(path, msgs); err != nil {
+		return err
+	}
 	// Write to a sibling tmp file then rename, so a crash mid-write can't
 	// leave a partial JSONL that won't reload. The fsync guards the anchor
 	// against power loss — it is the fallback when the event log is damaged.
@@ -480,7 +483,7 @@ func writeSessionMessages(path string, msgs []provider.Message) error {
 // checkSnapshotWrite decides whether this session may write msgs over path, and
 // whether the safe write shape is a no-op, append-only suffix, or full rewrite.
 func (s *Session) checkSnapshotWrite(path string, next []provider.Message, nextDigest [sha256.Size]byte, nextVersion uint64, allowOwnedRewrite bool) (snapshotWriteDecision, error) {
-	current, err := loadSessionUnlocked(path)
+	current, err := loadSnapshotBaseline(path, next)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return snapshotWriteDecision{}, nil
@@ -1038,7 +1041,11 @@ func recordSessionContentRevision(path string, digest [sha256.Size]byte, baseRev
 		// up-to-date ledgerStale path in save().
 		return 0, err
 	}
-	if !ok {
+	var persisted *BranchMeta
+	if ok {
+		read := meta
+		persisted = &read
+	} else {
 		meta = BranchMeta{ID: BranchID(path)}
 	}
 	if meta.Revision < baseRevision {
@@ -1047,15 +1054,8 @@ func recordSessionContentRevision(path string, digest [sha256.Size]byte, baseRev
 	meta.Revision++
 	meta.ContentDigest = digestString(digest)
 	meta.WriterID = SessionWriterID()
-	if err := saveBranchMeta(path, meta, false); err != nil {
+	if err := saveBranchMetaAfter(path, meta, false, persisted); err != nil {
 		return 0, err
-	}
-	stored, ok, err := loadBranchMetaRetry(path)
-	if err != nil {
-		return 0, err
-	}
-	if ok && stored.Revision > 0 {
-		return stored.Revision, nil
 	}
 	return meta.Revision, nil
 }
@@ -1105,9 +1105,16 @@ func messageForSessionIdentity(m provider.Message) provider.Message {
 // digestAndSizeSessionMessages also reports the encoded transcript size, which
 // the save path uses to bound the event log relative to the live content.
 func digestAndSizeSessionMessages(msgs []provider.Message) ([sha256.Size]byte, int64, error) {
+	return digestAndSizeSessionMessagesContext(context.Background(), msgs)
+}
+
+func digestAndSizeSessionMessagesContext(ctx context.Context, msgs []provider.Message) ([sha256.Size]byte, int64, error) {
 	h := sha256.New()
 	size := int64(0)
 	for _, m := range msgs {
+		if err := ctx.Err(); err != nil {
+			return [sha256.Size]byte{}, 0, err
+		}
 		m = messageForSessionIdentity(m)
 		b, err := json.Marshal(m)
 		if err != nil {
@@ -1308,12 +1315,13 @@ func UpdateBranchMeta(path string, touchUpdated bool, update func(*BranchMeta) e
 	if err != nil {
 		return err
 	}
+	persisted := m
 	if update != nil {
 		if err := update(&m); err != nil {
 			return err
 		}
 	}
-	return saveBranchMeta(path, m, touchUpdated)
+	return saveBranchMetaAfter(path, m, touchUpdated, &persisted)
 }
 
 func canonicalSessionSavePath(path string) string {
@@ -1382,13 +1390,22 @@ func CanonicalSessionPath(path string) string {
 // Missing files surface as os.IsNotExist so callers can fall through to a
 // new session.
 func LoadSession(path string) (*Session, error) {
+	if err := PrepareSessionPath(path); err != nil {
+		return nil, err
+	}
 	unlock := lockSessionSavePath(path)
 	defer unlock()
 	return loadSessionUnlocked(path)
 }
 
 func loadSessionUnlocked(path string) (*Session, error) {
-	msgs, _, damaged, err := loadSessionMessages(path)
+	return loadSessionUnlockedContext(context.Background(), path)
+}
+
+func loadSessionUnlockedContext(ctx context.Context, path string) (*Session, error) {
+	limits := defaultSessionReplayLimits
+	limits.ctx = ctx
+	msgs, _, damaged, err := loadSessionMessagesWithLimits(path, limits)
 	if err != nil {
 		return nil, err
 	}
@@ -1414,7 +1431,10 @@ func loadSessionUnlocked(path string) (*Session, error) {
 		s.rawMessages = msgs
 	}
 	s.Messages = normalized
-	if digest, err := DigestSessionMessages(s.Messages); err == nil {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if digest, _, err := digestAndSizeSessionMessagesContext(ctx, s.Messages); err == nil {
 		if meta, ok, metaErr := loadBranchMetaRetry(path); metaErr != nil {
 			// The sidecar exists but is unreadable even after retries (torn or
 			// corrupt). The session must still open, but revision 0 must not
@@ -1430,6 +1450,9 @@ func loadSessionUnlocked(path string) (*Session, error) {
 			}
 			s.markPersistedFromLoad(path, digest, s.version, revision, s.rewriteVersion)
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	return s, nil
 }
@@ -1569,7 +1592,7 @@ func ReconcileCleanupPending(dir string, cleanup func(CleanupPendingInfo) error)
 		return errors.Join(errs...)
 	}
 	for _, item := range pending {
-		handled, err := reconcileRecoveryTrashPending(item)
+		handled, err := reconcilePending(dir, item, cleanup)
 		if !handled {
 			if cleanup == nil {
 				continue
@@ -1863,17 +1886,7 @@ func migrateSessionSidecars(oldPath, newPath, newID string) error {
 			}
 		}
 	}
-	for _, pair := range [][2]string{
-		{store.SessionGoalState(oldPath), store.SessionGoalState(newPath)},
-		{store.SessionEventLog(oldPath), store.SessionEventLog(newPath)},
-		{store.SessionEventLogDamaged(oldPath), store.SessionEventLogDamaged(newPath)},
-		{store.SessionEventIndex(oldPath), store.SessionEventIndex(newPath)},
-		{store.SessionConflictLog(oldPath), store.SessionConflictLog(newPath)},
-		{store.SessionRecoveryState(oldPath), store.SessionRecoveryState(newPath)},
-		{store.SessionCheckpointDir(oldPath), store.SessionCheckpointDir(newPath)},
-		{store.SessionJobsDir(oldPath), store.SessionJobsDir(newPath)},
-		{store.SessionInboxDir(oldPath), store.SessionInboxDir(newPath)},
-	} {
+	for _, pair := range sessionSidecarMoves(oldPath, newPath) {
 		// A source name past the filesystem limit cannot exist; renaming it
 		// would just manufacture ENAMETOOLONG instead of a clean not-exist.
 		if len(filepath.Base(pair[0])) > nameMaxBytes {
@@ -1919,114 +1932,18 @@ func reparentSessionBranches(dir string, renamed map[string]string) error {
 	return errors.Join(errs...)
 }
 
-// ListSessionOrder returns every *.jsonl session under dir in the same
-// most-recently-active order used by ListSessions, using only file metadata and
-// branch sidecars. A missing directory is not an error.
-func ListSessionOrder(dir string) ([]SessionOrderInfo, error) {
-	entries, err := os.ReadDir(dir)
+// ListSessions returns complete listing metadata, replaying uncached foreign
+// sessions. Interactive callers use ListNativeSessions and LegacyListings.
+func ListSessions(dir string) ([]SessionInfo, error) {
+	out, err := ListNativeSessions(dir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
 		return nil, err
 	}
-	var out []SessionOrderInfo
-	for _, e := range entries {
-		if e.IsDir() || !store.IsSessionTranscriptName(e.Name()) {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		full := filepath.Join(dir, e.Name())
-		if !IsVisibleSession(full) {
-			continue
-		}
-		contentMod := SessionContentModTime(full)
-		if contentMod.IsZero() {
-			contentMod = info.ModTime()
-		}
-		createdAt := info.ModTime()
-		lastActivityAt := contentMod
-		scope := "global"
-		workspaceRoot := ""
-		topicID := ""
-		topicTitle := ""
-		customTitle := ""
-		archived := false
-		recovered := false
-		recoveryReason := ""
-		recoveryDigest := ""
-		parentID := ""
-		turns := 0
-		preview := ""
-		recoveryRootID := ""
-		schemaVersion := 0
-		revision := int64(0)
-		contentDigest := ""
-		if meta, ok, err := LoadBranchMeta(full); err == nil && ok {
-			if !meta.CreatedAt.IsZero() {
-				createdAt = meta.CreatedAt
-			}
-			if !meta.UpdatedAt.IsZero() {
-				lastActivityAt = meta.UpdatedAt
-			}
-			scope = meta.DefaultScope()
-			workspaceRoot = meta.WorkspaceRoot
-			topicID = meta.TopicID
-			topicTitle = meta.TopicTitle
-			customTitle = meta.CustomTitle
-			archived = meta.Archived
-			recovered = meta.Recovered
-			recoveryReason = meta.RecoveryReason
-			recoveryDigest = meta.RecoveryDigest
-			parentID = meta.ParentID
-			recoveryRootID = meta.RecoveryRootID
-			turns = meta.Turns
-			preview = meta.Preview
-			schemaVersion = meta.SchemaVersion
-			revision = meta.Revision
-			contentDigest = meta.ContentDigest
-		}
-		out = append(out, SessionOrderInfo{
-			Path:           full,
-			CreatedAt:      createdAt,
-			LastActivityAt: lastActivityAt,
-			ModTime:        lastActivityAt,
-			Scope:          scope,
-			WorkspaceRoot:  workspaceRoot,
-			TopicID:        topicID,
-			TopicTitle:     topicTitle,
-			CustomTitle:    customTitle,
-			Archived:       archived,
-			Recovered:      recovered,
-			RecoveryReason: recoveryReason,
-			RecoveryDigest: recoveryDigest,
-			ParentID:       parentID,
-			RecoveryRootID: recoveryRootID,
-			Turns:          turns,
-			Preview:        preview,
-			SchemaVersion:  schemaVersion,
-			Revision:       revision,
-			ContentDigest:  contentDigest,
-		})
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].LastActivityAt.Equal(out[j].LastActivityAt) {
-			return out[i].Path < out[j].Path
-		}
-		return out[i].LastActivityAt.After(out[j].LastActivityAt)
-	})
-	return out, nil
+	return withV4Sessions(dir, out), nil
 }
 
-// ListSessions returns every non-empty *.jsonl session under dir,
-// most-recently-active first, each with a preview line so the picker can show
-// something the user recognises. It never decodes a transcript: legacy counts
-// remain explicitly unknown until the session catalog's single repair worker
-// validates them. A missing directory is not an error.
-func ListSessions(dir string) ([]SessionInfo, error) {
+// ListNativeSessions reads metadata without consulting foreign transcript stores.
+func ListNativeSessions(dir string) ([]SessionInfo, error) {
 	ordered, err := ListSessionOrder(dir)
 	if err != nil {
 		return nil, err
@@ -2067,15 +1984,4 @@ func ContinueSessionPath(prevPath, dir, model string) string {
 		return ""
 	}
 	return NewSessionPath(dir, model)
-}
-
-// NewSessionPath returns the path to use for a fresh session, namespaced by
-// the model so the filename hints at what the conversation was with. dir is
-// typically config.SessionDir().
-func NewSessionPath(dir, model string) string {
-	safe := strings.NewReplacer("/", "-", "\\", "-", ":", "-", "<", "-", ">", "-", "\"", "-", "|", "-", "?", "-", "*", "-").Replace(model)
-	if safe == "" {
-		safe = "session"
-	}
-	return filepath.Join(dir, fmt.Sprintf("%s-%s.jsonl", time.Now().UTC().Format("20060102-150405.000000000"), safe))
 }

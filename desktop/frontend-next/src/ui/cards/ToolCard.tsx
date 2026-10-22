@@ -1,21 +1,28 @@
+import { JsonText } from "./JsonText";
 import { useEffect, useRef, useState } from "react";
 import { useStartsOpen } from "../../state/foldpref";
 import { t } from "../../i18n";
-import { nestLabel } from "../delegation";
+import { nestLabel, ranLabel } from "../delegation";
 import type { ExtensionSurface, Tool } from "../../port/wire";
 import type { RewindPlan, RewindResult } from "../../port/port";
 import { categoryOf, labelFor, mcpOrigin, runLabelFor } from "../icons";
 import { Sym, glyphFor } from "../Sym";
 import { GOAL_STATUS, argOf, goalUpdate, shortArgs } from "../args";
 import { Cost } from "../Cost";
-import { seconds, tokens } from "../../i18n/format";
+import { bytes, count, seconds, tokens } from "../../i18n/format";
 import { currentStep, parsePlan, stepDone } from "../../state/session";
 import { DiffView } from "./DiffView";
-import { Term, ToolOutput } from "./ToolOutput";
+import { BringCall } from "./BringCall";
+import { StopCall } from "./StopCall";
+import { WaitNote } from "./WaitNote";
+import { Term, ToolOutput, BoundNote } from "./ToolOutput";
 import { ExtensionView } from "./ExtensionView";
-import { toolFailed, toolFailureLabel } from "./outcome";
+import { toolChangedFile, toolErrorDetail, toolFailed, toolFailureLabel, toolOutputEchoed, toolRefusalReason } from "./outcome";
 import { StudioIcon } from "../StudioIcon";
-import { useEscape } from "../dismiss";
+import { registerNest } from "./nestreveal";
+import { useFullOutput, type ReadOutput } from "./useFullOutput";
+import type { StateTool } from "../../state/outputcap";
+import { ImagePreview } from "../ImagePreview";
 
 // The spec pops a symbol as it settles — colour arriving is the finish signal.
 // Only the transition may fire it: a restored transcript is all settled cards,
@@ -56,17 +63,29 @@ function useSettling(running: boolean): { pop: boolean; swap: boolean } {
 }
 
 export function ToolCard({
-  tool, running, children = [], takeover, onExtInvoke, onPrepareFileRevert, onCommitFileRevert, activity = false,
+  tool, running, children = [], readOutput, omitted = 0, takeover, onExtInvoke, onPrepareFileRevert, onCommitFileRevert, onStop, onBring, pinned = false, activity = false,
 }: {
-  tool: Tool;
+  tool: StateTool;
   running: boolean;
   activity?: boolean;
-  children?: Tool[];
+  children?: StateTool[];
+  // Reads a call's whole output back from the kernel when the page kept only its ends.
+  readOutput?: ReadOutput;
+  // Characters of a running call's output the page let go of from the front.
+  omitted?: number;
   // Reverting the file this call wrote. Optional: a card drawn outside a live
   // pane (history, a fixture) has nothing to revert against.
   onPrepareFileRevert?: (path: string) => Promise<RewindPlan>;
   onCommitFileRevert?: (planId: string, resolution?: string) => Promise<RewindResult>;
   // A view an extension published against this call. It replaces the body only.
+  // Ends this call alone and leaves the turn running. Absent where no live
+  // session stands behind the card.
+  onStop?: () => void;
+  // Shows this call's result again at the end of the transcript. Absent on the
+  // copy that is already there, and where no transcript stands behind the card.
+  onBring?: () => void;
+  // The copy brought to the end: drawn open, because it was asked for.
+  pinned?: boolean;
   takeover?: ExtensionSurface;
   onExtInvoke?: (actionId: string) => void;
 }) {
@@ -85,12 +104,12 @@ export function ToolCard({
   // and one that sits blank until the whole file arrives at once.
   const streaming = running && !tool.args && (tool.argChars ?? 0) > 0;
   const arg = tool.name === "todo_write" ? "" : streaming ? `${tokens(tool.argChars!)} 字符` : shortArgs(tool.args ?? "");
-  // A shell result carries its exit status separately from stdout, and stdout
-  // alone cannot say whether the command worked.
   const bad = toolFailed(tool);
   // The number is the actionable half; the state only says that something went
   // wrong, which the colour already says.
   const badLabel = toolFailureLabel(tool);
+  const refusal = toolRefusalReason(tool);
+  const errorDetail = toolErrorDetail(tool);
   // Which server answered belongs on the card, not in a panel: this is the
   // moment the user can judge whether an external service should have run.
   // The interpreter that actually ran it, or the remote tool a capability call
@@ -103,7 +122,8 @@ export function ToolCard({
   // A refused call carries the same sentence twice: the kernel writes it to the
   // model as output and to the reader as an error. Rendering both prints it
   // twice, and the second copy reads like a second failure.
-  const echoed = !!tool.err && tool.err.trim() === (tool.output ?? "").trim();
+  const echoed = toolOutputEchoed(tool);
+  const full = useFullOutput(tool, readOutput);
   // update_goal's payload is the model's own prose about the turn. Its shape is
   // one claim — done, still going, or stuck — so the card says the claim rather
   // than the object carrying it.
@@ -111,18 +131,32 @@ export function ToolCard({
   // Running is not a reason to show the arguments: the group above already says
   // the work is happening, and a call that opens itself pushes the transcript
   // around while it reads. A failure is different — that is what is being asked.
-  const start = useStartsOpen("steps", false, bad);
-  const [touched, setOpen] = useState<boolean | null>(null);
+  const start = useStartsOpen("steps", false, bad, toolChangedFile(tool));
+  const [touched, setOpen] = useState<boolean | null>(pinned ? true : null);
   useEffect(() => {
     if (bad) setOpen(null);
   }, [bad]);
   const open = touched ?? start;
+  // The body of a finished, closed card is most of what a long session holds in
+  // the page, so such a card does not mount it; once opened it stays, so what the
+  // reader did inside (show all) survives closing it again.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (open) opened.current = true;
+  }, [open]);
+  const nestMounted = open || running || opened.current;
+  useEffect(() => {
+    if (nestMounted || children.length === 0) return;
+    return registerNest(children.map((c) => c.id).filter((id): id is string => !!id), () => setOpen(true));
+  }, [nestMounted, children]);
   const changes = changeCounts(tool);
-  const hasBody = Boolean(
-    takeover || tool.diff || goal || tool.name === "todo_write" ||
-    (tool.output && !echoed && children.length === 0) || tool.err || children.length,
-  );
   const activityArgs = activity ? prettyArgs(tool.args) : "";
+  // A call being watched in the activity group opens to its input even with no
+  // output yet: a row that cannot open is the one that looks stuck.
+  const hasBody = Boolean(
+    takeover || tool.diff || goal || tool.argumentNormalization || tool.name === "todo_write" ||
+    (tool.output && !echoed && children.length === 0) || tool.err || children.length || (activity && running && activityArgs),
+  );
   const activityResult = Boolean(
     takeover || tool.diff || goal || tool.name === "todo_write" || tool.output || tool.err || children.length,
   );
@@ -134,7 +168,7 @@ export function ToolCard({
       {who && <span className="who" title={t("按技能 {name} 的设定运行的子代理", { name: who })}>{who}</span>}
       {from && <span className="src" title={t("外部服务 {name} 提供的工具", { name: from.server })}>{from.server}</span>}
       {tag && <span className="tag" title={tagHint(tool)}>{tag}</span>}
-      {arg && <span className={streaming ? "arg shim" : "arg"}>{arg}</span>}
+      {arg && <span className={streaming ? "arg shim" : "arg"} title={streaming ? undefined : prettyArgs(tool.args)}>{arg}</span>}
       {changes && (
         <span className="tool-delta" aria-label={t("新增 {added} 行，删除 {removed} 行", changes)}>
           <b>+{changes.added}</b><i>−{changes.removed}</i>
@@ -150,11 +184,21 @@ export function ToolCard({
       >
         <StudioIcon name={running ? "clock" : bad ? "warning" : "check"} />
       </span>
+      {onBring && tool.id && !running && hasBody ? <BringCall onBring={onBring} /> : null}
       {hasBody && <span className="tool-fold" aria-hidden="true" />}
     </>
   );
   const body = (
     <div className="out">
+      {tool.argumentNormalization && (
+        <section className="activity-call-input">
+          <p>{t("参数格式已自动兼容")}</p>
+          <details>
+            <summary>{t("兼容前的原始输入")}</summary>
+            <pre>{prettyArgs(tool.argumentNormalization.original)}</pre>
+          </details>
+        </section>
+      )}
       {activity && (
         <>
           <div className="activity-call-meta">
@@ -164,9 +208,10 @@ export function ToolCard({
           {activityArgs && (
             <section className="activity-call-input">
               <header><b>{t("输入")}</b><span>JSON</span></header>
-              <pre>{activityArgs}</pre>
+              <pre><JsonText text={activityArgs} /></pre>
             </section>
           )}
+          {running && !tool.output && !tool.err && children.length === 0 && <WaitNote args={tool.args} />}
           {activityResult && (
             <div className="activity-call-result">
               <b>{t("结果")}</b>
@@ -200,28 +245,41 @@ export function ToolCard({
               onCommit={onCommitFileRevert}
             />
           )}
-          {!tool.diff && tool.name === "todo_write" && <Steps tool={tool} />}
+          {!tool.diff && tool.outputDiff && tool.output && (
+            <>
+              <DiffView diff={tool.output} />
+              <BoundNote bound={tool.bound} />
+            </>
+          )}
+          {!tool.diff && !tool.outputDiff && tool.name === "todo_write" && <Steps tool={tool} />}
           {goal && (
             <div className="goalup" data-s={GOAL_STATUS[goal.status]?.[1] ?? "run"}>
               <span className="st">{t(GOAL_STATUS[goal.status]?.[0] ?? goal.status)}</span>
               {goal.reason && <span className="rs">{goal.reason}</span>}
             </div>
           )}
-          {!tool.diff && !goal && tool.name !== "todo_write" && tool.output && !echoed && children.length === 0 && (
-            <ToolOutput name={shown} text={tool.output} bound={tool.bound} id={tool.id} />
+          {!tool.diff && !tool.outputDiff && !goal && tool.name !== "todo_write" && tool.output && !echoed && children.length === 0 && (
+            <>
+              {omitted > 0 && <div className="bound">{t("此前省略了 {n} 个字符，这里只显示最近的输出", { n: count(omitted) })}</div>}
+              {full.note}
+              <ToolOutput name={shown} text={full.text ?? ""} bound={tool.bound} id={tool.id} />
+            </>
           )}
           <ToolShots images={tool.images} />
+          <ToolVideos videos={tool.videos} />
         </>
       )}
       {/* The error stays outside the takeover: an extension may redraw what
           a call produced, never whether it failed. */}
-      {tool.err && <div className="txt bad">{tool.err}</div>}
+      {refusal && <div className="txt" data-refusal={tool.refusalCode}>{refusal}</div>}
+      {errorDetail && <div className="txt bad">{errorDetail}</div>}
       {children.length > 0 && (
         <div className="nest">
           <div className="nest-hd">
             <i className="pip" />
             <span className="who">{nestLabel(who, tool.profile?.count, children.length)}</span>
             <span className="prof">{t("独立上下文 · 不进主轨迹")}</span>
+            {ranLabel(tool.profile) && <span className="ran" title={ranLabel(tool.profile)}>{ranLabel(tool.profile)}</span>}
             {/* 委派出去那部分的账：耗时是父调用的，token 是子步骤各自留下的 */}
             <span className="rt">
               {[
@@ -232,14 +290,18 @@ export function ToolCard({
                 .join(" · ")}
             </span>
           </div>
-          <div className="nest-bd">
-            {children.map((c) => (
-              <NestedCall key={c.id} tool={c} />
-            ))}
-          </div>
-          {/* What the delegate handed back closes its own panel: outside it,
-              the sentence reads as the main run's conclusion. */}
-          {tool.output && <div className="nest-ret">{tool.output}</div>}
+          {nestMounted && (
+            <>
+              <div className="nest-bd">
+                {children.map((c) => (
+                  <NestedCall key={c.id} tool={c} read={readOutput} />
+                ))}
+              </div>
+              {/* What the delegate handed back closes its own panel: outside it,
+                  the sentence reads as the main run's conclusion. */}
+              {tool.output && <div className="nest-ret">{tool.output}</div>}
+            </>
+          )}
         </div>
       )}
     </div>
@@ -256,79 +318,108 @@ export function ToolCard({
     >
       <div className="g">
         <Sym glyph={glyphFor(shown)} done={settling.pop && !bad} />
-        <span className="line" />
       </div>
       <div className="c">
         {hasBody ? (
-          <details className="tool-disclosure" open={open} onToggle={(event) => event.currentTarget.open !== open && setOpen(event.currentTarget.open)}>
+          <details className="tool-disclosure" data-lazy={nestMounted ? undefined : ""} open={open} onToggle={(event) => event.currentTarget.open !== open && setOpen(event.currentTarget.open)}>
             <summary className="hl" data-swap={settling.swap ? "" : undefined}>{heading}</summary>
-            {body}
+            {nestMounted ? body : null}
           </details>
         ) : (
           <div className="hl" data-swap={settling.swap ? "" : undefined}>{heading}</div>
         )}
+        {running && onStop && tool.id && <StopCall onStop={onStop} />}
       </div>
     </div>
   );
 }
 
+function ToolVideos({ videos }: { videos?: NonNullable<Tool["videos"]> }) {
+  if (!videos?.length) return null;
+  return (
+    <div className="tvideos">
+      {videos.map((v, i) => (
+        <div key={v.name + i} className="tvideo">
+          {t("视频 {name}（{detail}）已原生发送给 {model}", {
+            name: v.name,
+            detail: [bytes(v.size), v.durationMs ? seconds(v.durationMs) : ""].filter(Boolean).join(" · "),
+            model: v.model,
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ToolShots({ images }: { images?: string[] }) {
-  const [open, setOpen] = useState("");
-  useEscape(!!open, () => setOpen(""));
   if (!images?.length) return null;
   return (
-    <>
-      <div className="tshots">
-        {images.map((src, i) => (
-          <button key={src.slice(0, 64) + i} className="tshot" data-action="tool.image-open" onClick={() => setOpen(src)}
-            aria-label={t("放大第 {n} 张", { n: i + 1 })}>
-            <img src={src} alt={t("工具截图 {n}", { n: i + 1 })} loading="lazy" />
-          </button>
-        ))}
-      </div>
-      {open && (
-        <div className="tshot-full" data-action="tool.image-close" onClick={() => setOpen("")} role="presentation">
-          <img src={open} alt={t("放大的工具截图")} />
-        </div>
-      )}
-    </>
+    <div className="tshots">
+      {images.map((src, i) => (
+        <ImagePreview key={src + i} src={src} name={t("工具截图 {n}", { n: i + 1 })} className="tshot">
+          <img src={src} alt={t("工具截图 {n}", { n: i + 1 })} loading="lazy" />
+        </ImagePreview>
+      ))}
+    </div>
   );
 }
 
 function changeCounts(tool: Tool): { added: number; removed: number } | null {
-  if (!tool.diff && tool.added === undefined && tool.removed === undefined) return null;
+  if (!toolChangedFile(tool)) return null;
   const lines = tool.diff?.split("\n") ?? [];
   const added = tool.added ?? lines.filter((line) => line.startsWith("+") && !line.startsWith("+++")).length;
   const removed = tool.removed ?? lines.filter((line) => line.startsWith("-") && !line.startsWith("---")).length;
   return { added, removed };
 }
 
-function NestedCall({ tool }: { tool: Tool }) {
+const NESTED_PREVIEW = 400;
+const NESTED_WHOLE_CAP = 200_000;
+
+export function NestedCall({ tool, whole = false, read }: { tool: StateTool; whole?: boolean; read?: ReadOutput }) {
+  const [all, setAll] = useState(false);
+  const full = useFullOutput(tool, read);
+  const body = full.text ?? "";
   const shown = tool.resolvedName || tool.name;
   const tag = tagFor(tool);
   const bad = toolFailed(tool);
-  const clipped = (tool.output?.length ?? 0) > 400;
+  const clipped = !whole && body.length > NESTED_PREVIEW;
+  const echoed = toolOutputEchoed(tool);
+  const refusal = toolRefusalReason(tool);
+  const errorDetail = toolErrorDetail(tool);
   return (
     <div className="call" data-call={tool.id || undefined} data-k={KINDED.has(categoryOf(shown)) ? categoryOf(shown) : undefined}>
       <div className="g">
         <Sym glyph={glyphFor(shown)} />
-        <span className="line" />
       </div>
       <div className="c">
         <div className="hl">
           <span className="nm" title={shown}>{labelFor(shown)}</span>
           {tag && <span className="tag" title={tagHint(tool)}>{tag}</span>}
-          {tool.args && <span className="arg">{shortArgs(tool.args)}</span>}
+          {tool.args && <span className="arg" title={prettyArgs(tool.args)}>{shortArgs(tool.args)}</span>}
           {bad && <span className="fail">{toolFailureLabel(tool)}</span>}
           <Cost tools={[tool]} />
         </div>
-        {tool.output && (
+        {tool.output && !echoed && (
           <div className="out">
-            <Term text={tool.output.slice(0, 400)} />
-            {clipped && <div className="bound">{t("仅显示前 400 个字符")}</div>}
+            {full.note}
+            <Term text={clipped && !all ? body.slice(0, NESTED_PREVIEW) : body.slice(0, NESTED_WHOLE_CAP)} />
+            {(whole || all) && body.length > NESTED_WHOLE_CAP && <div className="bound bad">{t("输出过长，仅显示前 200000 个字符")}</div>}
+            {clipped && (
+              <div className="bound">
+                {all ? null : t("仅显示前 400 个字符")}
+                <button type="button" className="out-more" data-action="tool.show-all" aria-expanded={all} onClick={() => setAll(!all)}>
+                  {all ? t("收起") : t("显示全部")}
+                </button>
+              </div>
+            )}
           </div>
         )}
-        {tool.err && <div className="out"><div className="txt bad">{tool.err}</div></div>}
+        {tool.err && (
+          <div className="out">
+            {refusal && <div className="txt" data-refusal={tool.refusalCode}>{refusal}</div>}
+            {errorDetail && <div className="txt bad">{errorDetail}</div>}
+          </div>
+        )}
       </div>
     </div>
   );

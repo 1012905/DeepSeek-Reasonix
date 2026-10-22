@@ -1,15 +1,15 @@
 # Reasonix Benchmarks
 
-Five harnesses live under `benchmarks/`; `cmd/e2ebench` also exposes a
+Six harnesses live under `benchmarks/`; `cmd/e2ebench` also exposes a
 SWE-bench Verified mode:
 
 - `e2e/` — the committed end-to-end task suite, driven by
   [`cmd/e2ebench`](../cmd/e2ebench/main.go). It runs each task against a real
   provider and emits a markdown + JSON report (accuracy, cache-hit rate, token
   use, cost) suitable for pasting into a PR.
-- `context-maintenance-e2e/` — a standalone seed → resume → comprehension
-  harness that A/B-compares cold-restart cache behavior with and without
-  context pruning.
+- `context-maintenance-e2e/` — a standalone seed → resume → continue smoke that
+  checks a session seeds below the compaction trigger, resumes without paying
+  for a summary, and folds exactly once past it.
 - `compaction/` — CompactionBench: grows a session one generation at a time and
   folds it after each, measuring what repeated compaction costs and what it
   loses. See [CompactionBench](#compactionbench) below.
@@ -19,6 +19,10 @@ SWE-bench Verified mode:
 - `fanout-width/` — a shape-instructed fleet whose members share nothing, for
   pricing what running them at the same time is worth. See
   [Pricing the run graph](#pricing-the-run-graph) below.
+- `realrepo/` — long tasks over a pinned snapshot of this repository, for
+  measuring changes that cut model round trips (13–31 requests per task on
+  `deepseek-flash`). See
+  [its README](realrepo/README.md).
 
 ## Directory layout
 
@@ -420,19 +424,20 @@ own outcome).
 | `-suite` | `benchmarks/e2e` | Suite root (must contain `tasks/<id>/`). |
 | `-task` | *(all)* | Suite mode: run only these comma-separated task IDs (e.g. `-task fix-add-bug`); unknown IDs fail with the available list. |
 | `-attempts` | `1` | Suite and diff modes: retry a task until an attempt passes, up to N; enables the `Pass@≤N` KPI, and TTCS charges a retried solve with its failed attempts' wall. |
-| `-trials` | `1` | Suite mode: run every task N times and keep every outcome. Adds a **Reliability** line: `pass^N` (tasks that passed every trial), `pass@N` (any trial), mean `pass@1` over all trials, and the flaky tasks by name. `Pass@≤N` asks whether the agent can solve a task; `pass^N` asks whether it does so every time. Cannot be combined with `-attempts`. |
+| `-trials` | `1` | Suite mode: run every task N times and keep every outcome. Adds a **Reliability** line: `pass^N` (complete tasks that passed every trial) and `pass@N` (complete tasks with any pass), both over the tasks that ran all N trials only (`n/a` when none did), mean `pass@1` over every graded trial, and the flaky tasks by name; a task the token budget cut short is listed on an **Incomplete** line and is in neither. `Pass@≤N` asks whether the agent can solve a task; `pass^N` asks whether it does so every time. Cannot be combined with `-attempts`. |
 | `-tape-record DIR` | — | Suite mode, with `-meter`: record every provider exchange at the meter, one tape per task and trial (`DIR/<task>/trial-N/0001.request.json`, `.response.json`, `.response.body`). Taped runs use a fixed workdir path and pin the seeded files' times, because both reach the model through the workspace block and file listings. |
 | `-tape-replay DIR` | — | Suite mode, with `-meter`: answer each run from its tape instead of the provider, and add a **Replay** line naming the first request whose body differs from the recorded one, down to the message (`request 2, message 4 (tool)`), the tool list, or a field. The diverging request is kept as `NNNN.replayed.json` beside the recorded one. A kernel change that should not alter what the model is asked replays with every request matched. |
 | `-bin` | `reasonix` | Path to the reasonix binary. |
 | `-model` | *(config default)* | Provider/model name. |
 | `-profile` | `baseline` | Tool-surface/runtime tier: `baseline` \| `economy` \| `balanced` \| `delivery`. All but `baseline` append `--profile <tier>` to the agent invocation; `baseline` passes no flag (byte-identical legacy control, behaviorally `balanced`). Economy starts with the core tool set and pays `connect_tool_source` rounds plus prefix resets to grow it — the report's Tool surface line prices that trade. |
-| `-ablate` | *(none)* | Ablation arm: comma-separated subsystems to switch off — `evidence`, `planner`, `subagent`, `retrieval`, `compaction`; `none` \| `all`. |
+| `-ablate` | *(none)* | Ablation arm: comma-separated subsystems to switch off — `evidence`, `planner`, `subagent`, `retrieval`, `compaction`, `upstream` and `recall-search`; `none` \| `all`. |
 | `-out` | *(stdout)* | Write the markdown report here. |
 | `-json` | *(none)* | Write the JSON report here (optional). |
 | `-trajectories` | *(none)* | Suite mode: write one `<task-id>.trajectory.jsonl` per task into this directory (the agent's full event stream with timestamps — see `reasonix run --trajectory`). The report gains a time-attribution line (tools vs. model) and each JSON result a `trajectory` digest. |
 | `-force-planner` | `false` | Suite mode: prefix each prompt with a plan-first directive so the two-model turn engages regardless of the planner gate. Use for the "with planner" arm of an A/B; results carry `plan_forced` so arms are only comparable with equal forcing. |
 | `-anchor` | `blind` | Suite mode: which hypothesis the agent holds before it looks at anything — `blind` (none, the control) \| `correct` \| `wrong`. The seeded arms prefix each prompt with the task's authored seed and **skip** tasks that have none, so an unseeded control run never lands in a seeded denominator. Results carry `anchor`. See [Anchor resistance](#anchor-resistance). |
 | `-cache` | `cold` | Suite mode: `cold` runs each task as a fresh session (the fair cross-agent comparison arm); `warm` primes the provider prefix cache with a one-step run in the same workdir first, measuring the long-lived-session steady state. Never mix arms in one report — compare them with `-mode compare cold.json warm.json`. |
+| `-policy` | *(none)* | Suite mode: experiment arm. `memory-off` hides the memory store, which is the MemoryBench counterfactual arm; the empty default runs the baseline. |
 | `-budget` | `800000` | Abort once total tokens cross this (`0` = no cap). Remaining tasks are reported as skipped. |
 | `-meter` | *(off)* | Suite mode: route the benchmarked provider through the neutral measuring proxy, using this `config.toml` as the source. Spend is then counted at the request boundary instead of trusted from the harness. See [Neutral metering](#neutral-metering). |
 | `-faults` | *(none)* | Suite mode: inject provider failures through the meter — absolute indices (`3:429`) and/or a cadence that scales with the run (`every:5:500`). Requires `-meter`. See [Fault recovery](#fault-recovery). |
@@ -541,33 +546,32 @@ writer.
 
 ## context-maintenance-e2e
 
-This harness measures what happens when a long session goes idle past the
-provider's cache TTL and then resumes: it A/B-compares cold-restart miss tokens
-with and without pruning, and checks that the agent re-reads a file behind a
-prune placeholder instead of hallucinating.
+A cost-capped smoke for content-driven maintenance, in three legs over one state
+directory: seed a session just below the compaction trigger, load it back and
+check nothing is re-derived, then grow it past the trigger and check exactly one
+summary lands.
 
-It is hardcoded to the `deepseek-v4-flash` model at `https://api.deepseek.com`
-and requires the `DEEPSEEK_API_KEY` environment variable.
+Seed and resume take no provider; `continue` samples and needs
+`DEEPSEEK_API_KEY`. The model is hardcoded to `deepseek-v4-flash` at
+`https://api.deepseek.com`.
 
 ```sh
-export DEEPSEEK_API_KEY=...
+# Seed below the trigger: no checkpoint installed, no summary started
+go run ./benchmarks/context-maintenance-e2e -offline seed
 
-# Seed both arms (pruned + control) with a large session and warm the cache
-go run ./benchmarks/context-maintenance-e2e seed
-
-# Wait past the provider's cache TTL, then resume: prune the "pruned" arm and
-# compare cold-restart miss tokens
+# Reload: the projection version must not move and no summary may run
 go run ./benchmarks/context-maintenance-e2e resume
 
-# Run the comprehension trials (agent must re-read a pruned file and answer
-# from it); exits non-zero unless every trial passes
-go run ./benchmarks/context-maintenance-e2e comprehension
+# Grow past the trigger: one summary, version +1, then no further summary
+export DEEPSEEK_API_KEY=...
+go run ./benchmarks/context-maintenance-e2e continue
 ```
 
 | Flag | Default | Purpose |
 | --- | --- | --- |
-| `-dir` | `benchmarks/context-maintenance-e2e/run` | State directory for `seed`/`resume` (sessions + `meta.json`, `resume-<ts>.json`). |
-| `-trials` | `5` | Number of comprehension trials. |
+| `-dir` | `benchmarks/context-maintenance-e2e/run` | State directory shared by the three legs (session + `meta.json`). |
+| `-max-usd` | `0.50` | Hard cost cap for the live legs. |
+| `-offline` | off | Skip the live provider; `seed` only. |
 
 ## See also
 
@@ -593,6 +597,24 @@ e2ebench -suite benchmarks/memorybench -budget 0 -policy memory-off -trajectorie
 e2ebench -mode compare on.json off.json     # Memory utility section
 ```
 
+MemoryBench requires an OS read sandbox. It runs on macOS and Linux and
+refuses to start on Windows, where the benchmark cannot isolate the committed
+`tasks/<id>/memory/` answers from a graded agent. Each run also audits every
+recorded trajectory leg for a successful read of those answers; an answer read
+invalidates the result and makes the suite command exit nonzero. A missing or
+unreadable trajectory marks only that run incomplete; other tasks still run.
+Trajectories are captured temporarily when `-trajectories` is omitted.
+
+The audit treats a completed `read_file` call naming a task-memory path as a
+read. For `bash` and `grep`, a task-memory path in the arguments plus an authored
+fact line in the result is **evidence** of a read, not a proof of how that text
+was obtained. `glob` and directory listings expose names but not fact bodies;
+the audit does not count them as answer reads. Commands that reach the answer
+through an indirect path, such as `cd` followed by a relative filename, may
+not be attributed by the trajectory check. The OS read sandbox is the primary
+boundary; this audit is a second check, not a proof that an unflagged run never
+accessed an answer.
+
 Utility delta = paired Pass(on) − Pass(off). Harmful attribution is paired,
 never judged: the same task passed without memory and failed with it while
 recall fired. Scenario classes: exact, paraphrase, cjk, symbol, distractor
@@ -606,8 +628,8 @@ update (revised value wins), pinned (prefix channel end to end).
 `benchmarks/compaction/` drives the real agent compaction path over a session
 that grows one generation at a time. Each generation appends a round of work
 and then folds, so generation N folds everything generations 1..N produced —
-which is the growth that matters, because a fold re-derives its digest from the
-whole canonical transcript rather than from the previous digest.
+which is the growth that matters, because a fold reads the model-visible
+projection, so the previous digest feeds the next one.
 
 ```bash
 go run ./benchmarks/compaction -mode=cost                     # offline, no API key
@@ -634,16 +656,3 @@ probe, not a compaction loss.
 Probe answers are scored on whole words, and a wanted answer does not count if a
 rejected one appears anywhere in the same reply — "yes, but it has not been
 re-run since" is the shape a drifting digest produces, and it is not a pass.
-
-### Fold arms
-
-`-arm=full` (default) re-derives every digest from the canonical transcript, so
-digests never chain. `-arm=incremental` folds the model-visible view instead,
-feeding the previous digest back through the summarizer. The arms exist to price
-that trade: run the cost arm for what chaining saves, and the fidelity arm for
-what it costs.
-
-```bash
-go run ./benchmarks/compaction -mode=cost -arm=incremental
-DEEPSEEK_API_KEY=… go run ./benchmarks/compaction -mode=fidelity -arm=incremental
-```

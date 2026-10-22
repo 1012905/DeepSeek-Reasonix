@@ -327,7 +327,7 @@ func TestManagementMemoryRecallAndInstructionDiagnostics(t *testing.T) {
 			},
 			Score: 4.25, Freshness: memory.FreshnessFresh, Reason: "matched cache, policy; project scope",
 		}},
-		CharBudget: 2400, UsedChars: 280, Omitted: 1,
+		CharBudget: 2400, UsedChars: 280, OmittedByBudget: 1,
 	})
 
 	if !c.managementNotice("/memory recall") {
@@ -392,7 +392,10 @@ func TestManagementMemoryRevisionRestore(t *testing.T) {
 	if !c.managementNotice("/memory restore " + second.Memory.ID + " 1") {
 		t.Fatal("/memory restore was not handled")
 	}
-	active, ok := c.Memory().Store.Read(second.Memory.ID)
+	active, ok, readErr := c.Memory().Store.Read(second.Memory.ID)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
 	if !ok {
 		t.Fatal("restored memory is not active")
 	}
@@ -438,7 +441,10 @@ func TestManagementMemoryArchiveRecoveryAcceptsQuotedPathWithSpaces(t *testing.T
 	if !c.managementNotice(`/memory recover "` + archivePath + `"`) {
 		t.Fatal("/memory recover was not handled")
 	}
-	active, ok := c.Memory().Store.Read(saved.Memory.ID)
+	active, ok, readErr := c.Memory().Store.Read(saved.Memory.ID)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
 	if !ok {
 		t.Fatal("recovered memory is not active")
 	}

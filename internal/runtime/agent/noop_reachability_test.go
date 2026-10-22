@@ -47,14 +47,14 @@ func TestEveryNoopVerdictIsReachable(t *testing.T) {
 		NoopNoNewClosedPrefix: func(t *testing.T) []string {
 			a := windowedFoldFixture(t, 120_000)
 			ctx := context.Background()
-			if _, err := a.contextManager().Prepare(ctx, ContextPreparePolicy{Trigger: CompactionTriggerPressure}); err != nil {
+			if _, err := a.window().contextManager().Prepare(ctx, ContextPreparePolicy{Trigger: CompactionTriggerPressure}); err != nil {
 				t.Fatal(err)
 			}
-			if a.currentProjectionVersion() == 0 {
+			if a.window().currentProjectionVersion() == 0 {
 				t.Fatal("the first fold installed no projection")
 			}
 			a.sess.conversation.Add(provider.Message{Role: provider.RoleAssistant, Content: "one more step"})
-			_, reason, err := a.compactToProjection(ctx, CompactionTriggerPressure, "", compactionScope{}, false)
+			_, reason, err := a.window().compactToProjection(ctx, CompactionTriggerPressure, "", compactionScope{}, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -126,12 +126,12 @@ func TestEveryNoopVerdictIsReachable(t *testing.T) {
 			a, sink := economicFixture(t, 160_000, 30)
 			a.activeTurnCreatedAt.Store(economicActiveTurnAt)
 			ctx := context.Background()
-			if _, err := a.contextManager().Prepare(ctx, ContextPreparePolicy{Trigger: CompactionTriggerPressure}); err != nil {
+			if _, err := a.window().contextManager().Prepare(ctx, ContextPreparePolicy{Trigger: CompactionTriggerPressure}); err != nil {
 				t.Fatal(err)
 			}
 			openTransaction(a, 40)
 			for range 3 {
-				if _, err := a.contextManager().Prepare(ctx, ContextPreparePolicy{Trigger: CompactionTriggerPressure}); err != nil {
+				if _, err := a.window().contextManager().Prepare(ctx, ContextPreparePolicy{Trigger: CompactionTriggerPressure}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -160,6 +160,11 @@ func TestEveryNoopVerdictIsReachable(t *testing.T) {
 // into the body. The window is the variable that decides how far it reaches.
 func windowedFoldFixture(t *testing.T, window int) *Agent {
 	t.Helper()
+	return windowedFoldFixtureWith(t, window, &fakeProvider{reply: "digest"})
+}
+
+func windowedFoldFixtureWith(t *testing.T, window int, prov *fakeProvider) *Agent {
+	t.Helper()
 	sess := &sessionstore.Session{Messages: []provider.Message{
 		{Role: provider.RoleSystem, Content: "system"},
 		{Role: provider.RoleUser, Content: "long-running task"},
@@ -170,7 +175,7 @@ func windowedFoldFixture(t *testing.T, window int) *Agent {
 			provider.Message{Role: provider.RoleAssistant, Content: "step " + string(rune('a'+i%26))},
 			provider.Message{Role: provider.RoleUser, Content: body})
 	}
-	return New(&fakeProvider{reply: "digest"}, tool.NewRegistry(), sess, Options{
+	return New(prov, tool.NewRegistry(), sess, Options{
 		ContextWindow: window, CompactRatio: 0.85, RecentKeep: 2,
 		ArchiveDir: testenv.TempDir(t),
 	}, &recordSink{})
@@ -185,7 +190,7 @@ func directNoop(t *testing.T, a *Agent) string {
 	// A rejected checkpoint reports its verdict and an error together, and the
 	// verdict is what this reads: refusing to fold and failing to are the same
 	// answer to "why was nothing folded".
-	_, reason, err := a.compactToProjection(context.Background(), CompactionTriggerPressure, "", compactionScope{}, false)
+	_, reason, err := a.window().compactToProjection(context.Background(), CompactionTriggerPressure, "", compactionScope{}, false)
 	if reason == "" && err != nil {
 		t.Fatalf("compactToProjection: %v", err)
 	}

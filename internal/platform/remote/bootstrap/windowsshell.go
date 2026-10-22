@@ -23,7 +23,7 @@ func (windowsShell) Executable() string { return "reasonix.exe" }
 // Home does not ask the shell: OpenSSH on Windows will not resolve ~, but
 // every SFTP session starts in the user's directory, so the file layer's own
 // idea of "." answers the same question without a second command.
-func (windowsShell) Home(ctx context.Context, _ Conn, fs *sftpfs.FS) (string, error) {
+func (windowsShell) Home(ctx context.Context, _ Conn, fs sftpfs.Files) (string, error) {
 	home, err := fs.RealPath(ctx, ".")
 	if err != nil {
 		return "", fmt.Errorf("bootstrap: resolve remote home: %w", err)
@@ -34,6 +34,51 @@ func (windowsShell) Home(ctx context.Context, _ Conn, fs *sftpfs.FS) (string, er
 	return toSFTPPath(home), nil
 }
 
+// Absolute accepts rooted, drive-qualified and UNC paths. One folder gets one
+// spelling (upper-case drive, no trailing slash) because the state slug is
+// derived from it.
+func (windowsShell) Absolute(p string) (string, bool) {
+	p = strings.ReplaceAll(p, `\`, "/")
+	if rest, ok := strings.CutPrefix(p, "//?/"); ok {
+		if !hasDriveRoot(rest) {
+			return "", false
+		}
+		p = rest
+	}
+	switch {
+	case hasDriveRoot(p):
+		p = "/" + strings.ToUpper(p[:1]) + p[1:]
+	case strings.HasPrefix(p, "/"):
+	default:
+		return "", false
+	}
+	if t := strings.TrimRight(p, "/"); t != "" {
+		p = t
+	}
+	return p, true
+}
+
+// HomeRelative also takes the backslash spelling of ~.
+func (windowsShell) HomeRelative(p string) (string, bool) {
+	if p[:min(len(p), 2)] == `~\` {
+		return p[2:], true
+	}
+	return posixShell{}.HomeRelative(p)
+}
+
+// hasDriveRoot is a drive letter followed by a separator or nothing: C: and
+// C:foo are relative to that drive's current directory, not rooted.
+func hasDriveRoot(p string) bool {
+	if len(p) < 2 || p[1] != ':' {
+		return false
+	}
+	c := p[0] | 0x20
+	if c < 'a' || c > 'z' {
+		return false
+	}
+	return len(p) == 2 || p[2] == '/'
+}
+
 // Paths keeps the SFTP spelling, which is what the file layer addresses and
 // what every state path is stored as. The shell form is derived where a
 // command needs it, never the other way round.
@@ -41,25 +86,27 @@ func (windowsShell) Paths(home, workspace string) StatePaths {
 	return pathsFor(toSFTPPath(home), toSFTPPath(workspace))
 }
 
-func (windowsShell) Launch(spec LaunchSpec, p StatePaths) string {
-	// The serve runs under a second PowerShell, reached the same encoded way,
-	// so its own arguments never pass through a round of shell parsing.
+func (windowsShell) LaunchScript(spec LaunchSpec, p StatePaths) (string, []byte) {
 	inner := "& " + psQuote(toShellPath(spec.Bin)) + " serve --addr 127.0.0.1:0 --auth token" +
 		" --token-file " + psQuote(toShellPath(p.TokenFile)) +
 		" --port-file " + psQuote(toShellPath(p.PortFile)) +
 		" --pid-file " + psQuote(toShellPath(p.PidFile)) +
 		windowsBrokerArgs(spec, p) +
 		" *>> " + psQuote(toShellPath(p.LogFile))
+	// Windows PowerShell 5.1 needs a BOM to read non-ASCII paths as UTF-8.
+	script := "\ufefftry {\r\n" + inner + "\r\nexit $LASTEXITCODE\r\n} catch {\r\n" +
+		"$_ | Out-File -LiteralPath " + psQuote(toShellPath(p.LogFile)) + " -Append -Encoding utf8\r\nexit 1\r\n}\r\n"
+	return p.PortFile + ".ps1", []byte(script)
+}
 
+func (windowsShell) Launch(spec LaunchSpec, p StatePaths) string {
 	// OpenSSH ends a session's children with the session, Start-Process included
 	// — a serve launched that way was gone before its port file appeared. What
 	// the WMI service creates has no such parent; this is the setsid of here.
-	launch := "powershell -NoProfile -NonInteractive -EncodedCommand " + encodePS(inner)
+	launch := "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"" + toShellPath(p.PortFile+".ps1") + "\""
 	outer := strings.Join([]string{
 		"$ErrorActionPreference='Stop'",
 		"New-Item -ItemType Directory -Force -Path " + psQuote(toShellPath(p.Dir)) + " | Out-Null",
-		"Remove-Item -Force -ErrorAction SilentlyContinue -LiteralPath " +
-			psQuote(toShellPath(p.PortFile)) + "," + psQuote(toShellPath(p.PidFile)),
 		"$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine=" +
 			psQuote(launch) + "; CurrentDirectory=" + psQuote(toShellPath(spec.Workspace)) + "}",
 		"if ($r.ReturnValue -ne 0) { throw \"Win32_Process.Create returned $($r.ReturnValue)\" }",
@@ -93,6 +140,11 @@ func (windowsShell) Alive(pid int, p StatePaths) string {
 		commandLineOf(pid),
 		"if (" + ownsServe(p) + ") { '1' } else { '0' }",
 	}, "; "))
+}
+
+func (windowsShell) ServeVersion(pid int) string {
+	return psCommand(fmt.Sprintf(
+		"$e = (Get-Process -Id %d -ErrorAction SilentlyContinue).Path; if ($e) { & $e --version 2>$null | Select-Object -First 1 }", pid))
 }
 
 func (windowsShell) Stop(pid int, p StatePaths) string {
@@ -198,5 +250,8 @@ func (windowsShell) NativePath(p string) string { return toShellPath(p) }
 
 // toShellPath is the reverse, for a path going into a script.
 func toShellPath(p string) string {
+	if after, ok := strings.CutPrefix(p, "//"); ok {
+		return `\\` + strings.ReplaceAll(after, "/", `\`)
+	}
 	return strings.ReplaceAll(strings.TrimPrefix(p, "/"), "/", `\`)
 }

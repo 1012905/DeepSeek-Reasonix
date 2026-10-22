@@ -49,7 +49,7 @@ func lastRole(msgs []json.RawMessage) string {
 			Content string `json:"content"`
 		}
 		_ = json.Unmarshal(raw, &m)
-		if m.Role == "user" && strings.Contains(m.Content, "Host task state.") {
+		if m.Role == "user" && (strings.HasPrefix(m.Content, "Host task state.") || strings.HasPrefix(m.Content, "Host progress record")) {
 			continue
 		}
 		return m.Role
@@ -61,7 +61,7 @@ func (m *loopMock) handler(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	if isSummarizeRequest(body) {
 		writeSSE(w, m.t,
-			streamChunk(deltaText("- goal: keep going\n- pending: continue the task")),
+			streamChunk(deltaText("## Goal\n- goal: keep going\n- pending: continue the task")),
 			finishChunk("stop"),
 			usageChunk(80, 30, 0, 80))
 		return
@@ -179,9 +179,9 @@ func TestCompactionPausesWhenWindowTooSmall(t *testing.T) {
 	if started > 2 {
 		t.Fatalf("summary transactions started = %d, want ≤2 (no multi-span / retry loop)", started)
 	}
-	if blocked == 0 && a.currentProjectionVersion() == 0 {
+	if blocked == 0 && a.window().currentProjectionVersion() == 0 {
 		// Either a durable block or a successful install is fine; looping is not.
-		t.Logf("started=%d blocked=%d version=%d", started, blocked, a.currentProjectionVersion())
+		t.Logf("started=%d blocked=%d version=%d", started, blocked, a.window().currentProjectionVersion())
 	}
 }
 

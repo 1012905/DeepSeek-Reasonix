@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"reasonix/internal/contract/hostaudit"
 	"reasonix/internal/state/sessionstore"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -29,6 +30,8 @@ import (
 type streamedTurn struct {
 	text               string
 	reasoning          string
+	thoughtMs          int64 // see thoughtClock
+	firstTokenMs       int64 // see thoughtClock; 0 = not measured
 	signature          string
 	reasoningID        string
 	reasoningStatus    string
@@ -41,7 +44,15 @@ type streamedTurn struct {
 	maxArgChars        int      // peak streaming tool-arg size for failed-attempt estimates
 	attemptID          string   // the stream attempt this result came from, for usage correlation
 	bodyChain          []string // cumulative hashes of the messages this request actually sent
-	err                error
+	// perseverationAborted marks a stream the opt-in cut path ended early. It is
+	// a clean terminal (err == nil): the caller nudges and retries, then stops
+	// with a perseveration pause once the retry budget is spent.
+	perseverationAborted bool
+	// perseverationDetected marks a stream where the guard saw a degenerate loop
+	// but did not cut it. The round reports it through the progress-watch
+	// channel; the stream itself runs to its own terminal.
+	perseverationDetected bool
+	err                   error
 }
 
 // deferredStreamSink keeps selected stream events local until the caller
@@ -151,6 +162,7 @@ func (a *Agent) beginRunTurn(ctx context.Context, input string) (rawInput string
 		a.task.checkpoint = evidence.DeliveryCheckpoint{ScopeID: scope.ID}
 	}
 	a.captureBaselineChecks()
+	a.startTurnSnapshot(ctx)
 	// Re-lease this session's background-job mutations that no turn has
 	// committed yet. The Reset above just wiped any lease a failed or
 	// cancelled turn held (its ledger is gone), and a process restart starts
@@ -161,8 +173,11 @@ func (a *Agent) beginRunTurn(ctx context.Context, input string) (rawInput string
 	// change without the final-readiness gate ever seeing it. Plan turns defer
 	// this lease like collectBackgroundEvidence does so execution evidence is
 	// consumed and audited only after plan approval.
+	if a.svc.jobs != nil {
+		a.turn.jobSession = jobs.SessionFromContext(ctx)
+	}
 	if a.task.ledger != nil && a.svc.jobs != nil && !a.PlanningPhase() {
-		session := jobs.SessionFromContext(ctx)
+		session := a.turn.jobSession
 		for _, jobID := range a.svc.jobs.PendingEvidenceJobIDsForSession(session) {
 			summary, ready := a.svc.jobs.TryLeaseEvidenceForSession(session, jobID)
 			if !ready {
@@ -254,21 +269,14 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 		// survives tab switches and history replay. The model sees it as
 		// guidance (with a prefix), not a new task. One cache miss per
 		// steer is unavoidable — the model must see the new instruction.
-		if text, itemID, host, ok := a.consumeSteer(); ok {
-			a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(sessionstore.MidTurnSteerMessage(text, host))})
-			a.svc.sink.Emit(event.Event{Kind: event.Steer, Text: text, ItemID: itemID})
-		} else if itemID != "" {
+		if text, entry, ok := a.consumeSteer(); ok {
+			a.landSteer(text, entry)
+		} else if entry.itemID != "" {
 			// Loader failed after dequeue: durable entry stays for inspection
 			// (unapplied path marks uncertain + pause via the notice sink).
-			a.recordUnappliedSteer("(body load failed)", host, itemID)
+			a.recordUnappliedSteer("(body load failed)", entry.host, entry.itemID)
 		}
-		// Context pressure rides the turn tail, never the cached prefix: an
-		// append leaves the prefix byte-stable, and a model that knows a fold
-		// is near can restate what the summary would drop.
-		if notice := a.contextBudgetNotice(); notice != "" {
-			a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: sessionstore.MidTurnSteerMessage(notice, true)})
-			a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: contextBudgetNoticeSummary(a.ContextBudget())})
-		}
+		a.appendTurnTailNotices()
 
 		schemas := a.svc.tools.ProviderSchemas(ctx)
 		a.sess.lastProviderSchemas = schemas
@@ -298,7 +306,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 			// Exhausted stream retries (or a non-retryable error): persist one
 			// bounded LocalOnly recovery record for the next real user message.
 			// Intermediate failed attempts never wrote session state.
-			a.recordInterruptedDisplay(text, reasoning, partialCalls, true, state.workDurationMs())
+			a.recordInterruptedDisplay(text, reasoning, partialCalls, true, state.workDurationMs(), provider.StreamFailureCauseOf(err))
 			return err
 		}
 		a.sess.lastPrefixShape = prefixShape
@@ -309,7 +317,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 		// cut in half must reach neither history nor execution, and why it did
 		// not is the host's to state, not the model's to infer.
 		boundary := classifyResponseBoundary(usage, calls)
-		calls = boundary.committed
+		calls = a.prepareCallBatch(boundary.committed)
 		if msg, ok := finishReasonMessage(usage); ok {
 			a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: msg, Detail: boundary.noticeDetail()})
 		}
@@ -318,7 +326,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 		// Keep reasoning_content on the assistant turn for display and session
 		// archive. Most OpenAI-compatible backends do not replay it; providers
 		// with an explicit round-trip contract retain the raw provider text.
-		calls = a.withPreviewFileDiffs(ctx, calls)
+		workMs, committed := state.workDurationMs(), a.callsToCommit(streamed, calls)
 		a.sess.conversation.Add(provider.Message{
 			Role:               provider.RoleAssistant,
 			Content:            text,
@@ -326,12 +334,20 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 			ReasoningSignature: signature,
 			ReasoningID:        streamed.reasoningID,
 			ReasoningStatus:    streamed.reasoningStatus,
-			ToolCalls:          calls,
+			ToolCalls:          committed,
 			ResponsesItems:     responsesItems,
-			WorkDurationMs:     state.workDurationMs(),
+			WorkDurationMs:     workMs,
+			ThoughtMs:          streamed.thoughtMs,
 			ModelRef:           a.modelRef,
 		})
-
+		if len(committed) == 0 {
+			state.answeredMs = workMs
+		}
+		if cont, perr := a.settlePerseveration(state, streamed); !cont {
+			return perr
+		} else if streamed.perseverationAborted {
+			continue
+		}
 		if len(calls) == 0 {
 			if a.recordTruncationFact(boundary) {
 				// The truncated tail was the whole batch: nothing ran and no
@@ -379,7 +395,7 @@ func (a *Agent) recordTruncationFact(boundary responseBoundary) bool {
 	if boundary.fact == "" {
 		return false
 	}
-	a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(boundary.fact)})
+	a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(boundary.fact), HostAuthored: true})
 	return true
 }
 
@@ -424,7 +440,7 @@ func (a *Agent) streamWithSamplingRecovery(ctx context.Context, turn int) stream
 
 	for attempt := 1; attempt <= maxSamplingAttempts; attempt++ {
 		attemptID := newStreamAttemptID(attempt)
-		a.emitStreamAttempt(attemptID, event.StreamAttemptBegin, attempt, "", nil)
+		a.emitStreamAttempt(attemptID, event.StreamAttemptBegin, attempt, "", nil, 0)
 
 		var streamSink *deferredStreamSink
 		attemptSink := a.svc.sink
@@ -467,7 +483,7 @@ func (a *Agent) streamWithSamplingRecovery(ctx context.Context, turn int) stream
 					retrySink.Discard()
 					if ctx.Err() != nil {
 						streamSink.Discard()
-						a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, provider.StreamInterruptReason(retry.err), retry.err)
+						a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, provider.StreamInterruptReason(retry.err), retry.err, 0)
 						// Use the cancelled retry as the "latest" shape so
 						// FinishReason=interrupted is preserved for accounting.
 						return streamedTurn{usage: finalizeSamplingUsage(billable, retry.usage), attemptID: attemptID, err: retry.err}
@@ -477,7 +493,7 @@ func (a *Agent) streamWithSamplingRecovery(ctx context.Context, turn int) stream
 					a.storeLatestRequestUsage(result.usage)
 					result.usage = finalizeSamplingUsage(billable, result.usage)
 					event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningFallback})
-					a.emitStreamAttempt(attemptID, event.StreamAttemptCommit, attempt, "", nil)
+					a.emitStreamAttempt(attemptID, event.StreamAttemptCommit, attempt, "", nil, result.firstTokenMs)
 					return result
 				}
 				streamSink.Discard()
@@ -493,7 +509,7 @@ func (a *Agent) streamWithSamplingRecovery(ctx context.Context, turn int) stream
 				} else {
 					event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningRetryRecovered})
 				}
-				a.emitStreamAttempt(attemptID, event.StreamAttemptCommit, attempt, "", nil)
+				a.emitStreamAttempt(attemptID, event.StreamAttemptCommit, attempt, "", nil, retry.firstTokenMs)
 				return retry
 			}
 			if observed != reasoningLostReplay || strings.TrimSpace(result.text) != "" {
@@ -505,21 +521,21 @@ func (a *Agent) streamWithSamplingRecovery(ctx context.Context, turn int) stream
 		}
 
 		streamSink.Flush()
-		a.emitStreamAttempt(attemptID, event.StreamAttemptCommit, attempt, "", nil)
+		a.emitStreamAttempt(attemptID, event.StreamAttemptCommit, attempt, "", nil, result.firstTokenMs)
 		result.usage = finalizeSamplingUsage(billable, result.usage)
 		return result
 	}
 	return last
 }
 
-func (a *Agent) emitStreamAttempt(id string, action event.StreamAttemptAction, attempt int, reason string, err error) {
+func (a *Agent) emitStreamAttempt(id string, action event.StreamAttemptAction, attempt int, reason string, err error, firstTokenMs int64) {
 	if reason == "" && err != nil {
 		reason = provider.StreamInterruptReason(err)
 	}
 	a.svc.sink.Emit(event.Event{
 		Kind: event.StreamAttempt,
 		StreamAttempt: event.StreamAttemptInfo{
-			ID: id, Action: action, Attempt: attempt, Max: maxSamplingAttempts, Reason: reason,
+			ID: id, Action: action, Attempt: attempt, Max: maxSamplingAttempts, Reason: reason, FirstTokenMs: firstTokenMs,
 		},
 	})
 }
@@ -534,18 +550,21 @@ func newStreamAttemptID(attempt int) string {
 	return fmt.Sprintf("sa-%d-%d", attempt, streamAttemptSeq.Add(1))
 }
 
-// streamRetrySleep is the body-retry backoff. Tests replace it with a no-op so
-// recovery suites stay fast while production keeps the Codex-shaped delays.
+// streamRetrySleep waits out a body-retry backoff. Tests replace it with a
+// no-op so recovery suites stay fast while production keeps the real delays.
 var streamRetrySleep = sleepStreamRetryBackoff
 
-// sleepStreamRetryBackoff waits ~0.5s, 1s, 2s, 4s, 8s with small jitter.
-// Returns false when ctx is cancelled during the wait.
-func sleepStreamRetryBackoff(ctx context.Context, attempt int) bool {
-	// attempt is 1-based for the failed attempt about to be retried.
+// streamRetryDelay is the backoff before replaying failed attempt n (1-based):
+// 0.5s, 1s, 2s, 4s, then 8s, each with up to 250ms of jitter.
+func streamRetryDelay(attempt int) time.Duration {
 	shift := min(max(attempt-1, 0), 4)
 	base := time.Duration(1<<shift) * 500 * time.Millisecond
-	jitter := time.Duration(rand.IntN(250)) * time.Millisecond
-	timer := time.NewTimer(base + jitter)
+	return base + time.Duration(rand.IntN(250))*time.Millisecond
+}
+
+// sleepStreamRetryBackoff waits d; it returns false when ctx is cancelled first.
+func sleepStreamRetryBackoff(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
@@ -564,6 +583,7 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 	// it happens where the turn asks whether it may stop, not per tool call.
 	a.evaluateBaselineCriteriaOnce(ctx)
 	readiness := a.finalReadinessCheckFor()
+	a.turn.lastReadiness = &readiness
 	if state.graceRound && (readiness.reason != "" || !hasVisibleFinalAnswer(text)) {
 		return false, a.gracePause(state)
 	}
@@ -573,6 +593,14 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 		// immediately open another Run and silently bypass the chosen limit.
 		return false, a.gracePause(state)
 	}
+	// An executor that has not acted yet gets its one in-turn nudge before the
+	// gate ends the run: what it owes is still something this turn can supply.
+	if state.executorHandoff && !state.usedAnyTool && state.handoffNudges < maxExecutorHandoffNudges && a.shouldNudgeExecutorHandoff() {
+		state.handoffNudges++
+		a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeExecutorHandoff, Text: executorHandoffNoticeText(), Detail: "executor answered without taking any action; nudging it to use its tools"})
+		a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(executorHandoffRetryMessage()), HostAuthored: true})
+		return true, nil
+	}
 	if readiness.reason != "" {
 		// Delivery no longer retries readiness with hidden model messages: the
 		// run ends immediately with the missing requirements, and the host owns
@@ -581,6 +609,7 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 		// the recovery card for an explicit user continuation.
 		event.RecordReadinessAudit(a.svc.sink, readiness.audit(hostaudit.ReadinessErrored, false))
 		a.pending.deliveryRecovery = true
+		a.noteObligationsExplained()
 		// The blocked turn is the one whose summary matters most — it is where
 		// a rewritten check or an unverified mutation is still outstanding —
 		// and it was the only turn that never reported one.
@@ -591,29 +620,19 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 	// is reported here, where it is still the outcome of this turn.
 	a.reportReviewWarnings()
 	if !hasVisibleFinalAnswer(text) {
-		// DeepSeek thinking mode can stream a long reasoning_content and
-		// then finish with finish_reason="stop" but an empty content
-		// block: the model has explicitly signalled completion and its
-		// reasoning was already streamed to the user. Retrying here overrides
-		// that stop signal and forces another expensive thinking round (the
-		// "still thinking after the task is done" symptom), so honour the
-		// stop when reasoning carried the substance of the answer and treat
-		// the turn as a final answer instead of retrying.
-		if a.role.requireVisibleFinal || !reasoningOnlyFinishHonoured(a.svc.prov, usage, reasoning) {
+		// A DeepSeek reasoning-only stop is honoured: retrying it forces another
+		// thinking round after the task is done. Tool results with no visible
+		// synthesis after them are the exception and get exactly one retry.
+		owedSynthesis := state.usedAnyTool && state.emptyFinalBlocks == 0 && silentSinceLastToolRound(a.sess.conversation.Messages)
+		if a.role.requireVisibleFinal || owedSynthesis || !reasoningOnlyFinishHonoured(a.svc.prov, usage, reasoning) {
 			state.emptyFinalBlocks++
 			if state.emptyFinalBlocks >= maxEmptyFinalBlocks {
-				return false, fmt.Errorf("model finished without a visible final answer %d times", state.emptyFinalBlocks)
+				return false, &EmptyFinalError{Blocks: state.emptyFinalBlocks, FinishReason: finishReasonOf(usage)}
 			}
 			a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeEmptyFinal, Text: emptyFinalNotice(), Detail: emptyFinalNoticeDetail(a.svc.prov.Name(), usage, len(reasoning))})
-			a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(emptyFinalRetryMessage())})
+			a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(emptyFinalRetryMessage(usage)), HostAuthored: true})
 			return true, nil
 		}
-	}
-	if state.executorHandoff && !state.usedAnyTool && state.handoffNudges < maxExecutorHandoffNudges && a.shouldNudgeExecutorHandoff() {
-		state.handoffNudges++
-		a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeExecutorHandoff, Text: executorHandoffNoticeText(), Detail: "executor answered without taking any action; nudging it to use its tools"})
-		a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(executorHandoffRetryMessage())})
-		return true, nil
 	}
 	if readiness.applies {
 		event.RecordReadinessAudit(a.svc.sink, readiness.audit(hostaudit.ReadinessAllowed, a.turn.readinessRecovered))
@@ -626,6 +645,25 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 	// carries into the next turn un-folded and can overflow the model window.
 	// No-op below the trigger, so normal turns keep their warm cache.
 	return false, nil // model gave a final answer
+}
+
+// silentSinceLastToolRound reports whether the transcript holds a tool result
+// with no visible assistant text after it.
+func silentSinceLastToolRound(messages []provider.Message) bool {
+	for _, message := range slices.Backward(messages) {
+		if message.LocalOnly {
+			continue
+		}
+		switch message.Role {
+		case provider.RoleTool:
+			return true
+		case provider.RoleAssistant:
+			if hasVisibleFinalAnswer(message.Content) {
+				return false
+			}
+		}
+	}
+	return false
 }
 
 // handleToolRound executes a tool batch, persists tool messages, handles
@@ -654,15 +692,28 @@ func (a *Agent) handleToolRound(ctx context.Context, state *turnRuntime, step in
 		return false, boundaryErr
 	}
 
+	state.snapshot.await(ctx, snapshotWait)
+	mark := a.markProgressRound()
 	batch := a.executeBatch(ctx, state, calls)
 	results, images := batch.results, batch.images
+	flagged := a.screenExternal(ctx, calls, batch)
 	for i, call := range calls {
 		msg := provider.Message{
 			Role:       provider.RoleTool,
 			Content:    results[i],
 			Images:     images[i],
+			Videos:     batch.videos[i],
 			ToolCallID: call.ID,
 			Name:       call.Name,
+		}
+		// The host labels content from outside the workspace here, once, and never rewrites it.
+		if i < len(batch.outcomes) {
+			a.task.origins.note(batch.outcomes[i].provenance, results[i])
+			head := tool.ProvenanceHeader(batch.outcomes[i].provenance)
+			if flagged[i] {
+				head += suspectedInjectionLine
+			}
+			msg.Content = head + msg.Content
 		}
 		// First-visible Content is always the bounded form in results[i].
 		// Full originals ride on RawContent only when truncation applied.
@@ -682,8 +733,11 @@ func (a *Agent) handleToolRound(ctx context.Context, state *turnRuntime, step in
 	// If the context was cancelled during tool execution, return after storing
 	// the batch results so the session keeps paired tool-call history.
 	if ctx.Err() != nil {
-		a.recordInterruptedDisplay("", "", nil, true, state.workDurationMs())
+		a.recordInterruptedDisplay("", "", nil, true, state.workDurationMs(), "")
 		return false, ctx.Err()
+	}
+	if pause := a.settleProgressRound(state, mark); pause != nil {
+		return false, pause
 	}
 	if len(unavailableContextTools) > 0 {
 		if hasVisibleFinalAnswer(text) {

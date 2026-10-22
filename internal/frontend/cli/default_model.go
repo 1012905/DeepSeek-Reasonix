@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"reasonix/internal/contract/config"
+	"reasonix/internal/contract/provider"
 	"reasonix/internal/ext/extension/providerext"
 )
 
@@ -36,12 +37,14 @@ func resolveModelForCLI(explicitRef string, cfg *config.Config) (ref string, fal
 			return "", false, fmt.Errorf("unknown model %q", explicitRef)
 		}
 		if !entry.Configured() {
-			return "", false, fmt.Errorf("provider %q requires %s", explicitRef, entry.APIKeyEnv)
+			// Provider keys resolve only from the Reasonix credentials file, so
+			// naming the variable alone sends users to their shell environment.
+			return "", false, fmt.Errorf("model %q %w: add %s=<key> to %s or run `reasonix setup` (shell environment variables are not read)", explicitRef, provider.ErrKeyMissing, entry.APIKeyEnv, cfg.Roots().UserCredentialsPath())
 		}
 		return entry.Name + "/" + entry.Model, false, nil
 	}
-	ref, fallback, _ = cfg.ResolveNewSessionChatModel()
-	return ref, fallback, nil
+	start, _ := cfg.ResolveNewSessionChatModel()
+	return start.Ref, start.Fallback, nil
 }
 
 // serveStartModel is the model a serve's first pane starts on. Explicit flags
@@ -63,8 +66,8 @@ func resolveServeModel(modelName string) string {
 		return modelName
 	}
 	cfg := config.LoadForEdit(config.UserConfigPath())
-	if resolved, _, ok := cfg.ResolveNewSessionChatModel(); ok {
-		return resolved
+	if start, ok := cfg.ResolveNewSessionChatModel(); ok {
+		return start.Ref
 	}
 	return modelName
 }

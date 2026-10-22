@@ -1,7 +1,9 @@
 package control
 
 import (
+	"errors"
 	"fmt"
+	"path/filepath"
 	"sync/atomic"
 
 	"reasonix/internal/contract/config"
@@ -27,16 +29,27 @@ type skillSet struct {
 	// catalog is what the model has of the listing. It rides the turn, never
 	// the prefix, which a per-project catalog would diverge.
 	catalog projectionDebt
+	// pathHits is the workspace files the host has seen the session touch; a
+	// skill that declares `paths:` is eligible once one of them matches.
+	pathHits *skill.PathHits
 }
 
-func newSkillSet(enabled, all []skill.Skill, store, allStore *skill.Store, noImplicit bool) skillSet {
-	return skillSet{enabled: enabled, all: all, store: store, allStore: allStore, noImplicitInvocation: noImplicit}
+func newSkillSet(enabled, all []skill.Skill, store, allStore *skill.Store, noImplicit bool, workspaceRoot string) skillSet {
+	hits := store.PathHits()
+	if hits == nil {
+		hits = skill.NewPathHits(workspaceRoot)
+	}
+	return skillSet{enabled: enabled, all: all, store: store, allStore: allStore, noImplicitInvocation: noImplicit, pathHits: hits}
 }
 
 // skillsAllOffBlock replaces the listing when every skill is switched off: an
 // absence the model must be told about, since the listing it already has would
 // otherwise keep standing as current.
 const skillsAllOffBlock = "# Skills\n\nEvery skill this project had is switched off. The listing you were sent earlier no longer holds, and `run_skill` has nothing to reach."
+
+// skillsNoneEligibleBlock replaces the listing when skills exist but none is
+// eligible for the files this session has touched.
+const skillsNoneEligibleBlock = "# Skills\n\nNone of this project's skills apply to the files this session has touched. The listing you were sent earlier no longer holds."
 
 // owedCatalog returns the listing this turn owes, empty when the model already
 // has the current one. It asks the canonical registry rather than a flag, so a
@@ -46,11 +59,15 @@ func (s *skillSet) owedCatalog() string {
 	if s.noImplicitInvocation {
 		return ""
 	}
-	block := skill.IndexBlock(s.list())
+	listed := s.list()
+	block := skill.IndexBlock(s.pathHits.Visible(listed))
 	if block == "" && s.catalog.sent() {
 		// Silence would leave the listing the model already has standing as
 		// current. Every skill being switched off is a fact, not an absence.
 		block = skillsAllOffBlock
+		if skill.IndexBlock(listed) != "" {
+			block = skillsNoneEligibleBlock
+		}
 	}
 	return s.catalog.owed(block)
 }
@@ -96,17 +113,37 @@ func (s *skillSet) bySlashName(name string) (skill.Skill, bool) {
 }
 
 func (s *skillSet) prepare(sk skill.Skill) skill.Skill {
+	sk = sk.Complete()
 	if s.store != nil {
 		return s.store.Prepare(sk)
 	}
 	return sk
 }
 
-func (s *skillSet) render(sk skill.Skill, args string) string {
+// forModel is the skill as the model may use it now, by the slash name its
+// entry was registered under: re-read from the live store when there is one,
+// and refused when its author reserved it for the user.
+func (s *skillSet) forModel(sk skill.Skill) (skill.Skill, error) {
 	if s.store != nil {
-		return s.store.Render(sk, args)
+		return s.store.ForModel(sk.SlashName())
 	}
-	return skill.Render(sk, args)
+	if err := s.store.ValidateInvocation(sk); err != nil {
+		return skill.Skill{}, err
+	}
+	return sk.Complete(), nil
+}
+
+// modelGate judges the model's slash entries once per call; a session with no
+// live store has nothing that can change, so its entries were judged at build.
+func (s *skillSet) modelGate() func() func(string) error {
+	if s.store != nil {
+		return s.store.ModelGate()
+	}
+	return nil
+}
+
+func (s *skillSet) renderInvocation(sk skill.Skill, args string) string {
+	return skill.RenderInvocation(s.prepare(sk), args)
 }
 
 // discovered returns the construction-time enabled snapshot (not the live store),
@@ -158,6 +195,54 @@ func (c *Controller) DeleteSkill(name string, scope skill.Scope) error {
 	return w.Delete(name, scope)
 }
 
+var (
+	// ErrSkillNotRemovable is a skill with no folder of the user's own to delete:
+	// a built-in, or one a package provides, which goes when the package does.
+	ErrSkillNotRemovable = errors.New("this skill is not the user's own folder to remove")
+	// ErrSkillChanged is a removal aimed at a skill other than the one the list
+	// showed: the same name at another scope or path.
+	ErrSkillChanged = errors.New("the skill is no longer the one that was shown")
+)
+
+// RemoveSkill deletes the skill the person was shown, named by its scope and
+// path. A built-in or a package's skill is refused with its own identity, and a
+// request whose scope or path no longer matches what the name resolves to is
+// refused rather than aimed at whatever now answers to that name.
+func (c *Controller) RemoveSkill(name string, scope skill.Scope, path string) error {
+	w := c.skills.writer()
+	if w == nil {
+		return fmt.Errorf("no writable skill store in this session")
+	}
+	sk, ok := w.Read(name)
+	if !ok {
+		return &skill.NotFoundError{Name: name}
+	}
+	if !skillRemovable(sk) {
+		return ErrSkillNotRemovable
+	}
+	if sk.Scope != scope || filepath.Clean(sk.Path) != filepath.Clean(path) {
+		return ErrSkillChanged
+	}
+	return w.Delete(name, scope)
+}
+
+// skillRemovable is the one rule for which skills have a place of the user's own
+// to delete: not a built-in, not a package's, and backed by a file.
+func skillRemovable(sk skill.Skill) bool {
+	return sk.Scope != skill.ScopeBuiltin && sk.Plugin == "" && sk.Path != "" && sk.Path != "(builtin)"
+}
+
+// SkillRemoval says what removing sk would delete and whether that is a folder,
+// by the rule RemoveSkill follows; ok is false for a skill that cannot be removed.
+func (c *Controller) SkillRemoval(sk skill.Skill) (target string, folder, ok bool) {
+	w := c.skills.writer()
+	if w == nil || !skillRemovable(sk) {
+		return "", false, false
+	}
+	target, folder = w.RemovalTarget(sk)
+	return target, folder, true
+}
+
 // Skills scans the live Store, so a skill installed this session is listed.
 func (c *Controller) Skills() []skill.Skill {
 	return c.skills.list()
@@ -184,7 +269,7 @@ func (c *Controller) AllSkills() []skill.Skill {
 
 // DisabledSkills returns all discoverable skills that are off in this project.
 func (c *Controller) DisabledSkills() []skill.Skill {
-	resolve := c.skillActivation()
+	resolve := c.SkillActivation()
 	var out []skill.Skill
 	for _, sk := range c.AllSkills() {
 		if !resolve(sk.Name) {
@@ -196,13 +281,13 @@ func (c *Controller) DisabledSkills() []skill.Skill {
 
 // SkillEnabled reports whether a skill is on in this project.
 func (c *Controller) SkillEnabled(name string) bool {
-	return c.skillActivation()(name)
+	return c.SkillActivation()(name)
 }
 
-// skillActivation resolves several names against one config and one store read.
+// SkillActivation resolves several names against one config and one store read.
 // skills.disabled_skills stays readable as the declared default, so a
 // hand-written config keeps working even though the switch no longer writes it.
-func (c *Controller) skillActivation() func(string) bool {
+func (c *Controller) SkillActivation() func(string) bool {
 	declared := func(string) bool { return true }
 	if cfg, err := config.Load(); err == nil {
 		declared = func(name string) bool { return !cfg.IsSkillDisabled(name) }
@@ -253,3 +338,8 @@ func (c *Controller) canonicalSkillName(name string) (string, error) {
 	}
 	return "", &skill.NotFoundError{Name: name}
 }
+
+// TouchedPaths lists the workspace files this session's completed tool calls
+// named, sorted: the facts a skill's `paths:` globs are judged against. It is a
+// read-only diagnostic view of the set.
+func (c *Controller) TouchedPaths() []string { return c.skills.pathHits.Seen() }

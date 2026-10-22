@@ -1,26 +1,52 @@
-import { useRef, useState, type ReactNode } from "react";
-import { useStartsOpen } from "../../state/foldpref";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useFoldModes, useStartsOpen } from "../../state/foldpref";
+import { firstSentence } from "../thoughtPeek";
 import { StudioIcon } from "../StudioIcon";
 import { t } from "../../i18n";
 import { count, decimals } from "../../i18n/format";
 import { Sym } from "../Sym";
 import type { Item } from "../../state/session";
+import { thoughtStartedAt } from "../../state/say";
 import { LazyMarkdown } from "../LazyMarkdown";
 import { Boundary } from "../Boundary";
 import { CopyButton } from "../CopyButton";
+import { TooltipButton } from "../TooltipButton";
 import { useRevealed } from "../reveal";
+import { useShown } from "../shown";
+import { ReplyMenu } from "./ReplyMenu";
 import { useDismiss } from "../dismiss";
+import { pinToViewport } from "../place";
+import type { LocalRefs } from "../Markdown";
 
 // Folded, the only thing left of a thought is how much of the turn it was. The
 // spec puts both halves there — how long, and how much — because either alone
 // hides whether a slow turn was spent thinking or waiting.
-function thoughtLabel(item: Extract<Item, { t: "say" }>) {
+function ThoughtLabel({ item }: { item: Extract<Item, { t: "say" }> }) {
   // Graphemes, not code units: an emoji in the reasoning is one character to
   // the reader and two to the string.
-  const chars = t("{n} 字", { n: count([...(item.reasoning ?? "")].length) });
-  return item.thoughtMs
-    ? t("思考 {secs} 秒 · {chars}", { secs: decimals(item.thoughtMs / 1000, 1), chars })
-    : t("思考 {chars}", { chars });
+  const graphemes = useMemo(() => [...(item.reasoning ?? "")].length, [item.reasoning]);
+  const chars = t("{n} 字", { n: count(graphemes) });
+  return <>{item.thoughtMs ? t("思考 {secs} 秒 · {chars}", { secs: decimals(item.thoughtMs / 1000, 1), chars }) : t("思考 {chars}", { chars })}</>;
+}
+
+const LIVE_TICK_MS = 100;
+const PEEK_CHARS = 80;
+
+// While the model is still thinking the reader sees the clock run, not a bare
+// ellipsis; a card this window did not watch begin has no start to count from.
+function LiveThought({ id }: { id: string }) {
+  const since = thoughtStartedAt(id);
+  const watched = useShown();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (since === undefined || !watched) return;
+    setNow(Date.now());
+    const h = window.setInterval(() => setNow(Date.now()), LIVE_TICK_MS);
+    return () => window.clearInterval(h);
+  }, [since, watched]);
+  if (since === undefined) return <>{t("思考中…")}</>;
+  return <>{t("思考中 {secs} 秒", { secs: decimals(Math.max(0, now - since) / 1000, 1) })}</>;
 }
 
 // A ref is "provider/model"; the model is what identifies it to a reader, and
@@ -33,27 +59,35 @@ const modelName = (ref: string) => ref.slice(ref.lastIndexOf("/") + 1);
 export interface Quote {
   text: string;
   turn?: number;
+  // The workspace file the text was selected in, when it did not come from a reply.
+  source?: string;
   n: number;
 }
 
-/** What a finished reply can be acted on with. Absent members are capabilities
- *  this transcript does not have — a rebuilt one cannot re-run a turn — and the
- *  bar draws only what it can actually do. */
+/** What a finished reply can be acted on with. Regeneration belongs to the
+ *  individual reply and requires a paired checkpoint. */
 export interface ReplyActions {
+  files?: LocalRefs;
+  activeFile?: string;
+  onAddFile?: (reference: string) => void;
+  openDeliveredFile?: (path: string) => Promise<void>;
+  revealDeliveredFile?: (path: string) => Promise<void>;
   onQuote: (text: string, id: string) => void;
-  onRegenerate?: () => void;
+  onQuoteFile?: (text: string, source: string) => void;
+  canRegenerate: (id: string) => boolean;
+  hasLaterTurns: (id: string) => boolean;
+  onRegenerate: (id: string) => void;
+  canBranch: (id: string) => boolean;
+  onBranch: (id: string) => void | Promise<void>;
   model?: string;
   onConfigureModel?: () => void;
   onRunDetail?: () => void;
 }
 
-// Quoting a whole answer to ask about one sentence of it is not quoting. What
-// the reader has highlighted inside this card is what they mean; the selection
-// has to be checked against the card because the browser keeps the last one
-// anywhere on the page.
+// The browser keeps selections outside the answer, including across cards.
 function selectedIn(card: Element | null): string {
   const sel = card && window.getSelection();
-  if (!sel || sel.isCollapsed || sel.rangeCount === 0) return "";
+  if (!sel || sel.isCollapsed || sel.rangeCount !== 1) return "";
   const range = sel.getRangeAt(0);
   if (!card.contains(range.commonAncestorContainer)) return "";
   return sel.toString().trim();
@@ -68,24 +102,46 @@ function download(text: string) {
   URL.revokeObjectURL(url);
 }
 
-export function SayCard({ item, afterAnswer, reply }: { item: Extract<Item, { t: "say" }>; afterAnswer?: ReactNode; reply?: ReplyActions }) {
+export function SayCard({ item, afterAnswer, settled = true, reply, quiet }: { item: Extract<Item, { t: "say" }>; afterAnswer?: ReactNode; settled?: boolean; reply?: ReplyActions; quiet?: boolean }) {
+  const [branching, setBranching] = useState(false);
   const start = useStartsOpen("thinking", !item.done && !item.text);
   const [touched, setOpen] = useState<boolean | null>(null);
   const open = touched ?? start;
+  const peeks = useFoldModes().thinking === "peek" && !open && item.done;
+  const peek = useMemo(() => (peeks ? firstSentence(item.reasoning ?? "", PEEK_CHARS) : ""), [peeks, item.reasoning]);
   const [menu, setMenu] = useState<"" | "retry" | "more">("");
-  // The menu draws above this row, outside its box, so leaving the row is the
-  // way to reach it — not the way to dismiss it.
-  const acts = useRef<HTMLDivElement>(null);
-  useDismiss(!!menu, acts, () => setMenu(""));
+  const shut = useCallback(() => setMenu(""), []);
+  const retry = useRef<HTMLButtonElement>(null);
+  const more = useRef<HTMLButtonElement>(null);
+  const answer = useRef<HTMLDivElement>(null);
+  const selectionMenu = useRef<HTMLDivElement>(null);
+  const [selection, setSelection] = useState<{ text: string; x: number; y: number } | null>(null);
+  const closeSelection = useCallback(() => {
+    if (selectionMenu.current?.contains(document.activeElement)) answer.current?.focus();
+    setSelection(null);
+  }, []);
+  useDismiss(!!selection, selectionMenu, closeSelection);
+  const offerSelection = (x: number, y: number) => {
+    if (!item.done || !reply) return false;
+    const text = selectedIn(answer.current);
+    if (!text) return false;
+    if (x === 0 && y === 0) {
+      const rect = window.getSelection()!.getRangeAt(0).getBoundingClientRect();
+      x = rect.left;
+      y = rect.bottom;
+    }
+    setMenu("");
+    setSelection({ text, x, y });
+    return true;
+  };
   // Thinking is the longest-running stream of the turn — 10s of it before the
   // first answer token, measured — so it gets the same paced reveal the answer
   // does rather than tracking the wire's bursts.
-  const thought = useRevealed(item.reasoning ?? "", !item.done);
+  const thought = useRevealed(item.reasoning ?? "", !item.done && open);
   return (
-    <div className="call" data-k="say">
+    <div className="call" data-k="say" data-quiet={quiet ? "" : undefined}>
       <div className="g">
         <Sym glyph="◦" />
-        <span className="line" />
       </div>
       <div className="c">
         <div className="hl">
@@ -98,7 +154,8 @@ export function SayCard({ item, afterAnswer, reply }: { item: Extract<Item, { t:
           {item.reasoning?.trim() && (
             <details className="think" open={open} onToggle={(e) => e.currentTarget.open !== open && setOpen(e.currentTarget.open)}>
               <summary>
-                <span className="fold">{item.done ? thoughtLabel(item) : t("思考中…")}</span>
+                <span className="fold">{item.done || item.thoughtMs !== undefined ? <ThoughtLabel item={item} /> : <LiveThought id={item.id} />}</span>
+                {peek && <span className="peek">{peek}</span>}
               </summary>
               <div className="tk">
                 {thought}
@@ -107,70 +164,109 @@ export function SayCard({ item, afterAnswer, reply }: { item: Extract<Item, { t:
             </details>
           )}
           {item.text && (
-            <div className="txt">
-              <Boundary fallback={<div className="md">{item.text}</div>}>
-                <LazyMarkdown text={item.text} streaming={!item.done} />
+            <div className="txt" ref={answer} tabIndex={item.done && reply ? 0 : undefined}
+              data-action-contextmenu="reply.selection.menu" data-action-keydown="reply.selection.menu" data-target={item.id}
+              onContextMenu={(e) => {
+                if (!offerSelection(e.clientX, e.clientY)) return;
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onKeyDown={(e) => {
+                if (e.key !== "ContextMenu" && !(e.key === "F10" && e.shiftKey)) return;
+                if (!offerSelection(0, 0)) return;
+                e.preventDefault();
+                e.stopPropagation();
+              }}>
+              <Boundary retryKey={item.text} fallback={<div className="md" style={{ whiteSpace: "pre-wrap" }}>{item.text}</div>}>
+                <LazyMarkdown text={item.text} streaming={!item.done} local={reply?.files} />
               </Boundary>
             </div>
           )}
           {afterAnswer}
           {/* Only once the answer is whole: copying half a stream hands over
-              something that was never said. */}
-          {item.done && item.text.trim() && (
-            <div className="acts" ref={acts}>
+              something that was never said, and a row of actions under work
+              that is still running reads as the turn being over. */}
+          {item.done && settled && item.text.trim() && (
+            <div className="acts">
               <CopyButton text={item.text} iconOnly />
               {reply && (
-                <button type="button" data-action="reply.quote" title={t("引用到输入框")} aria-label={t("引用到输入框")} onClick={(e) => reply.onQuote(selectedIn(e.currentTarget.closest(".call")) || item.text, item.id)}>
+                <TooltipButton type="button" data-action="reply.quote" data-target={item.id} title={t("引用到输入框")} aria-label={t("引用到输入框")} onClick={() => reply.onQuote(selectedIn(answer.current) || item.text, item.id)}>
                   <StudioIcon name="quote" />
-                </button>
+                </TooltipButton>
               )}
-              {reply?.onRegenerate && (
+              {reply?.canBranch(item.id) && (
+                <TooltipButton type="button" data-action="reply.branch" title={t("创建对话分支")} aria-label={t("创建对话分支")} disabled={branching} onClick={() => { setBranching(true); void Promise.resolve(reply.onBranch(item.id)).finally(() => setBranching(false)); }}>
+                  <StudioIcon name={branching ? "clock" : "fork"} />
+                </TooltipButton>
+              )}
+              {reply?.canRegenerate(item.id) && (
                 <span className="acts-menu">
-                  <button type="button" data-action="reply.retry" title={t("重新生成")} aria-label={t("重新生成")} aria-expanded={menu === "retry"} onClick={() => setMenu((m) => (m === "retry" ? "" : "retry"))}>
+                  <TooltipButton ref={retry} type="button" data-action="reply.retry" title={t("重新生成")} aria-label={t("重新生成")} aria-expanded={menu === "retry"} onClick={() => setMenu((m) => (m === "retry" ? "" : "retry"))}>
                     <StudioIcon name="refresh" />
-                  </button>
-                  {menu === "retry" && (
-                    <div className="acts-pop" role="menu">
-                      <div className="acts-pop-head">{t("重新生成")}<small>{t("当前回复会留在运行历史里")}</small></div>
-                      <button type="button" role="menuitem" data-action="reply.retry-now" onClick={() => { setMenu(""); reply.onRegenerate?.(); }}>
-                        <StudioIcon name="refresh" /><span>{t("按当前配置重试")}</span>{reply.model && <small>{reply.model}</small>}
-                      </button>
-                      {reply.onConfigureModel && (
-                        <button type="button" role="menuitem" data-action="reply.configure" onClick={() => { setMenu(""); reply.onConfigureModel?.(); }}>
-                          <StudioIcon name="sliders" /><span>{t("先调整模型与强度")}</span>
-                        </button>
-                      )}
+                  </TooltipButton>
+                  <ReplyMenu anchor={retry} open={menu === "retry"} onClose={shut}>
+                    <div className="acts-pop-head">
+                      {t("重新生成")}
+                      <small>{t("当前回复会留在运行历史里")}</small>
+                      {reply.hasLaterTurns(item.id) && <small>{t("这一轮之后的记录会被丢弃")}</small>}
                     </div>
-                  )}
+                    <button type="button" role="menuitem" data-action="reply.retry-now" onClick={() => { setMenu(""); reply.onRegenerate(item.id); }}>
+                      <StudioIcon name="refresh" /><span>{t("按当前配置重试")}</span>{reply.model && <small>{reply.model}</small>}
+                    </button>
+                    {reply.onConfigureModel && (
+                      <button type="button" role="menuitem" data-action="reply.configure" onClick={() => { setMenu(""); reply.onConfigureModel?.(); }}>
+                        <StudioIcon name="sliders" /><span>{t("先调整模型与强度")}</span>
+                      </button>
+                    )}
+                  </ReplyMenu>
                 </span>
               )}
               {reply && (
                 <span className="acts-menu">
-                  <button type="button" data-action="reply.more" title={t("更多")} aria-label={t("更多")} aria-expanded={menu === "more"} onClick={() => setMenu((m) => (m === "more" ? "" : "more"))}>
+                  <TooltipButton ref={more} type="button" data-action="reply.more" title={t("更多")} aria-label={t("更多")} aria-expanded={menu === "more"} onClick={() => setMenu((m) => (m === "more" ? "" : "more"))}>
                     <StudioIcon name="more" />
-                  </button>
-                  {menu === "more" && (
-                    <div className="acts-pop" role="menu">
-                      <div className="acts-pop-head">{t("这条回复")}</div>
-                      <button type="button" role="menuitem" data-action="reply.download" onClick={() => { setMenu(""); download(item.text); }}>
-                        <StudioIcon name="download" /><span>{t("下载回复")}</span><small>Markdown</small>
-                      </button>
-                      {reply.onRunDetail && (
-                        <>
-                          <div className="acts-pop-head">{t("本轮执行")}</div>
-                          <button type="button" role="menuitem" data-action="reply.run-detail" onClick={() => { setMenu(""); reply.onRunDetail?.(); }}>
-                            <StudioIcon name="gauge" /><span>{t("运行分析")}</span>
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
+                  </TooltipButton>
+                  <ReplyMenu anchor={more} open={menu === "more"} onClose={shut}>
+                    <div className="acts-pop-head">{t("这条回复")}</div>
+                    <button type="button" role="menuitem" data-action="reply.download" onClick={() => { setMenu(""); download(item.text); }}>
+                      <StudioIcon name="download" /><span>{t("下载回复")}</span><small>Markdown</small>
+                    </button>
+                    {reply.onRunDetail && (
+                      <>
+                        <div className="acts-pop-head">{t("本轮执行")}</div>
+                        <button type="button" role="menuitem" data-action="reply.run-detail" onClick={() => { setMenu(""); reply.onRunDetail?.(); }}>
+                          <StudioIcon name="gauge" /><span>{t("运行分析")}</span>
+                        </button>
+                      </>
+                    )}
+                  </ReplyMenu>
                 </span>
               )}
             </div>
           )}
         </div>
       </div>
+      {selection && reply && createPortal(
+        <div className="acts-pop" role="menu" aria-label={t("选中内容")} data-action-keydown="reply.selection.menu" data-target={item.id} ref={(el) => {
+          selectionMenu.current = el;
+          if (el) pinToViewport(el, selection.x, selection.y);
+        }}
+          onKeyDown={(e) => {
+            const keys = ["ArrowDown", "ArrowUp", "Home", "End"];
+            if (!keys.includes(e.key)) return;
+            const all = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+            const at = all.indexOf(document.activeElement as HTMLElement);
+            const next = e.key === "Home" ? 0 : e.key === "End" ? all.length - 1 : (at + (e.key === "ArrowDown" ? 1 : -1) + all.length) % all.length;
+            e.preventDefault();
+            all[next]?.focus();
+          }}>
+          <button type="button" role="menuitem" autoFocus data-action="reply.quote" data-target={item.id} onClick={() => {
+            setSelection(null);
+            reply.onQuote(selection.text, item.id);
+          }}><span>{t("引用选中内容")}</span></button>
+          <CopyButton text={selection.text} role="menuitem" label={t("复制选中内容")} />
+        </div>, document.body,
+      )}
     </div>
   );
 }

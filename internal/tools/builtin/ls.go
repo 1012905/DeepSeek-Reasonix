@@ -18,9 +18,11 @@ func init() { tool.RegisterBuiltin(listDir{}) }
 // read aliases for external folder refs. forbidRoots lists directories the tool
 // may not list or recurse into.
 type listDir struct {
+	netRoots    []string
 	workDir     string
 	paths       *PathResolver
 	forbidRoots []string
+	readRoots   []string
 }
 
 func (listDir) Name() string { return "ls" }
@@ -34,6 +36,8 @@ func (listDir) Schema() json.RawMessage {
 }
 
 func (listDir) ReadOnly() bool { return true }
+
+func (listDir) Reach() tool.Reach { return tool.ReachLocalRead }
 
 // SnipHint keeps a long head and short tail like grep/glob: the first entries
 // matter most, the tail confirms scope.
@@ -56,6 +60,12 @@ func (l listDir) Execute(ctx context.Context, args json.RawMessage) (string, err
 	}
 	rp := resolveReadablePath(l.workDir, p.Path, l.paths)
 	p.Path = rp.Path
+	if err := rp.refuseNetwork(l.netRoots); err != nil {
+		return "", err
+	}
+	if err := confineScope(l.readRoots, p.Path); err != nil {
+		return "", err
+	}
 	if confineRead(l.forbidRoots, p.Path) {
 		return "(empty directory)", nil
 	}

@@ -56,6 +56,7 @@ type offlineModeArgs struct {
 	suite    string
 	reportIn string
 	outMD    string
+	outJSON  string
 	addr     string
 }
 
@@ -71,6 +72,8 @@ func dispatchOfflineMode(mode string, a offlineModeArgs) bool {
 	switch mode {
 	case "compare":
 		runCompareMode(a.outMD)
+	case "rollout":
+		fail("rollout", runRolloutMode(a.outMD, a.outJSON))
 	case "traj":
 		emitTrajMode(a.trajDir, a.outMD)
 	case "barrier":
@@ -85,4 +88,17 @@ func dispatchOfflineMode(mode string, a offlineModeArgs) bool {
 		return false
 	}
 	return true
+}
+
+// absTrajectoryDir anchors -trajectories to the operator's cwd. Each task's
+// child runs with the task workdir as its cwd, so a relative value would name
+// a directory under every workdir instead of the one the operator meant.
+func absTrajectoryDir(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(dir); err == nil {
+		return abs
+	}
+	return dir
 }

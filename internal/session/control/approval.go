@@ -38,11 +38,7 @@ type approvalManager struct {
 	asks      map[string]pendingAsk
 	granted   map[string]bool
 	ids       promptIDs
-	// toolApprovalMode is the runtime approval posture: "ask" prompts, "auto"
-	// lets the policy auto-approve the writer fallback while preserving ask/deny
-	// rules, and "yolo" skips ordinary tool prompts while deny rules and fresh
-	// decisions remain enforced.
-	toolApprovalMode string
+	posture   approvalPosture
 	// approvalTimeout bounds how long requestApproval/Ask block on a user
 	// decision. Zero means wait indefinitely (correct for an interactive
 	// terminal); bot/headless frontends set it so a walked-away user can't wedge
@@ -71,14 +67,14 @@ type approvalManager struct {
 
 func newApprovalManager(policy permission.Policy, mode string, timeout time.Duration, persists bool) approvalManager {
 	return approvalManager{
-		policy:           policy,
-		persists:         persists,
-		approvals:        map[string]pendingApproval{},
-		asks:             map[string]pendingAsk{},
-		granted:          map[string]bool{},
-		ids:              newPromptIDs(),
-		toolApprovalMode: mode,
-		approvalTimeout:  timeout,
+		policy:          policy,
+		persists:        persists,
+		approvals:       map[string]pendingApproval{},
+		asks:            map[string]pendingAsk{},
+		granted:         map[string]bool{},
+		ids:             newPromptIDs(),
+		posture:         approvalPosture{mode: mode},
+		approvalTimeout: timeout,
 	}
 }
 
@@ -101,6 +97,10 @@ func NewHeadlessPermissionGate(policy permission.Policy) *freshHumanHeadlessGate
 // a task sub-agent run a write an explicit ask
 // rule was supposed to deny under auto.
 func BuildHeadlessApprovalGate(policy permission.Policy, mode string) *freshHumanHeadlessGate {
+	return buildHeadlessGate(policy, mode, nil)
+}
+
+func buildHeadlessGate(policy permission.Policy, mode string, folder *folderRefusal) *freshHumanHeadlessGate {
 	// An empty mode is the boot-time placeholder used by interactive frontends
 	// before they install their real gate. Keep that compatibility path distinct
 	// from an explicit headless Ask posture, which has nobody to approve it.
@@ -118,131 +118,19 @@ func BuildHeadlessApprovalGate(policy permission.Policy, mode string) *freshHuma
 		// model writes the same script to a file and runs it. policy is a copy.
 		policy.AllowDynamicBash = true
 		return &freshHumanHeadlessGate{gate: permission.NewGate(policy, denyPermissionApprover{})}
-	case ToolApprovalDontAsk:
+	case ToolApprovalDontAsk, ToolApprovalReadOnly:
 		policy.Mode = permission.Deny
+		policy.ReadOnly = normalizeToolApprovalMode(mode) == ToolApprovalReadOnly
 		return &freshHumanHeadlessGate{gate: permission.NewGate(policy, denyPermissionApprover{})}
 	default:
 		policy.Mode = permission.Ask
-		return &freshHumanHeadlessGate{gate: permission.NewGate(policy, denyPermissionApprover{})}
-	}
-}
-
-// SharedHeadlessGate is a mutable, concurrency-safe holder for the
-// non-interactive gate that every headless-only sub-agent surface shares —
-// `task`/`read_only_task`, writer-capable skill sub-agents, and the planner
-// runner. Those surfaces capture their gate once at construction with no
-// rebuild hook of their own, unlike the parent executor's gate (rebuilt in
-// place via Agent.SetGate on every SetToolApprovalMode/
-// ApplyHeadlessApprovalMode call). Every consumer holds this same pointer and
-// reads through Check, so a runtime approval-mode switch (interactive
-// Shift+Tab, or a headless --permission-mode passed at boot) only needs to
-// call Update here to keep sub-agents on the same contract as the parent
-// instead of silently pinning them to whatever mode was active when they were
-// first constructed.
-type SharedHeadlessGate struct {
-	mu     sync.RWMutex
-	policy permission.Policy
-	gate   *freshHumanHeadlessGate
-}
-
-// NewSharedHeadlessGate builds a shared gate holder from the base policy and
-// the initial approval mode (see BuildHeadlessApprovalGate for the mode
-// contract).
-func NewSharedHeadlessGate(policy permission.Policy, mode string) *SharedHeadlessGate {
-	g := &SharedHeadlessGate{policy: policy}
-	g.Update(mode)
-	return g
-}
-
-// Update rebuilds the held gate for a new approval mode. Safe to call
-// concurrently with Check (a turn may be mid-flight on another goroutine when
-// the user switches modes).
-func (g *SharedHeadlessGate) Update(mode string) {
-	next := BuildHeadlessApprovalGate(g.policy, mode)
-	g.mu.Lock()
-	g.gate = next
-	g.mu.Unlock()
-}
-
-// RuleAllows reports whether a configured allow rule already covers this call.
-// The fallback mode deliberately does not count: "auto approves writers" is a
-// posture, while a matched rule is the user's own answer written down, and only
-// the second one may stand in for asking again.
-func (g *SharedHeadlessGate) RuleAllows(toolName string, args json.RawMessage, readOnly bool) bool {
-	// Neutralizing the writer fallback is what separates the two: with Mode set
-	// to Ask, an Allow can only have come from a rule that matched. Reading the
-	// rule list directly would have to re-implement bash's segment matching.
-	probe := g.policy
-	probe.Mode = permission.Ask
-	return probe.Decide(toolName, readOnly, args) == permission.Allow
-}
-
-func (g *SharedHeadlessGate) Check(ctx context.Context, toolName string, args json.RawMessage, readOnly bool) (bool, string, error) {
-	g.mu.RLock()
-	gate := g.gate
-	g.mu.RUnlock()
-	return gate.Check(ctx, toolName, args, readOnly)
-}
-
-func (g *SharedHeadlessGate) ExplicitlyDenies(toolName string, args json.RawMessage) bool {
-	g.mu.RLock()
-	gate := g.gate
-	g.mu.RUnlock()
-	return gate.ExplicitlyDenies(toolName, args)
-}
-
-type freshHumanHeadlessGate struct {
-	gate                    *permission.Gate
-	dynamicBashBypass       bool
-	allowLowRiskFreshAction func(toolName string, args json.RawMessage) bool
-}
-
-func (g *freshHumanHeadlessGate) Check(ctx context.Context, toolName string, args json.RawMessage, readOnly bool) (bool, string, error) {
-	if RequiresFreshHumanApprovalTool(toolName) {
-		if !g.gate.ExplicitlyDenies(toolName, args) &&
-			g.allowLowRiskFreshAction != nil &&
-			g.allowLowRiskFreshAction(toolName, args) {
-			return true, "", nil
+		if folder != nil {
+			f := *folder
+			f.trusted = policy
+			f.trusted.Mode, f.trusted.AllowDynamicBash = permission.Allow, true
+			folder = &f
 		}
-		return false, "this tool requires fresh human approval and cannot run in a non-interactive session. Use an interactive session or a user-initiated memory command.", nil
-	}
-	if strings.EqualFold(toolName, "bash") {
-		if blocker := permission.BashSubjectApprovalBlocker(permission.Subject(args)); blocker != permission.BashApprovalBlockerNone {
-			if g.gate.Policy.Decide(toolName, readOnly, args) != permission.Allow && !g.dynamicBashBypass {
-				return false, headlessBashBlockReason(blocker), nil
-			}
-		}
-	}
-	return g.gate.Check(ctx, toolName, args, readOnly)
-}
-
-func (g *freshHumanHeadlessGate) ExplicitlyDenies(toolName string, args json.RawMessage) bool {
-	return g.gate.Policy.ExplicitlyDenies(toolName, args)
-}
-
-// Every blocked shape leads callers toward writing a script, so the writable
-// boundary belongs in all of them: told only to use a file, models reach for
-// /tmp and lose a second round to the sandbox.
-const headlessBashBlockSuffix = " Scratch files belong under $TMPDIR, the session-private directory the host provides; a literal /tmp path is not writable, and anything else must be inside the workspace. The user can also switch to an interactive session or YOLO mode."
-
-// headlessBashBlockReason names the shape that actually stopped the command.
-// A caller told "inline interpreter code is blocked" about `env | grep` learns
-// nothing and rewrites toward the wrong fix.
-func headlessBashBlockReason(blocker permission.BashApprovalBlocker) string {
-	const lead = "this shell command requires human approval and cannot run in a non-interactive session. "
-	switch blocker {
-	case permission.BashApprovalBlockerInlineCode:
-		return lead + "It carries inline interpreter code (python -c, node -e, bash -c), which the host cannot audit; write the code to a file with write_file and run that file instead (e.g. write repro.py, then `python3 repro.py`)." + headlessBashBlockSuffix
-	case permission.BashApprovalBlockerNestedExecution:
-		return lead + "It nests another command through substitution ($(...), `...`, or <(...)), so what would actually run is not visible in the command; split it into separate calls and pass the values literally." + headlessBashBlockSuffix
-	case permission.BashApprovalBlockerDynamicName:
-		return lead + "The program it runs comes from a variable, so the host cannot tell what would execute; name the program literally." + headlessBashBlockSuffix
-	case permission.BashApprovalBlockerIndirectExecution:
-		return lead + "It runs through a wrapper (eval, source, xargs, env without a command, find -exec) that executes something the command itself does not name; call the target program directly." + headlessBashBlockSuffix
-	case permission.BashApprovalBlockerHereDocBody:
-		return lead + "It feeds a here-document, whose body is file content rather than arguments the host can read; write the file with write_file, then run whatever needs it." + headlessBashBlockSuffix
-	default:
-		return lead + "The host could not statically read what it would run; use a simpler literal command, or read_file/grep for inspection." + headlessBashBlockSuffix
+		return &freshHumanHeadlessGate{gate: permission.NewGate(policy, denyPermissionApprover{folder: folder})}
 	}
 }
 
@@ -269,7 +157,7 @@ func (a *approvalManager) preApprovedForDecisionOptions(tool, subject string, ar
 		return a.sessionGrantAllowsLocked(tool, subject)
 	}
 	if requireHuman {
-		return a.toolApprovalMode == ToolApprovalYolo || a.sessionGrantAllowsLocked(tool, subject)
+		return a.requiredHumanAnsweredLocked(tool, subject)
 	}
 	return a.bypassAllowsLocked(tool, subject, args) || a.sessionGrantAllowsLocked(tool, subject)
 }
@@ -277,7 +165,17 @@ func (a *approvalManager) preApprovedForDecisionOptions(tool, subject string, ar
 func (a *approvalManager) preApprovedForRequiredHuman(tool, subject string) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.toolApprovalMode == ToolApprovalYolo || a.sessionGrantAllowsLocked(tool, subject)
+	return a.requiredHumanAnsweredLocked(tool, subject)
+}
+
+// requiredHumanAnsweredLocked is whether YOLO or a session grant stands in for
+// the person on a call that needs one. A fresh-human tool is never answered that
+// way: its card says so, and a grant for it is not something the host records.
+func (a *approvalManager) requiredHumanAnsweredLocked(tool, subject string) bool {
+	if requiresFreshApprovalTool(tool) {
+		return false
+	}
+	return a.posture.mode == ToolApprovalYolo || a.sessionGrantAllowsLocked(tool, subject)
 }
 
 // register allocates an approval ID, records the pending prompt, and returns the
@@ -417,15 +315,28 @@ func (p *promptIDs) issue() string {
 	return p.prefix + "-" + strconv.Itoa(p.next)
 }
 
+// pendingAsk is an in-flight ask question batch. questions is retained so the
+// AskRequest can be re-emitted to a frontend that reconnected after the original
+// event (see ReplayPendingPrompts).
+type pendingAsk struct {
+	questions []event.AskQuestion
+	engaged   chan struct{}
+	reply     chan []event.AskAnswer
+	queued    bool // registered but not yet shown; replay must skip it
+	origin    *event.AskOrigin
+	// skipAt is when the host will skip the question; zero when it never will.
+	skipAt time.Time
+}
+
 // registerAsk records the pending question batch under an identity already
 // issued and returns the reply channel. It is the moment the ask becomes
 // observable — queued, so a question waiting behind another prompt is visible
 // rather than living only inside a blocked goroutine.
-func (a *approvalManager) registerAsk(id string, questions []event.AskQuestion) chan []event.AskAnswer {
+func (a *approvalManager) registerAsk(id string, questions []event.AskQuestion, origin *event.AskOrigin) chan []event.AskAnswer {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	reply := make(chan []event.AskAnswer, 1)
-	a.asks[id] = pendingAsk{questions: questions, reply: reply, queued: true}
+	a.asks[id] = pendingAsk{questions: questions, engaged: make(chan struct{}), reply: reply, queued: true, origin: origin}
 	return reply
 }
 
@@ -454,6 +365,30 @@ func (a *approvalManager) markAskEmitted(id string) {
 	}
 }
 
+// setAskSkipAt records when an emitted question will be skipped.
+func (a *approvalManager) setAskSkipAt(id string, at time.Time) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if p, ok := a.asks[id]; ok {
+		p.skipAt = at
+		a.asks[id] = p
+	}
+}
+
+// skipInMs is what is left of the wait a frontend should show: zero when the
+// question is never skipped or the person has taken it over.
+func (p pendingAsk) skipInMs(now time.Time) int64 {
+	if p.skipAt.IsZero() {
+		return 0
+	}
+	select {
+	case <-p.engaged:
+		return 0
+	default:
+	}
+	return max(p.skipAt.Sub(now).Milliseconds(), 1)
+}
+
 // queuedAsks reports asks registered but not yet shown.
 func (a *approvalManager) queuedAsks() int {
 	a.mu.Lock()
@@ -472,15 +407,6 @@ func (a *approvalManager) cancelAsk(id string) {
 	a.mu.Lock()
 	delete(a.asks, id)
 	a.mu.Unlock()
-}
-
-// resolveAsk removes and returns the pending ask for id (AnswerQuestion path).
-func (a *approvalManager) resolveAsk(id string) (pendingAsk, bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	p, ok := a.asks[id]
-	delete(a.asks, id)
-	return p, ok
 }
 
 // clearAll drops every in-flight prompt without signaling — the cancel path,
@@ -512,11 +438,39 @@ func (a *approvalManager) hasPending() bool {
 	return len(a.approvals) > 0 || len(a.asks) > 0
 }
 
+// approvalPosture is the runtime approval posture — "ask" prompts, "auto" lets
+// the policy auto-approve the writer fallback while preserving ask/deny rules,
+// "yolo" skips ordinary prompts while deny rules and fresh decisions hold — and
+// whether it is the session's default rather than a posture somebody named.
+type approvalPosture struct {
+	mode      string
+	defaulted bool
+}
+
+// setDefaultMode applies mode as the default nobody named, draining what it
+// auto-allows. With onlyIfDefaulted it is a check-and-set: a posture somebody
+// named since the caller looked is theirs, and nothing changes.
+func (a *approvalManager) setDefaultMode(mode string, onlyIfDefaulted bool) ([]drainedApproval, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if onlyIfDefaulted && !a.posture.defaulted {
+		return nil, false
+	}
+	a.posture = approvalPosture{mode: mode, defaulted: true}
+	return a.drainForLocked(mode), true
+}
+
+func (a *approvalManager) defaulted() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.posture.defaulted
+}
+
 // mode returns the normalized runtime approval posture.
 func (a *approvalManager) mode() string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return normalizeToolApprovalMode(a.toolApprovalMode)
+	return normalizeToolApprovalMode(a.posture.mode)
 }
 
 // setMode applies a (pre-normalized) posture and drains any pending approvals
@@ -525,7 +479,11 @@ func (a *approvalManager) mode() string {
 func (a *approvalManager) setMode(mode string) []drainedApproval {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.toolApprovalMode = mode
+	a.posture = approvalPosture{mode: mode}
+	return a.drainForLocked(mode)
+}
+
+func (a *approvalManager) drainForLocked(mode string) []drainedApproval {
 	switch mode {
 	case ToolApprovalAuto:
 		return a.drainLocked(false)
@@ -551,7 +509,8 @@ func (a *approvalManager) waitContext(ctx context.Context) (context.Context, con
 }
 
 // snapshotPrompts copies the in-flight prompts for re-emission to a reconnected
-// frontend (ReplayPendingPrompts).
+// frontend (ReplayPendingPrompts). AllowsPersist is the tool's own grant; the
+// controller narrows it to what can be written down now.
 func (a *approvalManager) snapshotPrompts() ([]event.Approval, []event.Ask) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -561,7 +520,7 @@ func (a *approvalManager) snapshotPrompts() ([]event.Approval, []event.Ask) {
 		approvals = append(approvals, event.Approval{
 			ID: id, Tool: p.tool, Subject: p.subject, Reason: p.reason, ReasonCode: ExplicitApprovalCode(p.tool, p.subject),
 			RawInput: append(json.RawMessage(nil), p.rawInput...), Fresh: p.fresh,
-			AllowsSession: session, AllowsPersist: persist && a.persists,
+			AllowsSession: session, AllowsPersist: persist,
 			Kind: p.kind, Recovery: p.recovery,
 		})
 	}
@@ -572,7 +531,7 @@ func (a *approvalManager) snapshotPrompts() ([]event.Approval, []event.Ask) {
 		if p.queued {
 			continue
 		}
-		asks = append(asks, event.Ask{ID: id, Questions: p.questions})
+		asks = append(asks, event.Ask{ID: id, Questions: p.questions, Origin: p.origin, SkipInMs: p.skipInMs(time.Now())})
 	}
 	return approvals, asks
 }
@@ -583,7 +542,7 @@ func (a *approvalManager) bypassAllowsLocked(tool, subject string, args json.Raw
 	if requiresFreshApprovalTool(tool) {
 		return false
 	}
-	if a.toolApprovalMode == ToolApprovalYolo {
+	if a.posture.mode == ToolApprovalYolo {
 		return true
 	}
 	if !a.planAutoApprove {
@@ -654,6 +613,8 @@ func normalizeToolApprovalMode(mode string) string {
 		return ToolApprovalAuto
 	case "dontask", "dont-ask", "deny":
 		return ToolApprovalDontAsk
+	case "readonly", "read-only":
+		return ToolApprovalReadOnly
 	case ToolApprovalYolo, "full", "full-access", "bypass":
 		return ToolApprovalYolo
 	default:
@@ -668,7 +629,7 @@ func normalizeToolApprovalMode(mode string) string {
 func ParseToolApprovalMode(mode string) (string, bool) {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case ToolApprovalAsk, ToolApprovalAuto, "approve", "allow",
-		"dontask", "dont-ask", "deny",
+		"dontask", "dont-ask", "deny", "readonly", "read-only",
 		ToolApprovalYolo, "full", "full-access", "bypass":
 		return normalizeToolApprovalMode(mode), true
 	}
@@ -682,7 +643,7 @@ func ParseToolApprovalMode(mode string) (string, bool) {
 // narrow operation in interactive or headless mode.
 func RequiresFreshHumanApprovalTool(tool string) bool {
 	switch tool {
-	case planApprovalTool, memoryRememberTool, memoryForgetTool, SandboxEscapeApprovalTool, ManagedConfigWriteApprovalTool:
+	case planApprovalTool, memoryRememberTool, memoryForgetTool, permission.ConfirmTool, permission.OriginConfirmTool, SandboxEscapeApprovalTool, ManagedConfigWriteApprovalTool, NetworkEgressApprovalTool, PaidSearchApprovalTool, MCPSignInApprovalTool, MCPScopeUpgradeApprovalTool, SettingApprovalTool, SettingElevatedApprovalTool:
 		return true
 	default:
 		return false
@@ -720,7 +681,7 @@ func approvalGrantsForRequest(tool string, fresh, requireHuman bool) (session, p
 
 func allowsFreshSessionGrantTool(tool string) bool {
 	switch tool {
-	case SandboxEscapeApprovalTool, ManagedConfigWriteApprovalTool:
+	case SandboxEscapeApprovalTool, ManagedConfigWriteApprovalTool, NetworkEgressApprovalTool, PaidSearchApprovalTool, MCPSignInApprovalTool, SettingApprovalTool:
 		return true
 	default:
 		return false

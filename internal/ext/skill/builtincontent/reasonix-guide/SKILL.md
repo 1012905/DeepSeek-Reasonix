@@ -94,15 +94,38 @@ CLI/Desktop Diagnostics → Commands; invoke `/name` in chat.
 
 ## Hooks
 
-### Events (11)
+### Events (14)
 
-`PreToolUse`, `PostToolUse`, `PermissionRequest`, `UserPromptSubmit`, `Stop`, `PostLLMCall`, `SessionStart`, `SessionEnd`, `SubagentStop`, `Notification`, `PreCompact`.
+`PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `UserPromptSubmit`, `Stop`, `StopFailure`, `PostLLMCall`, `SessionStart`, `SessionEnd`, `SubagentStart`, `SubagentStop`, `Notification`, `PreCompact`.
+
+`SubagentStart` / `SubagentStop`:
+
+- Only a foreground `task` call fires them; `read_only_task`, `parallel_tasks`, `fleet`, skill sub-agents and background tasks do not.
+- Both carry `callId` to pair them. `SubagentStart` gets the task arguments in `toolArgs`.
+- `SubagentStop` fires on every end (answer, failure, cancel, refusal); `error` is set when there was no answer.
+- Neither can block: exit 2 only warns.
 
 **Blocking** (exit 2 can gate the loop): `PreToolUse`, `UserPromptSubmit`. Others warn or contribute context only.
 
+Reasonix does have hooks; permissions (`[permissions]` allow/ask/deny) are a separate mechanism, and a hook is the way to run custom code before a tool call.
+
+### Contract
+
+Settings shape: `{"hooks": {"<Event>": [{"match": "bash", "command": "sh ~/.reasonix/hooks/x.sh", "timeout": 3000}]}}`. The event payload is one line of JSON on stdin (`toolName`, `toolArgs`, `prompt`, ...); for `bash`, the command is `toolArgs.command`.
+
+Exit code is the verdict:
+
+- `0` passes; on `SessionStart`, stdout is injected once into the next user turn.
+- `2` blocks, only on `PreToolUse` / `UserPromptSubmit`; the hook's stderr is what the model reads.
+- Any other code only warns and lets the call through. A timeout blocks on those two events, warns elsewhere.
+
+A hook cannot force the model's wording, and there is no per-session scope.
+
+To forbid a command pattern without a script, prefer `[permissions] deny = ["Bash(git push*)"]`. A full worked example and the schema are in the Hooks section of docs/GUIDE.md.
+
 ### Sources
 
-- Project: `<workspace>/.reasonix/settings.json` — loaded automatically
+- Project: `<workspace>/.reasonix/settings.json` — loaded only after the user approves it as it stands (`reasonix trust`); never run by `reasonix review`
 - Plugin packages: installed enabled packages
 - Global: `<Reasonix home>/settings.json` (always)
 
@@ -116,7 +139,7 @@ Match field is an **anchored** regex: `file` does **not** match `read_file`; use
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| Project hooks silent | Wrong workspace / restart required | Confirm the project path and restart Reasonix after saving |
+| Project hooks silent | Awaiting approval, wrong workspace, or restart required | Run `reasonix trust`; confirm the project path and restart Reasonix after saving |
 | Matcher never fires | Non-anchored assumption / bad regex | Fix match (`hook.invalid_matcher`) |
 | Command missing | Empty command / missing context file | Fix settings entry |
 | Malformed JSON | Invalid settings.json | Repair JSON (file yields no hooks, no crash) |

@@ -21,6 +21,7 @@ type builtinSlashSpec struct {
 
 func builtinSlashSpecs() []builtinSlashSpec {
 	return []builtinSlashSpec{
+		{name: "/agent", insert: "/agent ", hint: "Agent compositions", descend: true, showInHelp: true},
 		{name: "/compact", insert: "/compact ", hint: i18n.M.CmdCompact, showInHelp: true},
 		{name: "/context", insert: "/context", hint: i18n.M.CmdContext, showInHelp: true},
 		{name: "/graph", insert: "/graph", hint: i18n.M.CmdGraph, showInHelp: true},
@@ -57,6 +58,7 @@ func builtinSlashSpecs() []builtinSlashSpec {
 		{name: "/theme", insert: "/theme ", hint: i18n.M.CmdTheme, descend: true},
 		{name: "/language", insert: "/language ", hint: i18n.M.CmdLanguage, descend: true, showInHelp: true},
 		{name: "/currency", insert: "/currency ", hint: i18n.M.CmdCurrency, descend: true, showInHelp: true},
+		{name: "/ask-timeout", insert: "/ask-timeout ", hint: i18n.M.CmdAskTimeout, descend: true, showInHelp: true},
 		{name: "/help", insert: "/help", hint: i18n.M.CmdHelp, showInHelp: true},
 		{name: "/web", insert: "/web", hint: i18n.M.CmdWeb, showInHelp: true},
 		{name: "/docs", aliases: []string{"/reasonix:docs"}, insert: "/docs ", hint: i18n.M.CmdDocs, showInHelp: true},
@@ -68,6 +70,7 @@ func builtinSlashSpecs() []builtinSlashSpec {
 		{name: "/quit", aliases: []string{"/exit"}, insert: "/quit", hint: i18n.M.CmdQuit},
 		{name: "/copy", insert: "/copy", hint: i18n.M.CmdCopy, showInHelp: true},
 		{name: "/export", insert: "/export", hint: i18n.M.CmdExport, showInHelp: true},
+		{name: "/btw", insert: "/btw ", hint: i18n.M.CmdBtw, showInHelp: true},
 	}
 }
 
@@ -103,4 +106,13 @@ func canonicalBuiltinSlashCommand(name string) string {
 		}
 	}
 	return name
+}
+
+func builtinSlashNames(name string) []string {
+	for _, spec := range builtinSlashSpecs() {
+		if spec.name == name {
+			return append([]string{spec.name}, spec.aliases...)
+		}
+	}
+	return nil
 }

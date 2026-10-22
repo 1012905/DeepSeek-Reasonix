@@ -33,6 +33,7 @@ import (
 	"reasonix/internal/runtime/agent"
 	"reasonix/internal/runtime/coordinator"
 	"reasonix/internal/runtime/guardian"
+	"reasonix/internal/runtime/usecap"
 	"reasonix/internal/safety/permission"
 	"reasonix/internal/state/checkpoint"
 	"reasonix/internal/state/memory"
@@ -144,8 +145,9 @@ func (r cancelingRunner) Run(_ context.Context, _ string) error {
 	return nil
 }
 
-// The gauge must measure what the trigger measures. Reporting the previous
-// turn's billed usage is how a session displayed 8% while it was compacting.
+// The gauge must measure what the trigger measures: the provider's reported
+// prompt size plus what the view gained since, never the turn's billed total
+// (which counts the completion) and never a local estimate that runs low.
 func TestContextSnapshotMeasuresTheTriggerInput(t *testing.T) {
 	prov := &scriptedTurns{turns: [][]provider.Chunk{{
 		{Type: provider.ChunkText, Text: "ok"},
@@ -159,10 +161,10 @@ func TestContextSnapshotMeasuresTheTriggerInput(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := c.ContextMaintenanceSnapshot().ProjectedTokens
+	estimate := c.ContextMaintenanceSnapshot().ProjectedTokens
 	used, window := c.ContextSnapshot()
-	if used != want || used == 6888 || window != 1_000_000 {
-		t.Fatalf("ContextSnapshot() = (%d, %d), want (%d, 1000000): the gauge reads the trigger's live input, never the last turn's 6888", used, window, want)
+	if used < 6840 || used >= 6888 || used < estimate || window != 1_000_000 {
+		t.Fatalf("ContextSnapshot() = (%d, %d), want the reported 6840-token prompt plus what it gained (estimate %d), never the billed 6888", used, window, estimate)
 	}
 }
 
@@ -1737,7 +1739,7 @@ func TestSessionSwapWaitsForRecoveryHandoff(t *testing.T) {
 			}
 			select {
 			case <-done:
-			case <-time.After(10 * time.Second):
+			case <-time.After(testenv.Budget(t)):
 				t.Fatal("session state move did not finish after the handoff completed")
 			}
 			if got := h.c.SessionPath(); got != wantPath {
@@ -2725,7 +2727,7 @@ func TestSubmitClearDiscardsCurrentContextWithoutSavingTranscript(t *testing.T) 
 	path := filepath.Join(dir, "session.jsonl")
 	cleared := make(chan struct{})
 	sink := event.FuncSink(func(e event.Event) {
-		if e.Kind == event.Notice && e.Text == "context cleared" {
+		if e.Kind == event.Notice && e.Text == i18n.M.SlashClearDone {
 			close(cleared)
 		}
 	})
@@ -2839,7 +2841,7 @@ func TestRegisterMCPServerOnDemandDefersConnectionUntilFirstUse(t *testing.T) {
 	if _, err := connect.Execute(context.Background(), json.RawMessage(`{}`)); err == nil || !strings.Contains(err.Error(), "initializing on first use") {
 		t.Fatalf("first-use connect result = %v, want initializing guidance", err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(testenv.Budget(t))
 	for !host.HasClient("on-demand") && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -2856,7 +2858,7 @@ func TestControllerMCPHotLifecycleUpdatesCapabilityRuntime(t *testing.T) {
 	host := plugin.NewHost()
 	defer host.Close()
 	reg := tool.NewRegistry()
-	runtime := agent.NewMCPCapabilityRuntime(context.Background(), host, nil, reg, nil)
+	runtime := usecap.NewMCPCapabilityRuntime(context.Background(), host, nil, reg, nil)
 	ctrl := New(Options{
 		Host: host, Registry: reg, PluginCtx: context.Background(), CapabilityRuntime: runtime,
 	})
@@ -2992,10 +2994,10 @@ command = "project-shared"
 	}
 }
 
-// A project's own server no longer starts on its own — but asking to connect it
-// is the answer it was waiting for, and the answer has to stick, or the action
-// works once and the server is off again next session.
-func TestConnectingAProjectMCPRecordsTheDecisionItRepresents(t *testing.T) {
+// A project's own server waits for the user, and connecting it by name is not
+// the answer: that act never showed the command. The connect is refused with
+// what it would run; the enable that does show it is the answer, and sticks.
+func TestConnectingAProjectMCPNeedsTheEnableThatShowsItsCommand(t *testing.T) {
 	isolateControlConfigHome(t)
 	workspace := testenv.TempDir(t)
 	var requests atomic.Int32
@@ -3058,18 +3060,31 @@ url = %q
 		},
 	})
 
-	entry := config.PluginEntry{Name: "project-docs", Source: config.MCPSourceProjectConfig}
+	loaded, err := config.LoadForRootReadOnly(workspace)
+	if err != nil || len(loaded.Plugins) != 1 {
+		t.Fatalf("load project declaration: %v (%d plugins)", err, len(loaded.Plugins))
+	}
+	entry := loaded.Plugins[0]
 	store := config.DefaultActivationStore()
 	if !store.AwaitingDecision(entry, workspace) {
 		t.Fatal("a server the repository declared should be waiting for an answer before anyone gives one")
 	}
 
+	if _, err := ctrl.ConnectConfiguredMCPServer("project-docs"); !errors.Is(err, ErrMCPApprovalOwed) || !strings.Contains(err.Error(), server.URL) {
+		t.Fatalf("connect of an unapproved project server = %v, want the approval-owed refusal with its endpoint", err)
+	}
+	if requests.Load() != 0 || !store.AwaitingDecision(entry, workspace) {
+		t.Fatalf("a refused connect contacted the server (%d requests) or recorded an answer", requests.Load())
+	}
+	if err := ctrl.SetMCPServerEnabled("project-docs", config.ActivationProject, true); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
 	n, err := ctrl.ConnectConfiguredMCPServer("project-docs")
 	if err != nil {
-		t.Fatalf("ConnectConfiguredMCPServer: %v", err)
+		t.Fatalf("ConnectConfiguredMCPServer after enabling: %v", err)
 	}
 	if store.AwaitingDecision(entry, workspace) {
-		t.Fatal("connecting it left it still waiting, so the next session asks again")
+		t.Fatal("enabling it left it still waiting, so the next session asks again")
 	}
 	if enabled, err := store.IsEnabled(entry, workspace); err != nil || !enabled {
 		t.Fatalf("IsEnabled after connecting = %v (%v), want the decision recorded", enabled, err)
@@ -3237,7 +3252,7 @@ tier = "lazy"
 	host := plugin.NewHost()
 	defer host.Close()
 	spec := plugin.Spec{Name: "mock", Command: "mock-mcp", Authorized: true}
-	runtime := agent.NewMCPCapabilityRuntime(context.Background(), host, []plugin.Spec{spec}, reg, nil)
+	runtime := usecap.NewMCPCapabilityRuntime(context.Background(), host, []plugin.Spec{spec}, reg, nil)
 	runtime.ConfigureServers([]config.PluginEntry{{Name: "mock", Command: "mock-mcp"}}, []plugin.Spec{spec}, map[string]bool{"mock": true})
 	c := New(Options{Host: host, Registry: reg, CapabilityRuntime: runtime, WorkspaceRoot: dir})
 
@@ -3687,7 +3702,7 @@ func TestGuardianCannotAutoAllowFreshHumanApprovalTools(t *testing.T) {
 		name:    "guardian",
 		streams: [][]provider.Chunk{textTurn(`{"risk_level":"low","user_authorization":"high","outcome":"allow","rationale":"authorized memory update"}`)},
 	}
-	guardianSess := guardian.NewSession(guardianProv, tool.NewRegistry(), guardian.PolicyPrompt(), "guardian-test", 0, nil, event.Discard)
+	guardianSess := guardian.NewSession(guardianProv, tool.NewRegistry(), nil, guardian.PolicyPrompt(), "guardian-test", 0, nil, event.Discard, nil)
 	exec := agent.New(&recordingProvider{name: "executor"}, tool.NewRegistry(), sessionstore.NewSession("sys"), agent.Options{}, event.Discard)
 
 	approvals := make(chan event.Approval, 1)
@@ -3763,7 +3778,11 @@ func TestLowRiskProjectMemoryCreateSkipsApprovalPrompt(t *testing.T) {
 	if err != nil || !strings.Contains(out, "Saved memory") {
 		t.Fatalf("auto-approved remember execution = %q, %v", out, err)
 	}
-	if got := store.List(); len(got) != 1 || got[0].Name != "release-target" {
+	got, err := store.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Name != "release-target" {
 		t.Fatalf("saved memories = %+v", got)
 	}
 }
@@ -3797,7 +3816,7 @@ func TestSessionGrantShortCircuitsGuardianReview(t *testing.T) {
 		name:    "guardian",
 		streams: [][]provider.Chunk{textTurn(`{"risk_level":"high","user_authorization":"unknown","outcome":"deny","rationale":"should never run"}`)},
 	}
-	guardianSess := guardian.NewSession(guardianProv, tool.NewRegistry(), guardian.PolicyPrompt(), "guardian-test", 0, nil, event.Discard)
+	guardianSess := guardian.NewSession(guardianProv, tool.NewRegistry(), nil, guardian.PolicyPrompt(), "guardian-test", 0, nil, event.Discard, nil)
 	exec := agent.New(&recordingProvider{name: "executor"}, tool.NewRegistry(), sessionstore.NewSession("sys"), agent.Options{}, event.Discard)
 	prompts := 0
 	c := New(Options{
@@ -4526,7 +4545,7 @@ func TestSendWhileRunningDoesNotInterleaveTurns(t *testing.T) {
 
 func waitForRunning(t *testing.T, c *Controller) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(testenv.Budget(t))
 	for time.Now().Before(deadline) {
 		if c.Running() {
 			return
@@ -4554,7 +4573,7 @@ func TestMidTurnAutosavePersistsDuringLongTurn(t *testing.T) {
 
 	c.Send("hello mid-turn persistence")
 
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(testenv.Budget(t))
 	for time.Now().Before(deadline) {
 		if b, err := os.ReadFile(path); err == nil && strings.Contains(string(b), "hello mid-turn persistence") {
 			return

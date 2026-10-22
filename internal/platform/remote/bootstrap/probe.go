@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"reasonix/internal/platform/releaseasset"
+	"reasonix/internal/platform/remote/sftpfs"
 )
 
 // Routes the auto strategy takes that are not serve_install values — nobody
@@ -23,6 +24,10 @@ const (
 // answers all of them at once.
 type Report struct {
 	OS, Arch, Home string
+	// Files is how that machine's files are reached: sftp, or exec when its
+	// server refuses the subsystem and scripts stand in. Empty when the
+	// connection does not say.
+	Files sftpfs.Mode
 	// Kernel is a reasonix already there that this caller could drive.
 	Kernel, Version string
 	// Outdated is one that is there and below the floor — having an old one is
@@ -35,6 +40,7 @@ type Report struct {
 	// the auto strategy takes first.
 	Downloader string
 	Routes     []Route
+	env        loginEnv
 }
 
 // Route is one way a kernel could reach that machine, and what stands in the
@@ -66,7 +72,7 @@ func (r Report) Ready() bool {
 // Probe reads everything a first connect depends on, and changes nothing over
 // there.
 func Probe(ctx context.Context, conn Conn, opts Options) (Report, error) {
-	fs, err := conn.SFTP()
+	fs, err := conn.Files()
 	if err != nil {
 		return Report{}, err
 	}
@@ -76,7 +82,8 @@ func Probe(ctx context.Context, conn Conn, opts Options) (Report, error) {
 	}
 	// Home as that machine spells it: the file layer's /C:/Users/... is not a
 	// path anybody there would type.
-	rep := Report{OS: goos, Arch: goarch, Home: target.NativePath(home)}
+	conn, env := connWithLoginEnv(ctx, conn, target)
+	rep := Report{env: env, OS: goos, Arch: goarch, Home: target.NativePath(home), Files: sftpfs.ModeOf(fs)}
 	// The whole set, not the subset this call carries: a probe answers for a
 	// connect, and every connect that opens a pane publishes a broker. Calling
 	// a kernel usable that the connect then refuses is what this prevents.
@@ -139,7 +146,7 @@ func routeClosed(name string, rep Report, opts Options, goos, goarch string) err
 		return nil
 	case InstallNPM:
 		if rep.NPM == "" {
-			return ErrNPMUnavailable
+			return npmUnavailable(rep.env, nil)
 		}
 		return nil
 	case InstallUpload:

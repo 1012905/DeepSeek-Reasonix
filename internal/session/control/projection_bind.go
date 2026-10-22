@@ -18,6 +18,20 @@ func (c *Controller) bindExecutorProjection(path string, loadSidecar bool) {
 		return
 	}
 	c.executor.BindSessionPath(path, loadSidecar)
+	if loadSidecar {
+		c.announceUnusedFold()
+	}
+}
+
+// announceUnusedFold says why a fold saved beside the session was not reused: the
+// full history goes to the model instead, and only the host knows which reason.
+func (c *Controller) announceUnusedFold() {
+	if c.sink == nil {
+		return
+	}
+	if code, text, ok := agent.FoldNotReusedNotice(c.executor.ProjectionDropped()); ok {
+		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Code: code, Text: text})
+	}
 }
 
 // maybeColdResumePrune records warm/cold/unknown only; it never rewrites
@@ -31,7 +45,7 @@ func (c *Controller) maybeColdResumePrune(path string, announce bool) {
 	m, ok, err := sessionstore.LoadBranchMeta(path)
 	if err != nil || !ok || m.UpdatedAt.IsZero() {
 		c.executor.SetCacheState(agent.CacheStateUnknown)
-		slog.Info("controller: resume cache state", "path", path, "cache_state", agent.CacheStateUnknown)
+		slog.Debug("controller: resume cache state", "path", path, "cache_state", agent.CacheStateUnknown)
 		return
 	}
 	last := m.UpdatedAt
@@ -40,7 +54,7 @@ func (c *Controller) maybeColdResumePrune(path string, announce bool) {
 		state = agent.CacheStateCold
 	}
 	c.executor.SetCacheState(state)
-	slog.Info("controller: resume cache state", "path", path, "cache_state", state, "idle", time.Since(last).Round(time.Minute).String())
+	slog.Debug("controller: resume cache state", "path", path, "cache_state", state, "idle", time.Since(last).Round(time.Minute).String())
 	if !announce || c.disableColdResumePrune || state != agent.CacheStateCold {
 		return
 	}

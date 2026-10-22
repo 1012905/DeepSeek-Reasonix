@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"reasonix/internal/runtime/contract"
 	"sync/atomic"
 
 	"reasonix/internal/safety/evidence"
@@ -17,9 +18,17 @@ type taskRuntime struct {
 	// baselineCriteria names what each rewritten file's criteria said first,
 	// keyed by path. The first capture of a path wins.
 	baselineCriteria map[string]evidence.TestCriterion
-	ledger           *evidence.Ledger
-	outcome          *evidence.OutcomeTracker
-	budget           runBudget
+	// contract caches the revision checkpoint.Contract names; contractRecord is
+	// the record it was read from, so a checkpoint naming another invalidates it.
+	contract       *contract.Contract
+	contractRecord string
+	ledger         *evidence.Ledger
+	// origins keeps the text of this task's external results, apart from the messages.
+	origins *originLedger
+	// explained holds the obligations whose full explanation an ended turn already carried.
+	explained []string
+	outcome   *evidence.OutcomeTracker
+	budget    runBudget
 	// witness holds, per changed path, the lines a later output has to carry to
 	// have shown that change. It is working state, not evidence: the verdict
 	// lands on the receipt, so the ledger never holds file content.
@@ -35,6 +44,14 @@ type taskRuntime struct {
 	// ran against, plus one so zero reads as never. A pointer for the same
 	// reason overScanLimit is one.
 	criteriaEpoch *atomic.Uint64
+}
+
+func newTaskRuntime(limit TaskBudget) taskRuntime {
+	return taskRuntime{
+		ledger:  evidence.NewLedger(),
+		origins: &originLedger{},
+		budget:  runBudget{limit: normalizeTaskBudget(limit)},
+	}
 }
 
 // Nil-safe: a zero taskRuntime has no memo, which costs the walk it would have
@@ -78,10 +95,14 @@ func (t *taskRuntime) restartLedger() {
 		scopeID:       t.scopeID,
 		checkpoint:    t.checkpoint,
 		ledger:        t.ledger,
+		origins:       &originLedger{},
 		outcome:       evidence.NewOutcomeTracker(),
 		budget:        runBudget{limit: t.budget.limit},
 		overScanLimit: new(atomic.Bool),
 		criteriaEpoch: new(atomic.Uint64),
 	}
+	// A new task is accepted under a new contract; a resumed one is not
+	// restarted, so the revision its checkpoint names stays in force.
+	t.checkpoint.Contract = ""
 	t.ledger.Reset()
 }

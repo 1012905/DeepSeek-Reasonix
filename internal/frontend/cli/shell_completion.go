@@ -55,6 +55,7 @@ func mcpCompletionSpec(help cliCompletionFlag) cliCompletionSpec {
 		completionSpec("enable", []cliCompletionFlag{help}),
 		completionSpec("disable", []cliCompletionFlag{help}),
 		completionSpecWithAliases("retry", []string{"connect"}, []cliCompletionFlag{help}),
+		completionSpec("trust", []cliCompletionFlag{help}),
 		completionSpec("update", []cliCompletionFlag{help}),
 		completionSpec("import", []cliCompletionFlag{help}),
 		completionSpecWithAliases("browse", []string{"search"}, []cliCompletionFlag{
@@ -74,6 +75,15 @@ func catalogCompletionSpec(help cliCompletionFlag) cliCompletionSpec {
 	return completionSpec("catalogs", []cliCompletionFlag{help}, completionSpec("reindex", []cliCompletionFlag{help}, reindex...))
 }
 
+func sessionsCompletionSpec(help cliCompletionFlag) cliCompletionSpec {
+	dir := completionFlag("--dir", cliCompletionPathValue)
+	return completionSpec("sessions", []cliCompletionFlag{help},
+		completionSpec("reindex", []cliCompletionFlag{completionFlag("--json", cliCompletionNoValue), dir, help}),
+		completionSpec("diagnose", []cliCompletionFlag{completionFlag("--json", cliCompletionNoValue), dir, help}),
+		completionSpec("cleanup", []cliCompletionFlag{completionFlag("--json --apply", cliCompletionNoValue), dir, help}),
+	)
+}
+
 func cliCompletionRootSpec() cliCompletionSpec {
 	profile := completionFlag("--profile", cliCompletionStaticValue, "economy", "balanced", "delivery")
 	preset := completionFlag("--preset", cliCompletionStaticValue, "light", "balanced", "delivery")
@@ -81,32 +91,33 @@ func cliCompletionRootSpec() cliCompletionSpec {
 	resume := completionFlag("--resume -r", cliCompletionOptionalValue) // optional QUERY
 	effort := completionFlag("--effort", cliCompletionStaticValue, "auto", "low", "medium", "high", "max")
 	permissionMode := completionFlag("--permission-mode", cliCompletionStaticValue,
-		"manual", "ask", "auto", "acceptEdits", "dontAsk", "plan", "bypassPermissions")
+		"manual", "ask", "auto", "acceptEdits", "dontAsk", "plan", "bypassPermissions", "read-only", "workspace-write", "danger-full-access")
 	help := completionFlag("--help -h", cliCompletionNoValue)
 
 	// run/serve --resume require a value; only interactive root --resume [QUERY] is optional.
 	runResume := completionFlag("--resume", cliCompletionSessionValue)
 	runFlags := []cliCompletionFlag{
-		model, preset, profile,
+		model, preset, profile, compositionCompletionFlag(),
 		completionFlag("--max-steps", cliCompletionStaticValue),
-		completionFlag("--show-thinking", cliCompletionNoValue),
+		completionFlag("--show-thinking", cliCompletionNoValue), completionFlag("--debug", cliCompletionNoValue),
 		completionFlag("--metrics", cliCompletionPathValue),
 		completionFlag("--dir", cliCompletionPathValue),
 		completionFlag("--continue -c", cliCompletionNoValue),
 		runResume,
 		completionFlag("--copy", cliCompletionNoValue),
+		completionFlag("--takeover", cliCompletionNoValue),
 		effort, permissionMode,
-		completionFlag("--auto -y", cliCompletionNoValue),
+		completionFlag("--auto -y", cliCompletionNoValue), completionFlag("--dangerously-skip-permissions --yolo", cliCompletionNoValue),
 		completionFlag("--print -p", cliCompletionNoValue),
-		completionFlag("--events-jsonl", cliCompletionNoValue),
+		completionFlag("--events-jsonl", cliCompletionNoValue), completionFlag("--fail-on-unverified", cliCompletionNoValue),
 		completionFlag("--output-format", cliCompletionStaticValue, "text", "json", "stream-json"),
 		completionFlag("--add-dir", cliCompletionPathValue),
 		completionFlag("--allowed-tools --allowedTools", cliCompletionStaticValue),
-		completionFlag("--ablate", cliCompletionStaticValue, "none", "all", "evidence", "planner", "subagent", "retrieval", "compaction"),
+		completionFlag("--ablate", cliCompletionStaticValue, "none", "all", "evidence", "planner", "subagent", "retrieval", "compaction", "upstream", "recall-search"),
 		help,
 	}
 	root := cliCompletionSpec{name: "reasonix", flags: append([]cliCompletionFlag{
-		model,
+		model, compositionCompletionFlag(),
 		completionFlag("--max-steps", cliCompletionStaticValue),
 		completionFlag("--print -p", cliCompletionNoValue),
 		completionFlag("--continue -c", cliCompletionNoValue),
@@ -114,7 +125,7 @@ func cliCompletionRootSpec() cliCompletionSpec {
 		completionFlag("--copy", cliCompletionNoValue),
 		completionFlag("--dangerously-skip-permissions --yolo", cliCompletionNoValue),
 		permissionMode,
-		effort,
+		effort, preset,
 		completionFlag("--dir", cliCompletionPathValue),
 		completionFlag("--add-dir", cliCompletionPathValue),
 		completionFlag("--allowed-tools --allowedTools", cliCompletionStaticValue),
@@ -126,7 +137,7 @@ func cliCompletionRootSpec() cliCompletionSpec {
 
 	root.subcommands = []cliCompletionSpec{
 		completionSpec("run", runFlags),
-		completionSpec("serve", serveFlags),
+		completionSpec("serve", serveFlags), completionSpecWithAliases("tui", []string{"chat", "code"}, cliTUICompletionFlags(model, preset, permissionMode, effort, help)),
 		completionSpec("web", serveFlags),
 		completionSpec("setup", []cliCompletionFlag{completionFlag("--local -l", cliCompletionNoValue), help}),
 		completionSpec("config", []cliCompletionFlag{help},
@@ -141,7 +152,7 @@ func cliCompletionRootSpec() cliCompletionSpec {
 		completionSpec("whoami", []cliCompletionFlag{help}),
 		completionSpec("logout", []cliCompletionFlag{help}),
 		completionSpec("acp", []cliCompletionFlag{
-			model, profile,
+			model, profile, permissionMode,
 			completionFlag("--planner", cliCompletionStaticValue, "auto", "off"),
 			completionFlag("--sandbox-network", cliCompletionStaticValue, "auto", "on", "off"),
 			completionFlag("--sandbox-bash", cliCompletionStaticValue, "auto", "enforce"),
@@ -203,11 +214,7 @@ func cliCompletionRootSpec() cliCompletionSpec {
 			completionSpec("run", []cliCompletionFlag{model, completionFlag("--max-steps --dir", cliCompletionStaticValue), help}),
 		),
 		doctorCompletionSpec(help),
-		completionSpec("sessions", []cliCompletionFlag{help},
-			completionSpec("reindex", []cliCompletionFlag{
-				completionFlag("--json", cliCompletionNoValue), completionFlag("--dir", cliCompletionPathValue), help,
-			}),
-		),
+		sessionsCompletionSpec(help),
 		catalogCompletionSpec(help),
 		completionSpec("report", []cliCompletionFlag{help},
 			completionSpec("list", []cliCompletionFlag{help}),
@@ -221,10 +228,8 @@ func cliCompletionRootSpec() cliCompletionSpec {
 			completionSpec("status", machineSessionCompletionFlags(help)),
 			completionSpec("recovery", machineSessionCompletionFlags(help)),
 		),
-		completionSpecWithAliases("hook", []string{"hooks"}, []cliCompletionFlag{help},
-			completionSpec("list", hookCompletionFlags(help)),
-			completionSpec("status", hookCompletionFlags(help)),
-		),
+		hookCompletionSpec(help),
+		completionSpec("trust", []cliCompletionFlag{completionFlag("--dir", cliCompletionPathValue), completionFlag("--yes -y --revoke", cliCompletionNoValue), help}),
 		completionSpec("task", []cliCompletionFlag{help},
 			// Machine list/show: --json --dir --project-root --session (task_machine.go).
 			completionSpec("list", completionTaskMachineListFlags(help)),
@@ -289,6 +294,7 @@ func doctorCompletionSpec(help cliCompletionFlag) cliCompletionSpec {
 
 func cliServeCompletionFlags(model, profile, help cliCompletionFlag) []cliCompletionFlag {
 	return []cliCompletionFlag{
+		compositionCompletionFlag(),
 		model, profile,
 		completionFlag("--max-steps --addr", cliCompletionStaticValue),
 		// Serve/Web resume accepts file paths, not branch IDs.
@@ -311,6 +317,13 @@ func machineSessionCompletionFlags(help cliCompletionFlag) []cliCompletionFlag {
 		completionFlag("--json", cliCompletionNoValue),
 		completionFlag("--dir --project-root", cliCompletionStaticValue), help,
 	}
+}
+
+func hookCompletionSpec(help cliCompletionFlag) cliCompletionSpec {
+	return completionSpecWithAliases("hook", []string{"hooks"}, []cliCompletionFlag{help},
+		completionSpec("list", hookCompletionFlags(help)),
+		completionSpec("status", hookCompletionFlags(help)),
+	)
 }
 
 func hookCompletionFlags(help cliCompletionFlag) []cliCompletionFlag {
@@ -660,3 +673,19 @@ const fishCompletionScript = `function __reasonix_completion
 end
 complete -c reasonix -a '(__reasonix_completion)'
 `
+
+func cliTUICompletionFlags(model, preset, permissionMode, effort, help cliCompletionFlag) []cliCompletionFlag {
+	return []cliCompletionFlag{
+		model, preset, permissionMode, effort, compositionCompletionFlag(),
+		completionFlag("--dir", cliCompletionPathValue),
+		completionFlag("--continue -c", cliCompletionNoValue),
+		completionFlag("--resume -r", cliCompletionSessionValue),
+		completionFlag("--copy", cliCompletionNoValue),
+		completionFlag("--dangerously-skip-permissions --yolo", cliCompletionNoValue),
+		completionFlag("--max-steps", cliCompletionStaticValue),
+		completionFlag("--add-dir", cliCompletionPathValue),
+		completionFlag("--allowed-tools --allowedTools", cliCompletionStaticValue),
+		completionFlag("--inline", cliCompletionNoValue),
+		help,
+	}
+}

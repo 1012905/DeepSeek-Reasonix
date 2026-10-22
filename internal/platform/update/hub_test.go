@@ -1,6 +1,12 @@
 package update
 
-import "testing"
+import (
+	"context"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+)
 
 func rowVersions(rows []VersionEntry) []string {
 	out := make([]string, len(rows))
@@ -71,5 +77,54 @@ func TestVersionRowsOrderNewestFirst(t *testing.T) {
 	}
 	if !rows[2].Older {
 		t.Error("1.9.0 is behind the running build")
+	}
+}
+
+type agentCapture struct{ got []string }
+
+func (a *agentCapture) RoundTrip(r *http.Request) (*http.Response, error) {
+	a.got = append(a.got, r.Header.Get("User-Agent"))
+	return &http.Response{StatusCode: http.StatusForbidden, Status: "403 Forbidden", Header: http.Header{}, Body: http.NoBody, Request: r}, nil
+}
+
+func TestHubReadsTheCatalogAsStudio(t *testing.T) {
+	cap := &agentCapture{}
+	hubOver(context.Background(), Install{Version: "2.26.0"}, &http.Client{Transport: cap})
+	want := UserAgent("2.26.0")
+	if len(cap.got) != 1 || cap.got[0] != want || !strings.HasPrefix(want, "Reasonix-Studio/2.26.0 (") {
+		t.Fatalf("catalog User-Agent = %q, want %q", cap.got, want)
+	}
+}
+
+type catalogBody string
+
+func (c catalogBody) RoundTrip(r *http.Request) (*http.Response, error) {
+	return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(string(c))), Request: r}, nil
+}
+
+const withdrawnHubCatalog = `{"schemaVersion":1,"versions":[
+ {"version":"2.37.0","tag":"studio-v2.37.0","manifest":"https://x/2.37.0/latest.json"},
+ {"version":"2.35.0","tag":"studio-v2.35.0","manifest":"https://x/2.35.0/latest.json"}],
+ "withdrawn":[{"version":"2.36.0","tag":"studio-v2.36.0","manifest":"https://x/2.36.0/latest.json","reason":"blank window on a fresh folder"}]}`
+
+func TestHubNamesAWithdrawnRunningVersionAndPointsAtTheFix(t *testing.T) {
+	hub := hubOver(context.Background(), Install{Version: "2.36.0"}, &http.Client{Transport: catalogBody(withdrawnHubCatalog)})
+	if hub.Withdrawn == nil || hub.Withdrawn.Version != "2.36.0" || hub.Withdrawn.Reason != "blank window on a fresh folder" {
+		t.Fatalf("Withdrawn = %+v, want the running 2.36.0 with its reason", hub.Withdrawn)
+	}
+	if hub.Latest != "2.37.0" || !hub.Newer {
+		t.Fatalf("latest = %q newer = %v, want the fix offered", hub.Latest, hub.Newer)
+	}
+	for _, row := range hub.Versions {
+		if row.Version == "2.36.0" && !row.Current {
+			t.Errorf("the running row lost its mark: %+v", row)
+		}
+	}
+}
+
+func TestHubSaysNothingOfWithdrawalForAVersionThatWasNeverPulled(t *testing.T) {
+	hub := hubOver(context.Background(), Install{Version: "2.35.0"}, &http.Client{Transport: catalogBody(withdrawnHubCatalog)})
+	if hub.Withdrawn != nil {
+		t.Fatalf("Withdrawn = %+v, want none for 2.35.0", hub.Withdrawn)
 	}
 }

@@ -2,6 +2,7 @@ package boot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reasonix/internal/state/sessionstore"
 	"strings"
@@ -56,6 +57,10 @@ func rebuildWithPrevious(ctx context.Context, old *control.Controller, previous 
 	if old == nil {
 		return nil, fmt.Errorf("boot: Rebuild requires the controller being replaced")
 	}
+	opts = inheritComposition(old, opts)
+	if _, observed := old.ObservePosture(); observed && opts.Observe == nil {
+		return nil, ErrObserveRebuild
+	}
 	if opts.Owner == nil {
 		opts.Owner = old.RuntimeOwner()
 	}
@@ -68,6 +73,9 @@ func rebuildWithPrevious(ctx context.Context, old *control.Controller, previous 
 	if opts.BrowserSession == nil {
 		opts.BrowserSession = old.BrowserSession()
 	}
+	if opts.WorkspaceRepo.Dir == "" {
+		opts.WorkspaceRepo = old.WorkspaceRepo()
+	}
 
 	home := opts.roots().Home()
 	// fromGraph must be the PREVIOUS generation's graph when available.
@@ -75,13 +83,13 @@ func rebuildWithPrevious(ctx context.Context, old *control.Controller, previous 
 	var fromGraph *extension.DependencyGraph
 	if previous != nil && previous.Plan != nil && previous.Plan.Graph != nil {
 		fromGraph = previous.Plan.Graph
-	} else if g, err := buildRuntimeGraph(home, nil); err == nil {
+	} else if g, err := buildRuntimeGraph(home, nil, opts.Composition); err == nil {
 		fromGraph = g
 	}
 	opts.Graph = fromGraph
 
 	// Prefer subgraph-classified rebuild when previous assembly is available.
-	if previous != nil && !opts.ForceFullRebuild && !changesModel(opts, old) {
+	if previous != nil && opts.Observe == nil && !opts.ForceFullRebuild && !changesModel(opts, old) {
 		if res, handled, err := tryRebuildSubgraph(ctx, old, previous, opts, m); handled {
 			return res, err
 		}
@@ -96,7 +104,7 @@ func rebuildWithPrevious(ctx context.Context, old *control.Controller, previous 
 	}
 
 	var toGraph *extension.DependencyGraph
-	if g, err := buildRuntimeGraph(home, nil); err == nil {
+	if g, err := buildRuntimeGraph(home, nil, opts.Composition); err == nil {
 		toGraph = g
 	}
 	var previousSnapshot *extension.RuntimeSnapshot
@@ -141,9 +149,11 @@ type RuntimeMigration struct {
 	carried          []provider.Message
 	authorizations   control.SessionAuthorizations
 	toolApprovalMode string
+	postureDefaulted bool
 	planMode         bool
 	goal             string
 	goalRunning      bool
+	modelMode        string
 }
 
 // CaptureRuntimeMigration reads the outgoing runtime's state. Capture it
@@ -154,12 +164,14 @@ func CaptureRuntimeMigration(old control.SessionAPI) RuntimeMigration {
 		prevPath:         old.SessionPath(),
 		carried:          old.History(),
 		toolApprovalMode: old.ToolApprovalMode(),
+		postureDefaulted: old.Posture().Defaulted,
 		planMode:         old.PlanMode(),
 		goal:             old.Goal(),
 		goalRunning:      old.GoalStatus() == control.GoalStatusRunning,
 	}
 	if ctrl, ok := old.(*control.Controller); ok {
 		m.authorizations = ctrl.SessionAuthorizations()
+		m.modelMode = ctrl.ModelMode()
 	}
 	return m
 }
@@ -175,7 +187,11 @@ func ApplyRuntimeMigration(ctrl, old *control.Controller, m RuntimeMigration) er
 	ctrl.AdoptHistory(carried, path)
 
 	// Re-apply session axes a rebuild must not reset.
-	ctrl.SetToolApprovalMode(m.toolApprovalMode)
+	if m.postureDefaulted {
+		ctrl.ApplyDefaultPosture()
+	} else {
+		ctrl.SetToolApprovalMode(m.toolApprovalMode)
+	}
 	ctrl.SetPlanMode(m.planMode)
 	if m.goalRunning && strings.TrimSpace(m.goal) != "" && strings.TrimSpace(ctrl.Goal()) == "" {
 		ctrl.SetGoal(m.goal)
@@ -186,8 +202,14 @@ func ApplyRuntimeMigration(ctrl, old *control.Controller, m RuntimeMigration) er
 			ctrl.CarryRecoveryFrom(old)
 		}
 		ctrl.InheritLifecycleFrom(old)
+		ctrl.InheritScratchFrom(old)
 	}
 	ctrl.RestoreSessionAuthorizations(m.authorizations)
+	// A mode survives only onto a model that declares it: switching to one
+	// that does not is what turns it off, rather than a request it would 400.
+	if err := ctrl.SetModelMode(m.modelMode); err != nil && !errors.Is(err, control.ErrModelModeUnsupported) {
+		return err
+	}
 	return nil
 }
 

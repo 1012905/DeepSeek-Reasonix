@@ -24,6 +24,9 @@ type FileStore struct {
 	sink    ProjectionSink
 }
 
+// StoreDir is where the host keeps task snapshots, relative to the project root.
+const StoreDir = ".reasonix/tasks"
+
 // NewFileStore returns a FileStore rooted at baseDir.  baseDir is typically
 // ".reasonix/tasks" relative to the project root.
 func NewFileStore(baseDir string) *FileStore {
@@ -136,6 +139,7 @@ func prepareTaskDir(root, id string) (string, error) {
 	if err := os.Chmod(root, 0o700); err != nil {
 		return "", err
 	}
+	_ = fileutil.MarkUntracked(root)
 	if err := os.MkdirAll(taskDir, 0o700); err != nil {
 		return "", err
 	}
@@ -577,6 +581,7 @@ func (s *FileStore) idempotencyPaths(projectDir, key string) (string, string, st
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", "", "", err
 	}
+	_ = fileutil.MarkUntracked(root)
 	_ = os.Chmod(dir, 0o700)
 	target := filepath.Join(dir, id+".json")
 	lock := filepath.Join(dir, id+".lock")
@@ -744,6 +749,7 @@ func (s *FileStore) RecordIdempotency(ctx context.Context, projectDir string, r 
 	if err := os.MkdirAll(idemDir, 0o700); err != nil {
 		return err
 	}
+	_ = fileutil.MarkUntracked(root)
 	if err := os.Chmod(idemDir, 0o700); err != nil {
 		return err
 	}

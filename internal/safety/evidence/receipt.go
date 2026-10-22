@@ -23,6 +23,12 @@ type Receipt struct {
 	CitedChecks []string       `json:"cited_checks,omitempty"`
 	TodoStep    *TodoStepMatch `json:"todo_step,omitempty"`
 	Paths       []string       `json:"paths,omitempty"`
+	// HostOwned are the Paths the host judged to be its own state when the call
+	// ran, so a later change to the filesystem cannot reclassify the write.
+	HostOwned []string `json:"host_owned,omitempty"`
+	// MutationPaths preserves path spelling before identity normalization can
+	// fold case or discard empty paths; scope exemptions must fail closed on both.
+	MutationPaths []string `json:"mutation_paths,omitempty"`
 	// CriteriaRewritten names existing tests this call rewrote or removed
 	// (see RewrittenTestCriteria). Editing a check is legitimate; doing it
 	// silently while reporting the suite as green is not.
@@ -54,6 +60,10 @@ type Receipt struct {
 	// ran, present after. A path the host watched appear is the only one it can
 	// later watch disappear and conclude the turn kept nothing there.
 	Created []string `json:"created,omitempty"`
+	// PathsComplete says Paths names every file this call changed: a complete
+	// before/after walk of the workspace saw no others. Without it Paths is what
+	// the host happened to watch, and says nothing about what it left out.
+	PathsComplete bool `json:"paths_complete,omitempty"`
 	// Showed lists the changed paths whose content this call's model-visible
 	// output demonstrably carried. It is decided while the output is in hand,
 	// so the ledger keeps the verdict and never the content.

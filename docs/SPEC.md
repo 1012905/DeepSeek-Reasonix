@@ -159,12 +159,19 @@ interface (`call` / `notify` / `close`) abstracts that, so the MCP-level logic
     cannot leak.
 - `${VAR}` / `${VAR:-default}` are expanded in `command`, `args`, `env`, `url`,
   and `headers` so secrets come from the environment, not the config file.
+- `${REASONIX_WORKSPACE_ROOT}` and `${CLAUDE_PROJECT_DIR}` expand, in those
+  fields only, to the server's absolute workspace path and outrank an
+  environment or `.env` variable of the same name.
 - Lifecycle: `initialize` → `notifications/initialized` → `tools/list`;
   invocation via `tools/call {name, arguments}`.
 - When a workspace root exists, initialize advertises `roots` and transports
   answer `roots/list` with its file URI. `tools/call` includes a per-call
   `_meta.progressToken`; matching `notifications/progress` messages stream into
   the existing tool-progress event path.
+- A local stdio server's `tools/call` also carries `_meta["io.reasonix/cwd"]` (the
+  workspace root) and `_meta["io.reasonix/readOnly"]` (true in plan mode).
+- Remote HTTP and SSE servers get neither, so no local path leaves the machine. A
+  key the call already carries is kept, and both are hints, not authority.
 - A stdio server uses one persistent transport for initialize, reads, and
   writes, preserving state such as browser sessions across tool calls. The
   process uses the server's process sandbox because process confinement cannot
@@ -257,8 +264,10 @@ when the sole automatic threshold is crossed.
 
 - Each provider declares `context_window` (tokens). The only automatic trigger is
   `agent.compact_ratio` (default **0.85**; presets 0.70 / 0.80 / 0.85; range
-  0.65–0.85).
+  strictly between 0 and 1).
   `triggerTokens = floor(context_window × compact_ratio)`.
+- Ratio bounds follow `CompactRatioMin` / `CompactRatioMax` in
+  `internal/contract/config`.
 - **Below the trigger** history is never rewritten: no summary, no prune/snip
   projection, no sidecar write, no projection-version bump, no maintenance event.
   Any rewrite would invalidate the prompt cache from that point on.
@@ -288,10 +297,11 @@ when the sole automatic threshold is crossed.
 - Automatic maintenance is planned once in `ContextManager.Prepare` from the
   current projection plus the append-only canonical tail. The canonical
   transcript is never rewritten. Subsequent thresholds merge
-  **prior digest + new history** into a single digest (no multi-span merge, no
-  application-layer retry). Failure records a generation-scoped
+  **prior digest + new history** into a single digest (no multi-span merge). Failure records a generation-scoped
   `blocked`/`failed` receipt; the same generation does not pay for another
   automatic summary. Manual `compress` can retry.
+- A summary cut at the output limit is retried once with a larger output cap;
+  if that is cut too, the failure keeps its typed code and records the cap.
 - Old multi-threshold keys (`soft_compact_ratio`, `tool_result_snip_ratio`,
   `compact_force_ratio`, `cold_resume_prune`, `context_editing`) are removed on
   ordinary start and ignored at runtime. Native provider tool clearing is not
@@ -367,10 +377,17 @@ digest, so a constraint keeps its protection across repeated compaction.
 
 A turn past those bounds folds like any other content. Prefix it with `[[keep]]`
 (keep policy `user_marked`, on by default) to hold it verbatim regardless of
-size. That drop is never silent: compaction telemetry carries `user_kept` and
+its own size.
+
+Marked turns have a budget of their own: together they may spend `window×15%`,
+newest first, and the oldest fold into the digest past it. A kept turn rides
+into every later fold, so an unbounded mark would grow what each fold carries
+until its candidate could not land under the trigger.
+
+That drop is never silent: compaction telemetry carries `user_kept` and
 `user_dropped` counts, and a committed checkpoint that had to fold one of your
-turns emits a warning naming `[[keep]]` — the projection reads as complete
-either way, so the count is the only thing that distinguishes them.
+turns, marked or not, emits a warning. The projection reads as complete either
+way, so the count is the only thing that distinguishes them.
 
 Two properties bound that loss. Each fold re-derives its digest from the
 canonical transcript rather than from the previous digest, so digests do not
@@ -1066,12 +1083,19 @@ type Chunk struct {
 
 ## 5. Configuration (TOML)
 
-Resolution order: **flag > project `./reasonix.toml` > the user config file
+Resolution order: **flag > project config > the user config file
 > built-in defaults**. Starting with **Reasonix v1.8.1**, the user config lives
 at `~/.reasonix/config.toml` on macOS/Linux and
 `%AppData%\reasonix\config.toml` on Windows. See
 [Configuration paths](./CONFIG_PATHS.md) for migration and related data paths.
-Fields marked user/global only are not overridden by project `reasonix.toml`.
+
+- Project config uses `./reasonix.toml` when present, otherwise
+  `.reasonix/reasonix.toml`; the two are never merged.
+- Reads and edits use the same selected path. New project configs still default
+  to `./reasonix.toml`.
+- A malformed or inaccessible root file does not permit fallback.
+- Fields marked user/global only are not overridden by either project config.
+
 Provider entries name secrets with `api_key_env`; saved key values live in
 Reasonix's global `<Reasonix home>/.env`, shared by CLI and desktop. Project
 `.env`, home `.env`, inherited shell environment variables, legacy credentials,
@@ -1116,6 +1140,7 @@ context_window = 1000000   # tokens; harness compacts older history near this li
 # max_output_tokens = 65536          # heavy reasoning / long tool loops
 # max_output_tokens = 131072         # only after repeated finish_reason=length
 # max_output_tokens never changes compact_ratio
+# idle_timeout_seconds = 300         # per-provider stream idle watchdog; default 300s (a silent pre-header wait is retried once, so up to ~2×)
 # model_overrides = { "deepseek-flash" = { context_window = 1000000, max_output_tokens = 32768 } }
 
 # A single-model entry still works for custom OpenAI-compatible endpoints.
@@ -1132,17 +1157,23 @@ offline = false  # set true when outbound network access is unavailable; prevent
 [tools]
 enabled = []   # omit/empty = all built-ins
 bash_timeout_seconds = 120   # foreground safety cap; set 0 for no tool-local cap
+protect_changed_files = true   # refuse a whole-file write over a change made since the agent last read or wrote the file
+browser_tools = true   # built-in browser tools; the browser starts on first use
 mcp_startup_timeout_seconds = 30   # background initialize + tools/list safety cap
 mcp_call_timeout_seconds = 300   # default MCP call safety cap; plugin/tool overrides may raise it
 
 [tools.shell]
 prefer = "auto"   # auto (default) | bash | powershell | pwsh — force the shell tool's interpreter
 # path = "C:\\Program Files\\PowerShell\\7\\pwsh.exe"   # explicit executable for the chosen shell
+# [tools.shell.env]   # extra variables every bash command inherits (user-global; a project reasonix.toml cannot set this)
+# BASH_ENV = "~/.reasonix/bashsandbox.rc"
+# A preset runs before every command, read-only and verification runs included: keep it side-effect free and outside the workspace's writable roots. Remote workspaces and `reasonix review` do not carry it.
 
 [skills]
 # paths = ["~/my-skills", "../shared/skills"]   # extra custom skill roots
 # excluded_paths = ["~/.agents/skills"]         # hide convention roots without deleting folders
 # disabled_skills = ["review"]                  # hidden from prompt, slash invocation, and skill tools
+# suppress_warnings = true                      # quiet non-fatal skill loading warnings; doctor still reports issues
 
 [permissions]
 mode  = "ask"                              # writer fallback when no rule matches: ask|allow|deny
@@ -1156,7 +1187,7 @@ ask   = []                                 # force a prompt even if otherwise al
 # forbid_read    = ["${HOME}/.ssh"]   # paths read/list/search tools and sandboxed bash may not inspect
 
 [serve]
-auth_mode = "none"             # none|token|password; use auth before binding beyond localhost
+# auth_mode = "token"          # token (default)|password|none; none still requires the launch token for changes
 # token = ""                   # optional fixed token; empty token mode generates one at startup
 # password_hash = ""           # bcrypt hash generated with reasonix serve --hash-password --password '...'
 # behind_proxy = false         # trust X-Forwarded-* only behind a trusted reverse proxy
@@ -1201,10 +1232,16 @@ unknown values fall back to `bar`. It applies to the Bubble Tea CLI/TUI
 textarea only, while desktop and browser inputs keep their platform-native
 cursor behavior.
 
-`[serve]` controls the HTTP browser frontend used by `reasonix serve`. The
-default `auth_mode = "none"` is intended for the loopback default
-`127.0.0.1:8787`; deployments reachable from another machine must use `token` or
-`password`. Password mode requires either a startup `--password` or a stored
+`[serve]` controls the HTTP browser frontend used by `reasonix serve`. An unset
+`auth_mode` generates a per-launch token. `none` is an explicit opt-out for a
+Serve fronted by other authentication; reads stay open, while every
+state-changing request, approvals included, still requires the launch token and
+otherwise refuses with `auth.launch_token_required`.
+
+The token goes to a 0600 file under `<Reasonix home>/remote/`, not the
+terminal. `[serve]` is read from the user config only.
+
+Password mode requires either a startup `--password` or a stored
 bcrypt `password_hash`. `behind_proxy` must stay false unless the server is
 behind a trusted proxy that owns the `X-Forwarded-For` and `X-Forwarded-Proto`
 headers.

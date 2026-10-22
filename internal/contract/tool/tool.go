@@ -34,6 +34,11 @@ type Tool interface {
 	ReadOnly() bool
 }
 
+// FilePresenter marks the host implementation that validates file declarations.
+type FilePresenter interface {
+	FilePresentation()
+}
+
 // ContextualTool is an execution-time availability contract for tools whose
 // ownership depends on the active workflow context. Provider schemas remain
 // static for cache stability; the host must still consult this contract before
@@ -62,9 +67,28 @@ type Previewer interface {
 	Preview(ctx context.Context, args json.RawMessage) (diff.Change, error)
 }
 
-// PreviewChange returns the change a writer tool would make for args, or ok=false
-// when there's nothing renderable: t is read-only, doesn't implement Previewer,
-// the preview errored (the edit will likely fail too), or the file is binary.
+// WritePathResolver owns writer path resolution. Any error requires a whole
+// workspace lease; ErrAmbiguousPath may also carry resolved targets for grants.
+type WritePathResolver interface {
+	WritePaths(json.RawMessage) ([]string, error)
+}
+
+// ReadPathResolver separates source reads from write-only targets.
+// Writers without it conservatively require read access to every write target.
+type ReadPathResolver interface {
+	ReadPaths(context.Context, json.RawMessage) ([]string, error)
+}
+
+// ReadRefusalFormatter names the operation whose source read was denied.
+type ReadRefusalFormatter interface {
+	FormatReadRefusal(error) error
+}
+
+// TargetAccessCheck checks the resolved target before hooks and source reads.
+type TargetAccessCheck func(context.Context, Tool, json.RawMessage) error
+
+// PreviewChange returns a writer change for display and preimage capture.
+// Binary changes remain available to capture even without a renderable diff.
 func PreviewChange(ctx context.Context, t Tool, args json.RawMessage) (diff.Change, bool) {
 	if t == nil || t.ReadOnly() {
 		return diff.Change{}, false
@@ -74,7 +98,7 @@ func PreviewChange(ctx context.Context, t Tool, args json.RawMessage) (diff.Chan
 		return diff.Change{}, false
 	}
 	ch, err := pv.Preview(ctx, args)
-	if err != nil || ch.Binary {
+	if err != nil {
 		return diff.Change{}, false
 	}
 	return ch, true
@@ -111,6 +135,14 @@ type PathWriter interface {
 func WritesNamedPaths(t Tool) bool {
 	w, ok := t.(PathWriter)
 	return ok && w.WritesNamedPaths()
+}
+
+// EffectsUnstated reports whether a tool acts through a program the host does
+// not see into: an MCP server may write the workspace, or act only on a remote
+// system. What such a call did is settled by observing the workspace.
+func EffectsUnstated(t Tool) bool {
+	_, mcp := t.(MCPMetadata)
+	return mcp && !WritesNamedPaths(t)
 }
 
 // ImageTool is an optional capability a Tool may implement when its results can
@@ -193,32 +225,6 @@ type MCPVisibleMetadata interface {
 // server. Empty means the server came from ordinary user/workspace config.
 type MCPPackageMetadata interface {
 	MCPPackageName() string
-}
-
-// MCPBinding describes one stable MCP capability and the exact provider-visible
-// name currently bound to it. Bindings are host metadata only: they never add
-// aliases to provider schemas or alter schema ordering.
-type MCPBinding struct {
-	Package      string
-	Server       string
-	RawName      string
-	VisibleName  string
-	CallableName string
-	CapabilityID string
-}
-
-// MCPAnnotations exposes safety-relevant annotations reported by an installed
-// MCP server. These hints do not change the provider-visible tool contract;
-// execution policy consumes them locally.
-type MCPAnnotations interface {
-	MCPDestructiveHint() bool
-}
-
-// MCPServerAuthorization reports whether the user installed this MCP server or
-// authorized its exact project identity. Authorization belongs to the server,
-// not to individual tools; readOnly/destructive metadata is checked separately.
-type MCPServerAuthorization interface {
-	MCPServerAuthorized() bool
 }
 
 // readerExecutionIntentKey carries a per-call, immutable authorization basis:
@@ -316,10 +322,9 @@ type Paged interface {
 }
 
 // ReadTargeter is an optional capability a Tool implements when a call names the
-// one filesystem path it reads. It is how a fetch of an already-spilled result is
-// recognised, and such a fetch must never spill again — it is how the pointer
-// gets redeemed. The tool resolves the path itself because only it knows its own
-// argument shape; "" means the call names no single path, as a shell cannot.
+// one filesystem path it reads, or "" when it names none. It recognises a fetch
+// of an already-spilled result, which must never spill again, and session path
+// tracking reuses it: a completed call that names a file counts as touching it.
 type ReadTargeter interface {
 	ReadTarget(args json.RawMessage) string
 }
@@ -337,6 +342,16 @@ func RegisterBuiltin(t Tool) {
 	}
 	builtins[name] = t
 }
+
+var conditionals = map[string]Tool{}
+
+// RegisterConditional declares a tool that exists only where assembly adds it
+// (a sub-registry, a configured backend), so a name that is not in the registry
+// at one moment is still a real tool. Intended for init().
+func RegisterConditional(t Tool) { conditionals[t.Name()] = t }
+
+// ConditionalNames returns the names declared by RegisterConditional, sorted.
+func ConditionalNames() []string { return slices.Sorted(maps.Keys(conditionals)) }
 
 // Builtins returns all registered built-in tools, sorted by name.
 func Builtins() []Tool {
@@ -358,23 +373,42 @@ func LookupBuiltin(name string) (Tool, bool) {
 
 // Registry is a per-run set of tools: enabled built-ins plus plugin tools.
 type Registry struct {
-	mu        sync.RWMutex
-	tools     map[string]Tool
-	order     []string
-	canon     map[string]json.RawMessage
-	suspended map[string]bool
+	mu          sync.RWMutex
+	tools       map[string]Tool
+	order       []string
+	canon       map[string]json.RawMessage
+	suspended   map[string]bool
+	disabledMCP map[string]bool
+	// disabledTools holds the names the user removed with [tools].disabled; Add
+	// refuses them so no later registration path brings one back.
+	disabledTools map[string]bool
+	// disabledMCPByServer keeps per-server policy so aliases can be replaced or cleared.
+	disabledMCPByServer map[string]map[string]bool
+	// heldMCP is the per-server set of tools withheld until their changed
+	// definition is re-approved, keyed by callable alias.
+	heldMCP map[string]map[string]HeldMCP
 	// providerVisible, when non-nil, restricts Schemas/ContractEntries to the
 	// listed tool names. Get/Execute still resolve every registered tool so
 	// use_capability can dispatch tool:<name> without changing the provider
 	// schema. Nil means every registered tool is provider-visible (tests and
 	// legacy direct construction).
 	providerVisible map[string]bool
-	schemaRev       atomic.Uint64
+	// admit, when non-nil, is the ceiling on what this registry may ever hold:
+	// Add refuses every tool it rejects, so no later registration path can widen it.
+	admit     func(Tool) bool
+	bindMCP   func(Tool) Tool
+	schemaRev atomic.Uint64
 }
 
 // NewRegistry returns an empty registry.
 func NewRegistry() *Registry {
-	return &Registry{tools: map[string]Tool{}, canon: map[string]json.RawMessage{}, suspended: map[string]bool{}}
+	return &Registry{
+		tools:               map[string]Tool{},
+		canon:               map[string]json.RawMessage{},
+		suspended:           map[string]bool{},
+		disabledMCP:         map[string]bool{},
+		disabledMCPByServer: map[string]map[string]bool{},
+	}
 }
 
 // SetProviderVisibleTools restricts the provider-visible schema surface to the
@@ -428,6 +462,20 @@ func (r *Registry) ProviderVisible(name string) bool {
 	return r.providerVisible[strings.TrimSpace(name)]
 }
 
+// ProviderSurfacePinned reports whether name belongs to an explicit
+// provider-visible allowlist. Unlike ProviderVisible it is false when no
+// allowlist is set: a registry that shows whatever it holds promises nothing
+// about which names a provider sees, so nothing has to be held back to keep
+// that promise.
+func (r *Registry) ProviderSurfacePinned(name string) bool {
+	if r == nil {
+		return false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.providerVisible != nil && r.providerVisible[strings.TrimSpace(name)]
+}
+
 func (r *Registry) isProviderVisibleLocked(name string) bool {
 	if r.providerVisible == nil {
 		return true
@@ -439,14 +487,21 @@ func (r *Registry) isProviderVisibleLocked(name string) bool {
 // canonicalized once here — it never changes after registration, so Schemas()
 // (called every turn) reuses the result instead of re-marshaling.
 func (r *Registry) Add(t Tool) {
+	r.mu.RLock()
+	admit, bindMCP := r.admit, r.bindMCP
+	r.mu.RUnlock()
+	if admit != nil && !admit(t) {
+		return
+	}
+	if _, mcp := t.(MCPMetadata); mcp && bindMCP != nil {
+		t = bindMCP(t)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	name := t.Name()
-	for prefix := range r.suspended {
-		if strings.HasPrefix(name, prefix) {
-			return
-		}
+	if r.suspendedLocked(name) || r.refusesLocked(t) {
+		return
 	}
 	if _, ok := r.tools[name]; !ok {
 		r.order = append(r.order, name)
@@ -459,6 +514,16 @@ func (r *Registry) Add(t Tool) {
 // MCPNamePrefix is the namespace every MCP tool name carries: the
 // model-visible name is "mcp__<server>__<tool>".
 const MCPNamePrefix = "mcp__"
+
+// ExtensionNamePrefix marks a tool a plugin runtime serves, the way
+// MCPNamePrefix marks one an MCP server does.
+const ExtensionNamePrefix = "ext__"
+
+// IsConnectionName reports a name in a namespace a connection supplies once it
+// is up, which a catalog read before then does not list.
+func IsConnectionName(name string) bool {
+	return strings.HasPrefix(name, MCPNamePrefix) || strings.HasPrefix(name, ExtensionNamePrefix)
+}
 
 // SplitMCPName splits a model-visible MCP tool name "mcp__<server>__<tool>" into
 // its server and tool parts. ok is false for non-MCP (built-in) names and for
@@ -550,7 +615,7 @@ func (r *Registry) MCPBindings() []MCPBinding {
 
 	out := make([]MCPBinding, 0, len(r.tools))
 	for _, t := range r.tools {
-		if b, ok := mcpBinding(t); ok {
+		if b, ok := MCPBindingFor(t); ok {
 			out = append(out, b)
 		}
 	}
@@ -570,7 +635,7 @@ func (r *Registry) ResolveCall(name string) (resolved Tool, canonical string, ca
 	}
 	matches := map[string]Tool{}
 	for canonicalName, t := range r.tools {
-		b, ok := mcpBinding(t)
+		b, ok := MCPBindingFor(t)
 		if !ok {
 			continue
 		}
@@ -591,71 +656,6 @@ func (r *Registry) ResolveCall(name string) (resolved Tool, canonical string, ca
 		slices.Sort(candidates)
 	}
 	return nil, "", candidates
-}
-
-func mcpBinding(t Tool) (MCPBinding, bool) {
-	meta, ok := t.(MCPMetadata)
-	if !ok {
-		return MCPBinding{}, false
-	}
-	server := strings.TrimSpace(meta.MCPServerName())
-	raw := strings.TrimSpace(meta.MCPRawToolName())
-	if server == "" || raw == "" {
-		return MCPBinding{}, false
-	}
-	visible := raw
-	if v, ok := t.(MCPVisibleMetadata); ok && strings.TrimSpace(v.MCPVisibleToolName()) != "" {
-		visible = strings.TrimSpace(v.MCPVisibleToolName())
-	}
-	pkg := ""
-	if p, ok := t.(MCPPackageMetadata); ok {
-		pkg = strings.TrimSpace(p.MCPPackageName())
-	}
-	return MCPBinding{
-		Package:      pkg,
-		Server:       server,
-		RawName:      raw,
-		VisibleName:  visible,
-		CallableName: t.Name(),
-		CapabilityID: "mcp-tool:" + server + "/" + raw,
-	}, true
-}
-
-func mcpBindingAliases(b MCPBinding) []string {
-	aliases := []string{
-		b.RawName,
-		b.VisibleName,
-		b.Server + "/" + b.RawName,
-		b.Server + "/" + b.VisibleName,
-		b.CapabilityID,
-		"mcp-tool:" + b.Server + "/" + b.VisibleName,
-		"mcp__" + portableMCPPart(b.Server) + "__" + portableMCPPart(b.RawName),
-		"mcp__" + portableMCPPart(b.Server) + "__" + portableMCPPart(b.VisibleName),
-	}
-	if b.Package != "" {
-		prefix := "mcp__plugin_" + portableMCPPart(b.Package) + "_" + portableMCPPart(b.Server) + "__"
-		aliases = append(aliases, prefix+portableMCPPart(b.RawName), prefix+portableMCPPart(b.VisibleName))
-	}
-	return aliases
-}
-
-// MCPBindingAliases returns accepted portable references for a binding. The
-// canonical provider-visible name remains MCPBinding.CallableName.
-func MCPBindingAliases(b MCPBinding) []string {
-	return append([]string(nil), mcpBindingAliases(b)...)
-}
-
-func portableMCPPart(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-':
-			b.WriteRune(r)
-		default:
-			b.WriteByte('_')
-		}
-	}
-	return b.String()
 }
 
 // Len returns the number of registered tools.

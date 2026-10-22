@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { fromHistory, initialState, reduce, type Item, type SessionEvent, type SessionState } from "./session";
+import { describe, expect, it, vi } from "vitest";
+import { chipLabel, fromHistory, initialState, reduce, type Item, type SessionEvent, type SessionState } from "./session";
 import type { HistoryMessage } from "../port/port";
 
 // vitest runs these in Node, where there is no localStorage. The preference
@@ -22,6 +22,26 @@ const hidingReceipts = <T,>(body: () => T): T => {
 };
 
 const run = (evs: SessionEvent[]): SessionState => evs.reduce(reduce, initialState);
+
+describe("when this window saw the turn start", () => {
+  it("is stamped by turn_started and not by a repeated start of the same message", () => {
+    vi.useFakeTimers({ now: 5_000 });
+    try {
+      const started = run([{ kind: "turn_started", msgIndex: 3 } as SessionEvent]);
+      expect(started.runSince).toBe(5_000);
+      vi.setSystemTime(9_000);
+      expect(reduce(started, { kind: "turn_started", msgIndex: 3 } as SessionEvent).runSince).toBe(5_000);
+      expect(reduce(started, { kind: "turn_started", msgIndex: 4 } as SessionEvent).runSince).toBe(9_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("is unknown until a turn starts in this window", () => {
+    expect(initialState.runSince).toBeUndefined();
+    expect(run([{ kind: "text", text: "x" } as SessionEvent]).runSince).toBeUndefined();
+  });
+});
 const tools = (s: SessionState) => s.items.filter((i): i is Extract<Item, { t: "tool" }> => i.t === "tool");
 const notices = (s: SessionState) =>
   s.items.filter((i) => i.t === "notice").map((i) => (i as Extract<Item, { t: "notice" }>).text);
@@ -91,6 +111,147 @@ describe("sealing a turn", () => {
     const s = run([partial("c1"), full("c1"), progress, done("context canceled")]);
     expect(tools(s)).toHaveLength(1);
   });
+
+  // A turn whose end never arrived is closed when the next one starts, the way
+  // its own end would have closed it: the dispatched call reports, the
+  // never-sent batch is counted, nothing keeps spinning.
+  it("seals a lost turn's open calls when the next turn starts", () => {
+    const start = { kind: "turn_started" } as SessionEvent;
+    const s = run([start, partial("c1"), full("c2"), start]);
+    expect(s.running).toBe(true);
+    expect(tools(s).filter((i) => i.running)).toHaveLength(0);
+    expect(tools(s).find((i) => i.tool.id === "c2")?.tool.err).toContain("没有回报结果");
+    expect(notices(s)[0]).toContain("1 个调用");
+  });
+
+  // A rebuild mid-turn meets the record already holding the round it committed
+  // — before its calls run — so the merge goes by identity, not concatenation.
+  it("folds the record's copy of a call into the live card", () => {
+    const start = { kind: "turn_started" } as SessionEvent;
+    const live = run([start, partial("c1"), full("c1")]);
+    const record = fromHistory([
+      { role: "user", content: "跑一下" },
+      { role: "assistant", content: "", toolCalls: [{ id: "c1", name: "bash", arguments: "{}" }] },
+    ] as HistoryMessage[]);
+    const s = reduce(live, { kind: "__restore", items: record.items, executions: record.executions } as SessionEvent);
+    const cards = tools(s).filter((i) => i.tool.id === "c1");
+    expect(cards).toHaveLength(1);
+    expect(cards[0].running).toBe(true);
+    expect(cards[0].tool.args).toBe('{"path":"a.js"}');
+    const settled = reduce(s, result("c1"));
+    expect(tools(settled)).toHaveLength(1);
+    expect(tools(settled)[0].tool.output).toBe("wrote a.js");
+  });
+
+  // A result the record already holds is the truth; the live copy adds nothing.
+  it("adopts the record's settled call over the live one", () => {
+    const start = { kind: "turn_started" } as SessionEvent;
+    const live = run([start, partial("c1"), full("c1")]);
+    const record = fromHistory([
+      { role: "user", content: "跑一下" },
+      { role: "assistant", content: "", toolCalls: [{ id: "c1", name: "bash", arguments: "{}" }] },
+      { role: "tool", content: "wrote a.js", toolCallId: "c1", toolName: "bash" },
+    ] as HistoryMessage[]);
+    const s = reduce(live, { kind: "__restore", items: record.items, executions: record.executions } as SessionEvent);
+    expect(tools(s)).toHaveLength(1);
+    expect(tools(s)[0].running).toBe(false);
+    expect(tools(s)[0].tool.output).toBe("wrote a.js");
+  });
+
+  // The record holds the committed answer, but the kernel commits each
+  // text-only round BEFORE handleFinalResponse decides whether the turn
+  // continues — the baseline-criteria run, the executor-handoff nudge, the
+  // empty-final retry and the steer drain all do — so a record ending on a
+  // say proves the answer, not the end.
+  it("keeps a live turn running when the record already holds its answer", () => {
+    const start = { kind: "turn_started", msgIndex: 1 } as SessionEvent;
+    const live = run([start, { kind: "text", text: "你好，正在" } as SessionEvent]);
+    const record = fromHistory([
+      { role: "user", content: "问" },
+      { role: "assistant", content: "你好，这是完整回答" },
+    ] as HistoryMessage[]);
+    const s = reduce(live, { kind: "__restore", items: record.items, executions: record.executions } as SessionEvent);
+    expect(s.items.filter((i) => i.t === "say")).toHaveLength(1);
+    expect(s.running).toBe(true);
+  });
+
+  // /history carries no turn-end marker, so the typed fact that a turn is
+  // over rides the status read every restore already pairs with the record.
+  // The record cannot even name the case it misses: a turn_done lost outside
+  // the replay window leaves the live cards spinning over a record whose last
+  // word is a tool result.
+  it("clears a stale running flag when the kernel says the turn is over", () => {
+    const start = { kind: "turn_started", msgIndex: 1 } as SessionEvent;
+    const live = run([start, partial("c1"), full("c1")]);
+    const record = fromHistory([
+      { role: "user", content: "跑一下" },
+      { role: "assistant", content: "", toolCalls: [{ id: "c1", name: "bash", arguments: "{}" }] },
+      { role: "tool", content: "wrote a.js", toolCallId: "c1", toolName: "bash" },
+    ] as HistoryMessage[]);
+    const restored = reduce(live, { kind: "__restore", items: record.items, executions: record.executions } as SessionEvent);
+    expect(restored.running).toBe(true);
+    const s = reduce(restored, { kind: "__running", running: false } as SessionEvent);
+    expect(s.running).toBe(false);
+  });
+
+  // What the record does not speak for is happening, not history: it stays
+  // after the record, where the next delta lands on the card it was landing on.
+  it("keeps the running tail the record does not speak for", () => {
+    const live = run([{ kind: "turn_started" } as SessionEvent, partial("c1"), full("c2")]);
+    const s = reduce(live, { kind: "__restore", items: [{ t: "user", id: "h1", text: "a" }], executions: {} } as SessionEvent);
+    expect(s.items[0]).toMatchObject({ t: "user", text: "a" });
+    expect(tools(s).map((i) => i.tool.id)).toEqual(["c1", "c2"]);
+    expect(tools(s).every((i) => i.running)).toBe(true);
+    expect(s.running).toBe(true);
+  });
+
+  // A resumed reader's watermark can land before this turn's open, and the
+  // replay delivers the same turn_started twice. The second names the turn
+  // already in front of us: not a lost end, so nothing it opened has ended —
+  // the call is still running and the prompt is still owed an answer.
+  it("does not seal a turn whose start frame arrives twice", () => {
+    const start = { kind: "turn_started", msgIndex: 1 } as SessionEvent;
+    const approval = {
+      kind: "approval_request",
+      approval: { id: "apv-1", tool: "write_file", subject: "src/main.rs" },
+    } as SessionEvent;
+    const s = run([start, partial("c1"), full("c1"), approval, start]);
+    expect(s.running).toBe(true);
+    expect(tools(s)).toHaveLength(1);
+    expect(tools(s)[0].running).toBe(true);
+    expect(tools(s)[0].tool.err).toBeFalsy();
+    expect(s.items.filter((i) => i.t === "approval")).toHaveLength(1);
+    expect(notices(s)).toHaveLength(0);
+  });
+
+  // The seal exists for the turn whose end never arrived, and identity is
+  // what tells that apart: the next start names the next message.
+  it("seals the lost turn when the next start names another message", () => {
+    const s = run([
+      { kind: "turn_started", msgIndex: 1 } as SessionEvent,
+      partial("c1"),
+      full("c1"),
+      { kind: "turn_started", msgIndex: 2 } as SessionEvent,
+    ]);
+    expect(tools(s).filter((i) => i.running)).toHaveLength(0);
+    expect(tools(s)[0].tool.err).toContain("没有回报结果");
+  });
+});
+
+// The kernel flags a turn the user's own action ended. Its err is the sentinel's
+// wording, which says nothing the flag does not, so it is not a failure card.
+describe("a turn the user cancelled", () => {
+  it("does not draw the cancellation as an error card", () => {
+    const s = run([partial("c1"), { kind: "turn_done", cancelled: true, err: "context canceled" } as SessionEvent]);
+    expect(s.items.filter((i) => i.t === "notice" && i.level === "error")).toHaveLength(0);
+    expect(s.terminal).toEqual({ kind: "cancelled" });
+    expect(s.doing).toBe("已取消");
+  });
+
+  it("still draws a genuine failure", () => {
+    const s = run([{ kind: "turn_done", err: "provider down" } as SessionEvent]);
+    expect(notices(s)).toEqual(["provider down"]);
+  });
 });
 
 describe("rebuilding a reopened transcript", () => {
@@ -112,6 +273,30 @@ describe("rebuilding a reopened transcript", () => {
 
   it("still drops a row that is neither text nor attachment", () => {
     expect(users([{ role: "user", content: "<reasoning-language>zh</reasoning-language>" }])).toHaveLength(0);
+  });
+
+  it("strips a failed-MCP-prompt block from a replayed turn", () => {
+    const got = users([
+      { role: "user", content: "<mcp-prompt-failure>\nThe user invoked MCP prompt \"p\"\n</mcp-prompt-failure>\n你好" },
+    ]);
+    expect(got).toHaveLength(1);
+    expect(got[0].text).toBe("你好");
+  });
+
+  it("strips a refused-calls block from a replayed turn", () => {
+    const got = users([
+      { role: "user", content: "<refused-calls>\nThe host refused these tool calls\n- bash {\"command\":\"git push\"} (permission.deny_rule)\n</refused-calls>\n继续" },
+    ]);
+    expect(got).toHaveLength(1);
+    expect(got[0].text).toBe("继续");
+  });
+
+  it("strips a session-scratch block from a replayed turn", () => {
+    const got = users([
+      { role: "user", content: "<session-scratch>\nThis session has a private scratch directory, $TMPDIR.\n</session-scratch>\n继续" },
+    ]);
+    expect(got).toHaveLength(1);
+    expect(got[0].text).toBe("继续");
   });
 
   it("leaves an ordinary turn as its text", () => {
@@ -193,6 +378,17 @@ describe("a notice about the runtime rather than the conversation", () => {
     expect(s.runtime).toEqual([]);
   });
 
+  it("carries a skipped-extension notice with its code and payload, once per extension", () => {
+    const skipped = (extension: string) => ({
+      kind: "notice", audience: "operator", level: "warn", code: "extension_skipped", text: "skipped",
+      detail: JSON.stringify({ extension, point: "tool.before", reason: "no_live_sidecar" }),
+    }) as SessionEvent;
+    const s = run([skipped("a"), skipped("a"), skipped("b")]);
+    expect(notices(s)).toEqual([]);
+    expect(s.runtime.map((n) => n.code)).toEqual(["extension_skipped", "extension_skipped"]);
+    expect(s.runtime.map((n) => JSON.parse(n.detail ?? "{}").extension)).toEqual(["a", "b"]);
+  });
+
   it("keeps legacy capability proxy audits out of the transcript", () => {
     const s = run([notice(undefined, "info", "capability proxy: use_capability → web_fetch")]);
     expect(notices(s)).toEqual([]);
@@ -205,6 +401,18 @@ describe("a line that is still queued", () => {
   const rows = (st: SessionState) => st.items.filter((i): i is Extract<Item, { t: "user" }> => i.t === "user");
   const queued = (id: string, itemId: string, kind: "steer" | "followup"): SessionEvent =>
     ({ kind: "__queued", id, itemId, queued: kind }) as SessionEvent;
+
+  it("raises one held-queue notice per window, and only for a paused receipt", () => {
+    const held = (id: string, itemId: string): SessionEvent =>
+      ({ kind: "__queued", id, itemId, queued: "followup", paused: true }) as SessionEvent;
+    const plain = run([typed("row-1", "a"), queued("row-1", "inbox-1", "steer")]);
+    expect(plain.runtime).toEqual([]);
+    const st = run([typed("row-1", "a"), held("row-1", "inbox-1"), typed("row-2", "b"), held("row-2", "inbox-2")]);
+    expect(st.runtime.map((n) => n.code)).toEqual(["queue_paused_hold"]);
+    const gone = run([typed("row-1", "a"), held("row-1", "inbox-1")]);
+    const after = reduce(reduce(gone, { kind: "__runtime_seen", id: gone.runtime[0].id } as SessionEvent), held("row-1", "inbox-1"));
+    expect(after.runtime).toHaveLength(1);
+  });
 
   // The row is on screen before the kernel has answered. The receipt is what
   // gives it a name to be taken back by, and without it the card has a button
@@ -222,6 +430,28 @@ describe("a line that is still queued", () => {
     const st = run([sent, queued("row-2", "inbox-10", "followup")]);
     expect(rows(st)[0].pending).toBe(true);
     expect(rows(st)[0].queued).toBe("followup");
+  });
+
+  // The kernel holds the line for a retry and says so; the queue panel shows it
+  // as blocked. The transcript row must not keep calling itself queued.
+  it("drops the pending row of a line the kernel could not apply, and keeps the notice", () => {
+    const waiting = run([typed("row-1", "x"), queued("row-1", "inbox-9", "steer"), typed("row-2", "y"), queued("row-2", "inbox-10", "steer")]);
+    const st = reduce(waiting, { kind: "notice", code: "unapplied_steer", level: "warn", text: "not applied", itemId: "inbox-9" } as SessionEvent);
+    expect(rows(st).map((r) => r.itemId)).toEqual(["inbox-10"]);
+    expect(st.items.some((i) => i.t === "notice" && i.code === "unapplied_steer")).toBe(true);
+  });
+
+  it("leaves a delivered line alone when a notice names it", () => {
+    const waiting = run([typed("row-1", "x"), queued("row-1", "inbox-9", "steer")]);
+    const read = reduce(waiting, { kind: "steer", text: "x", itemId: "inbox-9" } as SessionEvent);
+    const st = reduce(read, { kind: "notice", code: "unapplied_steer", level: "warn", text: "late", itemId: "inbox-9" } as SessionEvent);
+    expect(rows(st)).toHaveLength(1);
+    expect(rows(st)[0]).toMatchObject({ pending: false, steer: true });
+  });
+
+  it("does not name a row for an entry taken back before its receipt landed", () => {
+    const st = run([typed("row-1", "x"), { kind: "__unsent", id: "inbox-9" } as SessionEvent, queued("row-1", "inbox-9", "steer")]);
+    expect(rows(st)).toEqual([]);
   });
 
   it("takes the row away once the kernel drops it", () => {
@@ -263,6 +493,19 @@ describe("waiting for another session to finish writing", () => {
     ({ kind: "notice", code, level, text }) as SessionEvent;
   const cards = (st: SessionState) => st.items.filter((i): i is Extract<Item, { t: "notice" }> => i.t === "notice");
 
+  it("preserves holder and claim scope through close and event replay", () => {
+    const scope = { contended: 0, heldMs: 0, idleMs: 0, holder: "Fixture A", holderSessionId: "session-a", paths: ["src/a.go"], requestedPaths: ["src/a.go"] };
+    const opened = { ...lease("workspace_lease", "warn", "Waiting"), workspaceLease: scope } as SessionEvent;
+    const closed = { ...lease("workspace_lease_resumed", "info", "Claim granted"), workspaceLease: scope } as SessionEvent;
+    const waiting = run([opened]);
+    expect(cards(waiting)[0]).toMatchObject({ workspaceLease: scope });
+    const done = reduce(waiting, closed);
+    expect(cards(done)).toHaveLength(1);
+    expect(cards(done)[0]).toMatchObject({ id: cards(waiting)[0].id, workspaceLease: scope });
+    expect(cards(run([opened, closed]))[0]).toMatchObject({ workspaceLease: scope });
+    expect(cards(reduce(waiting, { ...closed, code: "workspace_lease_abandoned" } as SessionEvent))[0]).toMatchObject({ workspaceLease: scope });
+  });
+
   // The open used to be the whole surface: one card saying the session would
   // continue "when it is safe", still saying it long after it had.
   it("rewrites the waiting card in place when the wait ends", () => {
@@ -301,18 +544,15 @@ describe("the turn's verification receipt", () => {
   const card = { saysSomething: true, verdict: "unproven", gaps: [{ kind: "unverified_change" }] };
   const receipts = (s: SessionState) => s.items.filter((i) => i.t === "receipt");
 
-  // A turn that changed files and verified none of them ends on the one card
-  // that says so, so it is there unless this machine turned it off.
-  it("closes the turn by default", () => {
-    expect(receipts(run([done(card)]))).toHaveLength(1);
-  });
-
-  it("stays out when this machine turned it off", () => {
-    expect(receipts(hidingReceipts(() => run([done(card)])))).toEqual([]);
-  });
+  // The record is the transcript's; whether a card is drawn is decided at
+  // render time, so the preference never changes what the session holds.
+  it.each([["off", () => hidingReceipts(() => run([done(card)]))], ["default", () => run([done(card)])]])(
+    "closes the turn with the record when the preference is %s",
+    (_, go) => expect(receipts(go())).toHaveLength(1),
+  );
 
   // The kernel still decides whether a receipt has content at all; the
-  // preference only decides whether a reader sees one that does.
+  // preference decides nothing about that.
   it("still respects the kernel's own answer", () => {
     expect(receipts(showingReceipts(() => run([done({ ...card, saysSomething: false })])))).toEqual([]);
   });
@@ -369,10 +609,44 @@ describe("the retry line", () => {
     expect(s.waiting.retry?.attempt).toBe(1);
   });
 
-  it("times the stall from its first attempt, not its latest", () => {
-    const first = run([started(), retrying(1, "stream")]);
-    const second = reduce(first, retrying(2, "stream"));
-    expect(second.waiting.retry?.since).toBe(first.waiting.retry?.since);
+  // The notice fires when an attempt fails, so the clock it starts is the next
+  // attempt's wait: a counter that carried over would claim the whole stall as
+  // one wait.
+  it("restarts the clock for each attempt", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1000);
+      const first = run([started(), retrying(1, "headers")]);
+      vi.setSystemTime(61_000);
+      const second = reduce(first, retrying(2, "headers"));
+      expect(first.waiting.retry?.since).toBe(1000);
+      expect(second.waiting.retry?.since).toBe(61_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("carries the failure class, backoff and answer bound the kernel sent", () => {
+    const s = run([
+      started(),
+      {
+        kind: "retrying",
+        retryAttempt: 1,
+        retryMax: 10,
+        retryScope: "headers",
+        retryCause: "upstream_status",
+        retryStatus: 502,
+        retryDelayMs: 1250,
+        retryTimeoutSecs: 300,
+      } as SessionEvent,
+    ]);
+    expect(s.waiting.retry).toMatchObject({ cause: "upstream_status", status: 502, delayMs: 1250, timeoutSecs: 300 });
+  });
+
+  it("leaves the class unset for a kernel that does not send one", () => {
+    const s = run([started(), retrying(1, "headers")]);
+    expect(s.waiting.retry?.cause).toBeUndefined();
+    expect(s.waiting.retry?.delayMs).toBeUndefined();
   });
 
   it("comes down when the turn ends", () => {
@@ -401,9 +675,29 @@ describe("a question the run is still blocked on", () => {
 
   it("survives the rebuild that follows a reconnect", () => {
     const s = run([asking("ask-1"), rebuild([said("有一个技术决策需要确认：")])]);
-    expect(s.doing, "the header says the run is waiting on you").toBe("等待确认");
+    expect(s.doing, "the header says the run is waiting on you").toBe("等待你回答");
     expect(asks(s), "so the question has to still be answerable").toHaveLength(1);
     expect(asks(s)[0].ask.id).toBe("ask-1");
+  });
+
+  it("drops a cancelled ask before a rewritten user turn is restored and sent", () => {
+    const cancelled = reduce(run([asking("ask-1")]), {
+      kind: "turn_done", cancelled: true, err: "context canceled",
+    } as SessionEvent);
+    const rewritten = reduce(reduce(cancelled, rebuild([said("Earlier answer")])),
+      { kind: "__user", id: "edited", text: "Rewritten question", pending: false } as SessionEvent);
+    expect(rewritten.items.map((i) => i.t)).toEqual(["say", "user"]);
+    expect(asks(rewritten)).toHaveLength(0);
+  });
+
+  it("removes pending prompts at turn end but keeps answered questions", () => {
+    const first = run([asking("answered"), asking("pending"), approving("approval")]);
+    const answered = reduce(first, {
+      kind: "__decided", id: asks(first)[0].id, answers: [["egui 0.27"]],
+    } as SessionEvent);
+    const ended = reduce(answered, { kind: "turn_done", cancelled: true } as SessionEvent);
+    expect(asks(ended).map((i) => [i.ask.id, i.answered])).toEqual([["answered", [["egui 0.27"]]]]);
+    expect(ended.items.some((i) => i.t === "approval")).toBe(false);
   });
 
   it("keeps an approval the same way, for the same reason", () => {
@@ -482,6 +776,16 @@ describe("a question the run is still blocked on", () => {
     const s = reduce(local, receipt("apv-1", "allow_session"));
     expect((s.items[0] as Extract<Item, { t: "approval" }>).verdict).toBe("always");
   });
+
+  // The receipt can also overtake the answer's own reply. The card then reads
+  // what this window sent, not "handled in another window".
+  it("keeps this window's answer when the receipt overtook it", () => {
+    const racing = run([asking("ask-1"), receipt("ask-1", "answered")]);
+    const s = reduce(racing, { kind: "__decided", id: racing.items[0].id, answers: [["B"]] } as SessionEvent);
+    const ask = s.items[0] as Extract<Item, { t: "ask" }>;
+    expect(ask.answeredElsewhere).toBe(false);
+    expect(ask.answered).toEqual([["B"]]);
+  });
 });
 
 // A session's coverage is the kernel's answer, not this side's running guess:
@@ -536,5 +840,121 @@ describe("which model wrote a reply", () => {
       { kind: "text", text: "planning", source: "planner", modelRef: "deepseek/deepseek-pro" },
     ] as SessionEvent[]);
     expect(says(st)[0].model).toBe("deepseek/deepseek-pro");
+  });
+});
+
+describe("a receipt that arrives after the delivery it is for", () => {
+  const sent = { kind: "__user", text: "换个思路", pending: true, id: "row-1" } as SessionEvent;
+  const delivered = { kind: "steer", text: "换个思路", itemId: "it1" } as SessionEvent;
+  const receipt = { kind: "__queued", id: "row-1", itemId: "it1", queued: "steer" } as SessionEvent;
+  const users = (st: SessionState) => st.items.filter((i): i is Extract<Item, { t: "user" }> => i.t === "user");
+
+  it("leaves one delivered line and nothing waiting", () => {
+    const rows = users(run([sent, delivered, receipt]));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ steer: true, itemId: "it1" });
+    expect(rows.some((r) => r.pending)).toBe(false);
+  });
+
+  it("still names a line the kernel has not delivered yet", () => {
+    expect(users(run([sent, receipt]))[0]).toMatchObject({ pending: true, itemId: "it1" });
+  });
+});
+
+describe("chipLabel", () => {
+  it("says the turn is running for a client that joined after turn_started", () => {
+    expect(chipLabel(initialState, true)).toBe("运行中");
+    const done = run([{ kind: "turn_started" } as SessionEvent, { kind: "turn_done" } as SessionEvent]);
+    expect(chipLabel(done, true)).toBe("运行中");
+  });
+
+  it("keeps what the stream says once it has said something", () => {
+    const s = reduce(initialState, { kind: "tool_dispatch", tool: { id: "t1", name: "bash" } } as SessionEvent);
+    expect(chipLabel(s, true)).toBe("bash");
+  });
+
+  it("leaves a settled turn and a live one alone", () => {
+    expect(chipLabel(initialState, false)).toBe("空闲");
+    const live = run([{ kind: "turn_started" } as SessionEvent]);
+    expect(chipLabel(live, true)).toBe(live.doing);
+  });
+});
+
+describe("compaction digest restart", () => {
+  const progress = (text?: string): SessionEvent => ({ kind: "compaction_progress", text }) as SessionEvent;
+  const summaryOf = (s: SessionState) => (s.items.find((i) => i.t === "compaction") as Extract<Item, { t: "compaction" }>).c.summary;
+
+  it("keeps only the retried attempt's text when the first was cut", () => {
+    const s = run([
+      { kind: "compaction_started", compaction: {} } as SessionEvent,
+      progress("## Goal\ncut off mid"),
+      progress(),
+      progress("## Goal\nsecond"),
+    ]);
+    expect(summaryOf(s)).toBe("## Goal\nsecond");
+  });
+
+  it("shows nothing from the cut attempt if the retry writes nothing", () => {
+    const s = run([{ kind: "compaction_started", compaction: {} } as SessionEvent, progress("cut"), progress()]);
+    expect(summaryOf(s)).toBe("");
+  });
+
+});
+
+describe("an ask the host skipped on timeout", () => {
+  it("is sealed by its receipt as timed out, not as answered elsewhere by someone", () => {
+    const asked = run([
+      { kind: "turn_started" } as SessionEvent,
+      { kind: "ask_request", ask: { id: "a1", questions: [{ id: "q1", header: "H", prompt: "Which?", options: [{ label: "A" }, { label: "B" }] }] } } as SessionEvent,
+    ]);
+    const sealed = reduce(asked, { kind: "notice", decisionReceipt: { id: "a1", kind: "ask", outcome: "timed_out", subject: "Which?: —" } } as SessionEvent);
+    const ask = sealed.items.find((i) => i.t === "ask") as Extract<Item, { t: "ask" }>;
+    expect(ask.timedOut).toBe(true);
+    expect(ask.answered).toEqual([]);
+  });
+});
+
+// The kernel's progress frame carries the call id and the newest chunk only, so
+// folding it like a dispatch would blank the call's name and keep one chunk.
+describe("a running call's live output", () => {
+  const chunk = (output: string) => ({ kind: "tool_progress", tool: { id: "c1", name: "", output } }) as SessionEvent;
+
+  it("keeps the call's name and adds each chunk to what came before", () => {
+    const s = run([full("c1"), chunk("step 1\n"), chunk("step 2\n")]);
+    expect(tools(s)).toHaveLength(1);
+    expect(tools(s)[0].tool.name).toBe("write_file");
+    expect(tools(s)[0].tool.output).toBe("step 1\nstep 2\n");
+    expect(tools(s)[0].running).toBe(true);
+  });
+
+  it("gives way to the final result", () => {
+    const s = run([full("c1"), chunk("step 1\n"), { kind: "tool_result", tool: { id: "c1", name: "bash", output: "all done" } } as SessionEvent]);
+    expect(tools(s)[0].tool.output).toBe("all done");
+  });
+});
+
+// An error a read raised goes away when the same read next succeeds; one a
+// person's action raised, or another source's, stays until they dismiss it.
+describe("an error that names where it came from", () => {
+  it("is cleared by a later success of that same source only", () => {
+    const failed = run([{ kind: "__error", text: "status unreadable", from: "status" }]);
+    expect(failed.error).toBe("status unreadable");
+    expect(reduce(failed, { kind: "__error_clear", from: "extension" }).error).toBe("status unreadable");
+    expect(reduce(failed, { kind: "__error_clear", from: "status" }).error).toBe("");
+  });
+
+  it("does not clear an error with no source, or one that replaced it", () => {
+    const unnamed = run([{ kind: "__error", text: "send refused" }]);
+    expect(reduce(unnamed, { kind: "__error_clear", from: "status" }).error).toBe("send refused");
+    const replaced = run([
+      { kind: "__error", text: "status unreadable", from: "status" },
+      { kind: "__error", text: "send refused" },
+    ]);
+    expect(reduce(replaced, { kind: "__error_clear", from: "status" }).error).toBe("send refused");
+  });
+
+  it("is cleared by the person's dismissal whatever its source", () => {
+    const failed = run([{ kind: "__error", text: "status unreadable", from: "status" }]);
+    expect(reduce(failed, { kind: "__error", text: "" }).error).toBe("");
   });
 });

@@ -59,7 +59,7 @@ func browserCall(id, name string, args any) *provider.ToolCall {
 	return &provider.ToolCall{ID: id, Name: name, Arguments: string(raw)}
 }
 
-func buildBrowserEffect(t *testing.T, browserSection string, rounds []func(string) *provider.ToolCall) []provider.Request {
+func buildBrowserEffect(t *testing.T, browserSection string, rounds []func(string) *provider.ToolCall, options ...Options) []provider.Request {
 	t.Helper()
 	isolateConfigHome(t)
 	dir := robustTempDir(t)
@@ -67,6 +67,8 @@ func buildBrowserEffect(t *testing.T, browserSection string, rounds []func(strin
 	rec := &browserScriptProvider{rounds: rounds}
 	kind := "boot-browser-" + strings.ToLower(t.Name())
 	provider.Register(kind, func(provider.Config) (provider.Provider, error) { return rec, nil })
+	// The browser a run launches is the user's to name, never a checkout's.
+	writeUserConfig(t, browserSection+"\n")
 	writeFile(t, dir, "reasonix.toml", `
 default_model = "test-model"
 tool_approval = "yolo"
@@ -77,14 +79,17 @@ system_prompt = "BASE"
 [codegraph]
 enabled = false
 
-`+browserSection+`
-
 [[providers]]
 name = "test-model"
 kind = "`+kind+`"
 model = "x"
 `)
-	ctrl, err := Build(context.Background(), Options{Sink: event.Discard})
+	approveWorkspace(t, dir)
+	opts := Options{Sink: event.Discard}
+	if len(options) > 0 {
+		opts.ComputerDriver = options[0].ComputerDriver
+	}
+	ctrl, err := Build(context.Background(), opts)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -124,10 +129,21 @@ executable = "/nonexistent/chrome"`, []func(string) *provider.ToolCall{
 }
 
 func TestEffectDisabledBrowserLeavesTheSchema(t *testing.T) {
-	reqs := buildBrowserEffect(t, "[browser]\nenabled = false", nil)
+	reqs := buildBrowserEffect(t, "[tools]\nbrowser_tools = false", nil)
 	for _, name := range BrowserToolNames() {
 		if toolNames(reqs[0])[name] {
 			t.Fatalf("%s is in the schema with the browser disabled", name)
+		}
+	}
+}
+
+// [browser] enabled belongs to the 1.x command line, which writes false on
+// every save of the shared file; it must not take the tools away here.
+func TestEffectSharedBrowserKeyLeavesTheToolsBound(t *testing.T) {
+	reqs := buildBrowserEffect(t, "[browser]\nenabled = false", nil)
+	for _, name := range BrowserToolNames() {
+		if !toolNames(reqs[0])[name] {
+			t.Fatalf("%s is missing from the schema: %v", name, toolSchemaNames(reqs[0].Tools))
 		}
 	}
 }

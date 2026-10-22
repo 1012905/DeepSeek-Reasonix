@@ -20,7 +20,7 @@ import (
 func TestWorkspaceSwitchRefusedWithoutGrant(t *testing.T) {
 	ctrl := control.New(control.Options{})
 	defer ctrl.Close()
-	srv := httptest.NewServer(New(ctrl, NewBroadcaster(), config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, NewBroadcaster(), config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/workspace", "application/json",
@@ -35,6 +35,7 @@ func TestWorkspaceSwitchRefusedWithoutGrant(t *testing.T) {
 }
 
 func TestWorkspaceSwitchRebuildsAtNewRoot(t *testing.T) {
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
 	dir := testenv.TempDir(t)
 	old := control.New(control.Options{})
 	replacement := control.New(control.Options{})
@@ -46,7 +47,7 @@ func TestWorkspaceSwitchRebuildsAtNewRoot(t *testing.T) {
 		gotDir = d
 		return replacement, nil
 	}
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 	defer replacement.Close()
 
@@ -90,7 +91,7 @@ func TestWorkspaceSwitchRejectsMissingDirectory(t *testing.T) {
 		t.Fatal("a build was attempted for a path that does not exist")
 		return nil, nil
 	}
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	missing := filepath.Join(testenv.TempDir(t), "not-here")

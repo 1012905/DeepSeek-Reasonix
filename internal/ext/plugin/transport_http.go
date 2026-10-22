@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"reasonix/internal/base/secrets"
 	"reasonix/internal/contract/mcpdiag"
 	"reasonix/internal/contract/tool"
 )
@@ -38,6 +39,7 @@ type httpTransport struct {
 	client   *http.Client
 	roots    []mcpRoot
 	progress progressRouter
+	notices  notificationRouter
 	oauth    *mcpOAuthClient
 
 	mu      sync.Mutex
@@ -108,19 +110,23 @@ func sameHTTPOrigin(a, b *url.URL) bool {
 }
 
 func (t *httpTransport) call(ctx context.Context, method string, params any) (result json.RawMessage, err error) {
+	defer func() { err = secrets.DiagnosticError(err) }()
 	id := t.nextRequestID()
 	body, err := json.Marshal(rpcRequest{JSONRPC: "2.0", ID: id, Method: method, Params: params})
 	if err != nil {
 		return nil, err
 	}
+	modern := modernRequestHeaders(ctx, method, params)
 	defer func() {
-		if err != nil && ctx.Err() != nil {
+		// A modern request is cancelled by closing its stream, which the
+		// context already did; the revision defines no cancel notification.
+		if err != nil && ctx.Err() != nil && modern == nil {
 			cancelInFlight(t, method, id, ctx.Err())
 		}
 	}()
 
 	heldSession := t.sessionID() != ""
-	resp, err := t.do(ctx, body)
+	resp, err := t.doOAuth(ctx, body, false, modern)
 	if err != nil {
 		return nil, fmt.Errorf("plugin %q: %s: %w", t.name, method, err)
 	}
@@ -129,17 +135,16 @@ func (t *httpTransport) call(ctx context.Context, method string, params any) (re
 
 	if resp.StatusCode/100 != 2 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		msg := strings.TrimSpace(string(b))
 		// The spec's rule, whatever the body says: a 404 to a request that
 		// carried a session id means that session is gone.
 		if resp.StatusCode == http.StatusNotFound && heldSession {
 			t.clearSession()
 			return nil, fmt.Errorf("plugin %q: %s: %w", t.name, method, &httpSessionExpiredError{
-				status: resp.StatusCode,
-				body:   msg,
+				status:    resp.StatusCode,
+				bodyBytes: len(b),
 			})
 		}
-		return nil, fmt.Errorf("plugin %q: %s: %w", t.name, method, &httpStatusError{Status: resp.StatusCode, Detail: msg})
+		return nil, fmt.Errorf("plugin %q: %s: %w", t.name, method, t.statusFailure(resp, len(b), bodyRPCError(b), operationOf(body)))
 	}
 
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
@@ -161,7 +166,7 @@ func (t *httpTransport) notify(ctx context.Context, method string, params any) e
 	t.captureSession(resp)
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxHTTPBody))
 	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("plugin %q: %s: %w", t.name, method, &httpStatusError{Status: resp.StatusCode})
+		return fmt.Errorf("plugin %q: %s: %w", t.name, method, t.statusFailure(resp, 0, nil, method))
 	}
 	return nil
 }
@@ -196,6 +201,10 @@ func (t *httpTransport) registerProgress(token string, sink tool.ProgressFunc) f
 	return t.progress.registerProgress(token, sink)
 }
 
+func (t *httpTransport) registerNotification(method string, handler notificationFunc) func() {
+	return t.notices.registerNotification(method, handler)
+}
+
 // mu covers the shared fields below and never a round trip: a request in flight
 // must not stop the next call — or this one's own cancellation — from being
 // written. Each request already carries its own context for that.
@@ -227,13 +236,13 @@ func (t *httpTransport) clearSession() {
 // do POSTs one JSON-RPC body with the standard MCP headers, the configured
 // static headers, and the session id (once known).
 func (t *httpTransport) do(ctx context.Context, body []byte) (*http.Response, error) {
-	return t.doOAuth(ctx, body, false)
+	return t.doOAuth(ctx, body, false, nil)
 }
 
-func (t *httpTransport) doOAuth(ctx context.Context, body []byte, refreshed bool) (*http.Response, error) {
+func (t *httpTransport) doOAuth(ctx context.Context, body []byte, refreshed bool, modern http.Header) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.url, bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, secrets.DiagnosticError(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
@@ -262,15 +271,16 @@ func (t *httpTransport) doOAuth(ctx context.Context, body []byte, refreshed bool
 	if v := t.protocolVersion(); v != "" {
 		req.Header.Set("MCP-Protocol-Version", v)
 	}
+	maps.Copy(req.Header, modern)
 	resp, err := t.client.Do(req)
 	if err != nil || refreshed || resp.StatusCode != http.StatusUnauthorized || !usedOAuth || !t.oauth.canRefresh() {
-		return resp, err
+		return resp, secrets.DiagnosticError(err)
 	}
 	_ = resp.Body.Close()
 	if _, _, err := t.oauth.authorizationHeaderAfterReject(ctx, sent); err != nil {
 		return nil, err
 	}
-	return t.doOAuth(ctx, body, true)
+	return t.doOAuth(ctx, body, true, modern)
 }
 
 func (t *httpTransport) captureSession(resp *http.Response) {
@@ -287,28 +297,36 @@ func (t *httpTransport) captureSession(resp *http.Response) {
 // row — was left reading the digits back out of prose an external server had a
 // hand in writing.
 type httpStatusError struct {
-	Status int
-	Detail string
+	Status    int
+	BodyBytes int
+	// RPC is the JSON-RPC error the body carried, when it carried one: a
+	// modern server answers 400 with a typed error a caller has to tell apart.
+	RPC *rpcError
+}
+
+func (e *httpStatusError) Unwrap() error {
+	if e.RPC == nil {
+		return nil
+	}
+	return e.RPC
 }
 
 func (e *httpStatusError) Error() string {
-	if e.Detail == "" {
-		return fmt.Sprintf("http %d", e.Status)
-	}
-	return fmt.Sprintf("http %d: %s", e.Status, e.Detail)
+	return fmt.Sprintf("http %d (response body omitted; read %d bytes)", e.Status, e.BodyBytes)
 }
 
+func (e *httpStatusError) DiagnosticFacts() string { return e.Error() }
+
 type httpSessionExpiredError struct {
-	status int
-	body   string
+	status    int
+	bodyBytes int
 }
 
 func (e *httpSessionExpiredError) Error() string {
-	if e.body == "" {
-		return fmt.Sprintf("http %d: MCP session expired", e.status)
-	}
-	return fmt.Sprintf("http %d: %s", e.status, e.body)
+	return fmt.Sprintf("http %d: MCP session expired (response body omitted; read %d bytes)", e.status, e.bodyBytes)
 }
+
+func (e *httpSessionExpiredError) DiagnosticFacts() string { return e.Error() }
 
 // readSSEResponse scans an SSE stream for the JSON-RPC response matching id,
 // skipping server notifications and any other-id messages. Per the SSE spec,
@@ -335,7 +353,9 @@ func (t *httpTransport) readSSEResponse(ctx context.Context, body io.Reader, id 
 			if isNotificationID(message.ID) {
 				if message.Method == "notifications/progress" {
 					t.progress.dispatchProgress(message.Params)
+					return nil, false, nil
 				}
+				t.notices.dispatchNotification(message.Method, message.Params)
 				return nil, false, nil
 			}
 			if err := t.replyServerRequest(ctx, message); err != nil {
@@ -382,10 +402,14 @@ func (t *httpTransport) readSSEResponse(ctx context.Context, body io.Reader, id 
 }
 
 // replyServerRequest sends a JSON-RPC response on a separate Streamable HTTP
-// POST while the original response stream remains open. call holds t.mu here,
-// so do can safely read the current session id without taking another lock.
+// POST while the original response stream remains open.
 func (t *httpTransport) replyServerRequest(ctx context.Context, message inboundMessage) error {
-	body, err := json.Marshal(serverRequestReply(message.ID, message.Method, t.roots))
+	reply := serverRequestReply(message.ID, message.Method, t.roots)
+	if message.Method == elicitMethod {
+		e, _ := tool.ElicitorFrom(ctx)
+		reply = elicitationReply(ctx, e, t.name, message.ID, message.Params)
+	}
+	body, err := json.Marshal(reply)
 	if err != nil {
 		return err
 	}
@@ -397,7 +421,7 @@ func (t *httpTransport) replyServerRequest(ctx context.Context, message inboundM
 	t.captureSession(resp)
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxHTTPBody))
 	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("plugin %q: reply to %s: %w", t.name, message.Method, &httpStatusError{Status: resp.StatusCode})
+		return fmt.Errorf("plugin %q: reply to %s: %w", t.name, message.Method, t.statusFailure(resp, 0, nil, message.Method))
 	}
 	return nil
 }
@@ -416,4 +440,31 @@ func decodeRPCResult(body io.Reader, name string) (json.RawMessage, error) {
 		return nil, fmt.Errorf("plugin %q: %w", name, resp.Error)
 	}
 	return resp.Result, nil
+}
+
+// bodyRPCError reads a JSON-RPC error out of a non-2xx body, or nil.
+func bodyRPCError(body []byte) *rpcError {
+	var resp rpcResponse
+	if json.Unmarshal(bytes.TrimSpace(body), &resp) != nil {
+		return nil
+	}
+	return resp.Error
+}
+
+// operationOf names the request a body carries for the per-operation upgrade
+// count: its method, and for a tool call the tool it names.
+func operationOf(body []byte) string {
+	var req struct {
+		Method string `json:"method"`
+		Params struct {
+			Name string `json:"name"`
+		} `json:"params"`
+	}
+	if json.Unmarshal(body, &req) != nil {
+		return ""
+	}
+	if req.Method == "tools/call" && req.Params.Name != "" {
+		return req.Method + ":" + req.Params.Name
+	}
+	return req.Method
 }

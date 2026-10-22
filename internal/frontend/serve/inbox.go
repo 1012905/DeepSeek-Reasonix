@@ -46,8 +46,14 @@ func writeInboxError(w http.ResponseWriter, err error) {
 		refuse(w, http.StatusConflict, "inbox.capacity_bytes", err.Error(), nil)
 	case errors.Is(err, sessioninbox.ErrInvalidState):
 		refuse(w, http.StatusConflict, "inbox.invalid_state", err.Error(), nil)
+	case errors.Is(err, sessioninbox.ErrForeignRun):
+		refuse(w, http.StatusConflict, "inbox.foreign_run", err.Error(), nil)
 	case errors.Is(err, sessioninbox.ErrPaused):
 		refuse(w, http.StatusConflict, "inbox.paused", err.Error(), nil)
+	case errors.Is(err, sessioninbox.ErrUnrecovered):
+		// The bodies could not be read, so the queue's contents are unknown:
+		// a conflict, not an internal fault, and the panel can say which.
+		refuse(w, http.StatusConflict, "inbox.unrecovered", err.Error(), nil)
 	case errors.Is(err, sessioninbox.ErrNotFound):
 		refuse(w, http.StatusConflict, "inbox.not_found", err.Error(), nil)
 	case errors.Is(err, sessioninbox.ErrIdempotencyConflict):
@@ -69,26 +75,73 @@ func writeInboxError(w http.ResponseWriter, err error) {
 func (s *Server) inboxList(w http.ResponseWriter, r *http.Request) {
 	_ = r
 	snap := s.inboxAPI().InboxSnapshot()
+	if snap.Items == nil {
+		snap.Items = []sessioninbox.InboxItemMeta{}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(snap)
 }
 
+// chipLine is a composer line carrying skill chips. Input is the line as
+// shown, chips spelled "/name"; Submit is what the model reads with the chips
+// taken out, and the chips travel beside it rather than inside it.
+type chipLine struct {
+	Input       string                      `json:"input"`
+	Submit      string                      `json:"submit"`
+	Invocations []control.InvocationRequest `json:"invocations"`
+}
+
+func (l chipLine) empty() bool {
+	return strings.TrimSpace(l.Input) == "" && len(l.Invocations) == 0
+}
+
+func (l chipLine) request(r *http.Request) control.InboxRequest {
+	req := control.InboxRequest{Display: l.Input, Raw: l.Input, Submit: l.Input, Source: "http", Via: viaOf(r)}
+	if len(l.Invocations) > 0 {
+		req.Raw, req.Submit, req.Invocations = l.Submit, l.Submit, l.Invocations
+	}
+	return req
+}
+
 func (s *Server) inboxEnqueue(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Input          string `json:"input"`
+		chipLine
 		Intent         string `json:"intent"`
 		IdempotencyKey string `json:"idempotencyKey"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Input) == "" {
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.empty() {
 		missingField(w, "input")
 		return
 	}
-	intent := sessioninbox.IntentFollowup
+	req := body.request(r)
+	req.Intent = sessioninbox.IntentFollowup
 	if strings.EqualFold(body.Intent, "steer") {
-		intent = sessioninbox.IntentSteer
+		req.Intent = sessioninbox.IntentSteer
+	}
+	req.Idempotency = body.IdempotencyKey
+	s.bindMu.Lock()
+	defer s.bindMu.Unlock()
+	s.enqueueLocked(w, req)
+}
+
+// submitChips starts a chip line the way /submit starts a typed one, through
+// the inbox because the envelope is what carries the chips to the turn.
+func (s *Server) submitChips(w http.ResponseWriter, r *http.Request, line chipLine, format string) {
+	if s.refuseKeylessTurn(w) {
+		return
 	}
 	s.bindMu.Lock()
 	defer s.bindMu.Unlock()
+	if s.inboxAPI().Running() {
+		sessionBusy(w)
+		return
+	}
+	req := line.request(r)
+	req.Intent, req.Format = sessioninbox.IntentFollowup, format
+	s.enqueueLocked(w, req)
+}
+
+func (s *Server) enqueueLocked(w http.ResponseWriter, req control.InboxRequest) {
 	api := s.inboxAPI()
 	if ensurer, ok := any(api).(interface{ EnsureSessionPath() }); ok {
 		before := api.SessionPath()
@@ -100,23 +153,16 @@ func (s *Server) inboxEnqueue(w http.ResponseWriter, r *http.Request) {
 				sessionInUse(w, err)
 				return
 			}
+			keepUsedWorkspace(s.ctl().WorkspaceRoot())
 		}
 	}
 	if err := s.promoteSessionLease(); err != nil {
 		sessionInUse(w, err)
 		return
 	}
-	req := control.InboxRequest{
-		Intent:      intent,
-		Display:     body.Input,
-		Raw:         body.Input,
-		Submit:      body.Input,
-		Source:      "http",
-		Idempotency: body.IdempotencyKey,
-	}
 	var rec sessioninbox.InboxReceipt
 	var err error
-	if intent == sessioninbox.IntentSteer {
+	if req.Intent == sessioninbox.IntentSteer {
 		rec, err = api.TryEnqueueAndSteer(req)
 	} else {
 		rec, err = api.TryEnqueueFollowup(req)

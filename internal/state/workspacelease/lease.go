@@ -1,27 +1,25 @@
-// Package workspacelease serializes writers in different sessions that target
-// the same workspace, so one session's verification is not invalidated by
-// another's writes mid-turn. Readers never take one, and it is re-entrant
-// within a session: parallel tool calls and concurrent subagents share one
-// lease, so an agent team is never serialized here — scheduling those is
-// writeclaim.SubagentScheduler's, and it claims write paths, not the workspace.
-// A writer holds from its first mutation until every participating run ends,
-// and never past them: an exclusion nobody can outwait is worse than none.
+// Package workspacelease excludes overlapping write extents across sessions.
+// Readers remain concurrent; unknown extents claim the whole workspace.
+// Claims remain held until every participating run ends so another session
+// cannot overwrite a turn's earlier mutations during its verification, except
+// while the session waits on a person (Yield).
 package workspacelease
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reasonix/internal/base/fileutil"
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
-
-	"reasonix/internal/base/fileutil"
 )
 
 const retryInterval = 75 * time.Millisecond
@@ -54,12 +52,39 @@ type Wait struct {
 	Elapsed time.Duration
 	// Holder names the session writing when the wait began, as that session
 	// named itself; empty when it named nothing or could not be read.
-	Holder string
+	Holder          string
+	HolderSessionID string
+	Paths           []string
+	RequestedPaths  []string
+	// Repository is the git repository root that folded this session's folder
+	// into the shared writer domain; empty when the domain is the folder itself.
+	Repository string
 }
 
 // WaitNotice receives both ends of a reported wait. It must return quickly and
 // must not call back into Owner.
 type WaitNotice func(Wait)
+
+// Option configures an Owner when it is built.
+type Option func(*Owner)
+
+// WithoutWholeWorkspaceHold makes a writer that declared no extent (bash, MCP,
+// a sub-agent given no write_paths) claim nothing, instead of the whole
+// workspace. A writer that did declare paths, including paths that cannot be
+// resolved, still claims them. The choice belongs to the session, so another
+// Owner on the same workspace keeps its own.
+func WithoutWholeWorkspaceHold() Option {
+	return func(o *Owner) { o.undeclaredFree = true }
+}
+
+// WithFolderClaim makes a writer that declared no extent claim the folder the
+// session was opened on, not the repository that folds it into a larger domain.
+// It is for a session whose shell an OS sandbox confines to that folder; without
+// the confinement nothing stops the write landing beside it, so the whole
+// domain stays claimed.
+func WithFolderClaim() Option {
+	return func(o *Owner) { o.folderClaim = true }
+}
 
 // Owner is one Delivery session's re-entrant workspace lease. One Owner may be
 // shared by the root agent and all of its subagents. Different sessions must
@@ -71,6 +96,10 @@ type Owner struct {
 	// holder names this session to a session waiting on it. Read when the
 	// lease is taken, so a rename mid-hold shows on the next hold.
 	holder func() string
+	// undeclaredFree, folderClaim and maxWait are set at construction and never change.
+	undeclaredFree bool
+	folderClaim    bool
+	maxWait        time.Duration
 
 	mu            sync.Mutex
 	activeRuns    int
@@ -83,6 +112,8 @@ type Owner struct {
 	stats         Stats
 	acquiredAt    time.Time
 	lastAsk       time.Time
+	scope         pathLeaseState
+	holds         holdState
 }
 
 // State is a sanitized process-local snapshot used by Desktop to explain a
@@ -104,21 +135,8 @@ func (o *Owner) State() State {
 
 type localLock struct {
 	token chan struct{}
-
-	mu     sync.Mutex
-	holder string
-}
-
-func (l *localLock) setHolder(name string) {
-	l.mu.Lock()
-	l.holder = name
-	l.mu.Unlock()
-}
-
-func (l *localLock) currentHolder() string {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.holder
+	// logFailures counts claims granted here whose log entry could not be written.
+	logFailures atomic.Uint64
 }
 
 var localRegistry = struct {
@@ -129,8 +147,8 @@ var localRegistry = struct {
 // New returns a Delivery-session lease owner for workspaceRoot. lockDir must be
 // shared by Reasonix processes for cross-process protection; it is kept outside
 // the workspace so acquiring a lease never dirties user files.
-func New(workspaceRoot, lockDir string, onWait WaitNotice) (*Owner, error) {
-	canonical, err := CanonicalWorkspace(workspaceRoot)
+func New(workspaceRoot, lockDir string, onWait WaitNotice, opts ...Option) (*Owner, error) {
+	selected, canonical, err := canonicalWorkspaceParts(workspaceRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -153,36 +171,54 @@ func New(workspaceRoot, lockDir string, onWait WaitNotice) (*Owner, error) {
 	}
 	localRegistry.Unlock()
 
-	return &Owner{
+	o := &Owner{
 		lockPath: filepath.Join(lockDir, key+".lock"),
 		onWait:   onWait,
 		local:    local,
-	}, nil
+		scope:    pathLeaseState{root: canonical, identity: rand.Text()},
+	}
+	if selected != canonical {
+		o.scope.repository = canonical
+		o.scope.folder = selected
+	}
+	for _, opt := range opts {
+		opt(o)
+	}
+	return o, nil
 }
 
 // CanonicalWorkspace returns the stable identity used to key a workspace. It
 // resolves symlinks when possible and folds case on Windows, where paths are
 // case-insensitive by default.
 func CanonicalWorkspace(root string) (string, error) {
+	_, domain, err := canonicalWorkspaceParts(root)
+	return domain, err
+}
+
+// canonicalWorkspaceParts returns the folder as selected and the writer domain it
+// belongs to; they differ exactly when a git repository above the folder folds it in.
+func canonicalWorkspaceParts(root string) (selected, domain string, err error) {
 	root = strings.TrimSpace(root)
 	if root == "" {
-		return "", errors.New("workspace root is empty")
+		return "", "", errors.New("workspace root is empty")
 	}
 	abs, err := filepath.Abs(root)
 	if err != nil {
-		return "", fmt.Errorf("resolve workspace root: %w", err)
+		return "", "", fmt.Errorf("resolve workspace root: %w", err)
 	}
 	abs = filepath.Clean(abs)
-	if resolved, resolveErr := filepath.EvalSymlinks(abs); resolveErr == nil {
+	if resolved, resolveErr := fileutil.ResolveExistingPath(abs); resolveErr == nil {
 		abs = filepath.Clean(resolved)
 	} else if !os.IsNotExist(resolveErr) {
-		return "", fmt.Errorf("canonicalize workspace root: %w", resolveErr)
+		return "", "", fmt.Errorf("canonicalize workspace root: %w", resolveErr)
 	}
-	abs = nearestGitWorktreeRoot(abs)
-	if runtime.GOOS == "windows" {
-		abs = strings.ToLower(filepath.ToSlash(abs))
+	fold := func(p string) string {
+		if runtime.GOOS == "windows" {
+			return strings.ToLower(filepath.ToSlash(p))
+		}
+		return p
 	}
-	return abs, nil
+	return fold(abs), fold(nearestGitWorktreeRoot(abs)), nil
 }
 
 // nearestGitWorktreeRoot folds a repository root and any selected directory
@@ -261,18 +297,38 @@ func (o *Owner) EndRun() {
 // AcquireWrite lazily acquires this session's exclusive write lease. It is
 // re-entrant across parallel tool calls and shared subagents.
 func (o *Owner) AcquireWrite(ctx context.Context) error {
+	return o.AcquirePaths(ctx, nil)
+}
+
+// AcquirePaths retains the complete write extent until the last run ends.
+// Missing or unresolvable extents conservatively claim the whole workspace.
+func (o *Owner) AcquirePaths(ctx context.Context, paths []string) error {
+	_, err := o.acquire(ctx, paths, false)
+	return err
+}
+
+// acquire returns the call's hold when hold is set and the claim is not waived.
+func (o *Owner) acquire(ctx context.Context, paths []string, hold bool) (*callHold, error) {
 	if o == nil {
-		return nil
+		return nil, nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if o.undeclaredFree && len(paths) == 0 {
+		return nil, nil
+	}
+	claim := o.normalizePaths(paths)
+	if len(paths) == 0 && o.folderClaim && o.scope.folder != "" {
+		claim = []string{o.scope.folder}
+	}
 	for {
 		o.mu.Lock()
 		o.askedLocked(time.Now())
-		if o.acquired {
+		if o.acquired && coversPaths(o.scope.paths, claim) {
+			h := o.holdLocked(hold, paths)
 			o.mu.Unlock()
-			return nil
+			return h, nil
 		}
 		if o.acquiring {
 			done := o.acquireDone
@@ -281,22 +337,31 @@ func (o *Owner) AcquireWrite(ctx context.Context) error {
 			case <-done:
 				continue
 			case <-ctx.Done():
-				return ctx.Err()
+				return nil, ctx.Err()
 			}
 		}
 		o.acquiring = true
 		o.acquireDone = make(chan struct{})
 		done := o.acquireDone
-		o.mu.Unlock()
 
-		release, err := o.acquire(ctx)
+		wasAcquired := o.acquired
+		if wasAcquired {
+			claim = mergePaths(o.scope.paths, claim)
+		}
+		o.mu.Unlock()
+		release, err := o.acquirePaths(ctx, claim, wasAcquired)
 		o.mu.Lock()
 		o.acquiring = false
 		o.waiting = false
+		var h *callHold
 		if err == nil {
 			o.acquired = true
-			o.acquiredAt = time.Now()
-			o.releaseSystem = release
+			o.scope.paths = claim
+			if !wasAcquired {
+				o.acquiredAt = time.Now()
+				o.releaseSystem = release
+			}
+			h = o.holdLocked(hold, paths)
 		}
 		close(done)
 		releaseIfIdle := o.releaseIfIdleLocked()
@@ -304,7 +369,7 @@ func (o *Owner) AcquireWrite(ctx context.Context) error {
 		if releaseIfIdle != nil {
 			releaseIfIdle()
 		}
-		return err
+		return h, err
 	}
 }
 
@@ -312,9 +377,20 @@ func (o *Owner) releaseIfIdleLocked() func() {
 	if !o.acquired || o.acquiring || o.activeRuns != 0 {
 		return nil
 	}
+	return o.releaseLocked(true)
+}
+
+// releaseLocked drops the claim. A yield (final false) is a pause inside one
+// account: the held time so far is banked and no account is closed.
+func (o *Owner) releaseLocked(final bool) func() {
 	release := o.releaseSystem
 	o.acquired = false
 	o.releaseSystem = nil
+	o.scope.paths = nil
+	if !final {
+		o.stats.Held += time.Since(o.acquiredAt)
+		return release
+	}
 	closed, report := o.closeStatsLocked(time.Now())
 	notice := o.onRelease
 	return func() {
@@ -341,10 +417,12 @@ func (o *Owner) markWaiting() {
 // that clears inside the grace never becomes a line someone has to read, and
 // one that does not is always closed by the report that ends it.
 type waitClock struct {
-	owner   *Owner
-	started time.Time
-	began   bool
-	holder  string
+	owner     *Owner
+	started   time.Time
+	began     bool
+	holder    string
+	conflict  *ConflictError
+	requested []string
 }
 
 func (w *waitClock) contend() {
@@ -359,20 +437,38 @@ func (w *waitClock) report() {
 		return
 	}
 	w.began = true
-	w.owner.notify(Wait{Outcome: WaitBegan, Elapsed: time.Since(w.started), Holder: w.holder})
+	w.owner.notify(w.notice(WaitBegan, time.Since(w.started)))
 }
 
 func (w *waitClock) close(outcome WaitOutcome) {
 	if w.started.IsZero() {
 		return
 	}
+	w.report()
 	waited := time.Since(w.started)
 	w.owner.mu.Lock()
 	w.owner.contendedLocked(waited, w.began)
 	w.owner.mu.Unlock()
 	if w.began {
-		w.owner.notify(Wait{Outcome: outcome, Elapsed: waited})
+		w.owner.notify(w.notice(outcome, waited))
 	}
+}
+
+func (w *waitClock) notice(outcome WaitOutcome, elapsed time.Duration) Wait {
+	n := Wait{Outcome: outcome, Elapsed: elapsed, Holder: w.holder, RequestedPaths: w.requested, Repository: w.owner.scope.repository}
+	if c := w.conflict; c != nil {
+		n.Holder, n.HolderSessionID, n.Paths = c.Holder, c.SessionID, c.Paths
+	}
+	return n
+}
+
+func (w *waitClock) failure(err error) error {
+	if w.conflict == nil {
+		return err
+	}
+	c := *w.conflict
+	c.Cause = err
+	return &c
 }
 
 func (w *waitClock) remainingGrace() time.Duration {
@@ -380,81 +476,6 @@ func (w *waitClock) remainingGrace() time.Duration {
 		return left
 	}
 	return time.Nanosecond
-}
-
-// awaitToken waits for the in-process token. The grace timer is dropped once
-// the report is out, so a long wait stops waking to re-decide it.
-func (o *Owner) awaitToken(ctx context.Context, w *waitClock) error {
-	w.contend()
-	w.holder = o.local.currentHolder()
-	timer := time.NewTimer(w.remainingGrace())
-	defer timer.Stop()
-	grace := timer.C
-	for {
-		select {
-		case <-o.local.token:
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-grace:
-			w.report()
-			grace = nil
-		}
-	}
-}
-
-func (o *Owner) acquire(ctx context.Context) (func(), error) {
-	w := &waitClock{owner: o}
-	select {
-	case <-o.local.token:
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
-		if err := o.awaitToken(ctx, w); err != nil {
-			w.close(WaitAbandoned)
-			return nil, err
-		}
-	}
-
-	releaseLocal := func() { o.local.token <- struct{}{} }
-	for {
-		releaseFile, err := tryLockFile(o.lockPath)
-		if err == nil {
-			w.close(WaitAcquired)
-			name := o.holderName()
-			o.local.setHolder(name)
-			if name != "" {
-				_ = fileutil.AtomicWriteFile(o.holderPath(), []byte(name+"\n"), 0o600)
-			}
-			return func() {
-				_ = os.Remove(o.holderPath())
-				o.local.setHolder("")
-				releaseFile()
-				releaseLocal()
-			}, nil
-		}
-		if !errors.Is(err, errHeld) {
-			releaseLocal()
-			w.close(WaitAbandoned)
-			return nil, fmt.Errorf("acquire workspace write lease: %w", err)
-		}
-		w.contend()
-		if w.holder == "" {
-			w.holder = readHolder(o.holderPath())
-		}
-		w.report()
-		timer := time.NewTimer(retryInterval)
-		select {
-		case <-timer.C:
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
-			releaseLocal()
-			w.close(WaitAbandoned)
-			return nil, ctx.Err()
-		}
-	}
 }
 
 // readHolder reads the name a holder in another process left beside the lock.

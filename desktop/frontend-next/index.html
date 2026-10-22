@@ -3,6 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://id.reasonix.io" crossorigin />
+    <link rel="preconnect" href="https://remote.reasonix.io" crossorigin />
+    <link rel="dns-prefetch" href="//id.reasonix.io" />
+    <link rel="dns-prefetch" href="//remote.reasonix.io" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="theme-color" content="#07080c" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Reasonix" />
     <title>Reasonix Studio</title>
     <script>
       // The boot screen below is painted by this file, before the bundle that
@@ -22,19 +33,24 @@
       // browser never sends. Trading it for the cookie has to happen before the
       // bundle makes its first request, and the fragment is wiped from the
       // address bar and history on the way past so it cannot be copied on.
+      // A scanned pairing link carries a one-time code the same way.
       window.__rxAuth = (function () {
         try {
           var f = new URLSearchParams(window.location.hash.slice(1));
           var token = f.get("token");
-          if (!token) return Promise.resolve();
+          var pair = f.get("pair");
+          if (!token && !pair) return Promise.resolve();
           f.delete("token");
+          f.delete("pair");
           var rest = f.toString();
           window.history.replaceState(null, "", window.location.pathname + window.location.search + (rest ? "#" + rest : ""));
-          return fetch("/auth/token", {
+          return fetch(pair ? "/pair" : "/auth/token", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ token: token }),
-          }).then(function () {});
+            body: JSON.stringify(pair ? { code: pair } : { token: token }),
+          }).then(function (response) {
+            if (response.ok) window.location.reload();
+          });
         } catch (e) {
           return Promise.resolve();
         }
@@ -46,6 +62,25 @@
           return window.__rxAuth.then(function () { return native.apply(null, args); });
         };
       }
+
+      // A cloud connection otherwise waits for the whole application bundle
+      // before its first cross-origin round trip. Start the one-time grant as
+      // soon as the HTML is parsed so it overlaps JS/CSS download and parse.
+      window.__rxRemoteBootstrap = (function () {
+        try {
+          var device = new URLSearchParams(window.location.search).get("device");
+          if (!device) return null;
+          performance.mark("reasonix:remote:start");
+          return fetch("https://id.reasonix.io/me/remote-grants", {
+            method: "POST",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ targetDeviceId: device, scopes: ["desktop"] }),
+          });
+        } catch (e) {
+          return null;
+        }
+      })();
     </script>
     <style>
       /* The boot screen owns the window from the first paint until the kernel

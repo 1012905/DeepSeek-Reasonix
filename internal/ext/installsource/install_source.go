@@ -18,10 +18,11 @@ import (
 	"sort"
 	"strings"
 
+	"reasonix/internal/base/fileutil"
+	"reasonix/internal/base/secrets"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/tool"
 	"reasonix/internal/ext/pluginpkg"
-	"reasonix/internal/ext/skill"
 )
 
 // MCPConnectResult is what the ConnectMCP callback returns. Disconnect is
@@ -62,9 +63,16 @@ type Options struct {
 	// a preview handed out. On for the model, whose apply would otherwise be the
 	// first moment anyone could learn what the source holds; off for hosts.
 	RequireApprovedPlan bool
+	// PreparePlugin replaces plugin source resolution. Tests only: production
+	// code constructing Options must not set it.
+	PreparePlugin func(ctx context.Context, source, mode string) (root, commit string, cleanup func(), err error)
 }
 
-type installSourceTool struct {
+// Tool is install_source. Callers hold the concrete type so a call is
+// statically bound to this Execute, not to every tool.Tool.
+var _ tool.Tool = (*Tool)(nil)
+
+type Tool struct {
 	root                string
 	home                string
 	reasonixHome        string
@@ -81,10 +89,10 @@ type installSourceTool struct {
 	preparePlugin func(ctx context.Context, source, mode string) (root, commit string, cleanup func(), err error)
 }
 
-// NewTool returns a tool.Tool that callers register with the agent's
+// NewTool returns the install_source tool that callers register with the agent's
 // Registry. The returned tool is safe to call from any goroutine; the
 // underlying config/config.SaveTo paths do their own per-file locking.
-func NewTool(opts Options) tool.Tool {
+func NewTool(opts Options) *Tool {
 	root := opts.ProjectRoot
 	if root == "" {
 		if wd, err := currentDir(); err == nil {
@@ -116,7 +124,7 @@ func NewTool(opts Options) tool.Tool {
 	// manifests); guard the dial against SSRF the same way web_fetch does, so a
 	// prompt-injected source can't reach cloud metadata / internal services.
 	client = ssrfGuardClient(client)
-	return &installSourceTool{
+	return &Tool{
 		root:                root,
 		home:                home,
 		reasonixHome:        reasonixHome,
@@ -125,17 +133,18 @@ func NewTool(opts Options) tool.Tool {
 		onDisconnect:        opts.OnDisconnect,
 		approval:            opts.Approval,
 		requireApprovedPlan: opts.RequireApprovedPlan,
+		preparePlugin:       opts.PreparePlugin,
 	}
 }
 
-func (*installSourceTool) Name() string   { return "install_source" }
-func (*installSourceTool) ReadOnly() bool { return false }
+func (*Tool) Name() string   { return "install_source" }
+func (*Tool) ReadOnly() bool { return false }
 
-func (*installSourceTool) Description() string {
+func (*Tool) Description() string {
 	return "Plan, install, or uninstall a Reasonix skill, MCP server, or plugin package from a URL, local file/folder, .mcp.json, executable, or package name. Two-phase: with apply=false (default) returns a deterministic plan with per-action risk level and a planId; with apply=true, passing back that planId, it copies/registers skills, connects/persists MCP servers, or installs plugin packages. An apply without the planId of a plan you have read installs nothing and returns the plan instead. op='uninstall' removes a previously installed skill, MCP server, or plugin package by name."
 }
 
-func (*installSourceTool) Schema() json.RawMessage {
+func (*Tool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 "type":"object",
 "properties":{
@@ -143,7 +152,7 @@ func (*installSourceTool) Schema() json.RawMessage {
   "source":{"type":"string","description":"URL, local file/folder path, .mcp.json path, or package name to install from. Ignored when op=uninstall (use name instead)."},
   "kind":{"type":"string","enum":["auto","skill","mcp","plugin"],"description":"Capability kind. Defaults to auto."},
   "apply":{"type":"boolean","description":"false (default) only returns an install plan; true performs the planned writes/connects. Ignored for op=uninstall."},
-  "scope":{"type":"string","enum":["project","global"],"description":"Where to persist config or copy skills. MCP installs default to global so every project can use them; project-root .mcp.json imports default to project; skills default to project when a workspace exists, otherwise global."},
+  "scope":{"type":"string","enum":["project","global"],"description":"Where to persist config or copy skills. MCP installs and skills default to global; project-root .mcp.json imports default to project. Set project explicitly to install only for this workspace."},
   "mode":{"type":"string","enum":["auto","copy","link","register"],"description":"Skill install mode. auto registers multi-skill roots and copies single skills into the canonical <skill-name>/SKILL.md layout; copy copies skill files/folders; link creates symlinks; register adds a skill root to [skills].paths."},
   "name":{"type":"string","description":"Optional override for the installed MCP server or single skill name. Required for op=uninstall when removing by name."},
   "transport":{"type":"string","enum":["auto","stdio","http","sse"],"description":"MCP transport override. URL sources default to http unless --sse-like; package sources default to stdio."},
@@ -163,7 +172,12 @@ func (*installSourceTool) Schema() json.RawMessage {
 // Execute parses args, plans, and (if apply=true and Approval allows)
 // performs the writes. JSON output is always returned on success even when
 // the plan is empty, so the model can read structured `next` hints.
-func (t *installSourceTool) Execute(ctx context.Context, raw json.RawMessage) (string, error) {
+func (t *Tool) Execute(ctx context.Context, raw json.RawMessage) (string, error) {
+	return t.execute(ctx, raw, nil)
+}
+
+func (t *Tool) execute(ctx context.Context, raw json.RawMessage, res *Result) (output string, err error) {
+	defer func() { err = secrets.DiagnosticError(err) }()
 	var req request
 	if err := json.Unmarshal(raw, &req); err != nil {
 		return "", fmt.Errorf("install_source: invalid args: %w", err)
@@ -199,17 +213,19 @@ func (t *installSourceTool) Execute(ctx context.Context, raw json.RawMessage) (s
 			return marshalJSON(response{
 				OK: false, Status: "blocked", Op: req.Op, Applied: false,
 				Source: req.Source, Kind: "plugin", Scope: req.Scope, Mode: req.Mode,
-				Warnings: warnings, Error: err.Error(),
+				Warnings: warnings, failure: err,
 				Next: "Choose a plugin that exports a supported skill, command, agent, hook, or MCP server.",
 			}), nil
 		}
 		return "", err
 	}
-	// Marketplace planning may keep one temporary clone alive so apply can
-	// reuse the exact approved snapshot. Clean it on every exit path, including
-	// plan-ID mismatch or host approval denial before executeApply runs.
+	// Marketplace apply reuses the approved snapshot; release its temporary clone
+	// even when approval or plan-ID validation refuses the operation.
 	defer cleanupActionResources(actions)
-	planID := computePlanID(req, actions)
+	if err := checkExpectedDigest(req.ExpectDigest, actions); err != nil {
+		return "", err
+	}
+	planID := res.fingerprint(req, actions)
 	if len(actions) == 0 {
 		out := response{
 			OK:       false,
@@ -250,6 +266,8 @@ func (t *installSourceTool) Execute(ctx context.Context, raw json.RawMessage) (s
 			Actions:  publicActions(actions),
 			Warnings: warnings,
 			Next:     planNext(unticketed),
+
+			ContentDigest: contentDigest(actions),
 		}
 		return marshalJSON(out), nil
 	}
@@ -277,20 +295,21 @@ func (t *installSourceTool) Execute(ctx context.Context, raw json.RawMessage) (s
 		}
 	}
 
-	return t.executeApply(ctx, req, actions, warnings, planID), nil
+	return t.executeApply(ctx, req, actions, warnings, planID, res), nil
 }
 
 // executeApply runs the apply phase. The first failed action short-circuits
 // the rest only when a single failure implies the plan is unusable; for
 // MCP installs in particular, partial completion is reported honestly.
-func (t *installSourceTool) executeApply(ctx context.Context, req request, actions []action, warnings []string, planID string) string {
+func (t *Tool) executeApply(ctx context.Context, req request, actions []action, warnings []string, planID string, res *Result) string {
 	ok := true
 	anySucceeded := false
 	for i := range actions {
 		if err := t.apply(ctx, req, &actions[i]); err != nil {
 			ok = false
 			actions[i].Status = "failed"
-			actions[i].Error = err.Error()
+			actions[i].failure = err
+			actions[i].ErrorCode = ErrorCode(err)
 			if actions[i].Next == "" {
 				actions[i].Next = nextForError(err)
 			}
@@ -298,6 +317,9 @@ func (t *installSourceTool) executeApply(ctx context.Context, req request, actio
 		}
 		actions[i].Status = "done"
 		anySucceeded = true
+		if res != nil {
+			res.Applied = append(res.Applied, AppliedItem{Kind: actions[i].Kind, Name: actions[i].Name, Target: actions[i].Target, ConfigPath: actions[i].ConfigPath})
+		}
 		warnings = append(warnings, actions[i].Warnings...)
 	}
 	status := "done"
@@ -342,7 +364,7 @@ func cleanupActionResources(actions []action) {
 // asks the host to disconnect. We do not consult the approval hook for
 // uninstall: the user already named the entry, and removal is the inverse
 // of the install they authorized.
-func (t *installSourceTool) executeUninstall(req request) string {
+func (t *Tool) executeUninstall(req request) string {
 	actions := []action{}
 	scopes := t.uninstallSearchScopes(req)
 	for _, scope := range scopes {
@@ -379,7 +401,7 @@ func (t *installSourceTool) executeUninstall(req request) string {
 		if err := t.apply(context.Background(), req, &actions[i]); err != nil {
 			ok = false
 			actions[i].Status = "failed"
-			actions[i].Error = err.Error()
+			actions[i].failure = err
 			actions[i].Next = "Inspect the error, then retry op=uninstall."
 			continue
 		}
@@ -408,7 +430,7 @@ func (t *installSourceTool) executeUninstall(req request) string {
 	})
 }
 
-func (t *installSourceTool) uninstallSearchScopes(req request) []string {
+func (t *Tool) uninstallSearchScopes(req request) []string {
 	if req.scopeExplicit && req.Scope != "" {
 		return []string{req.Scope}
 	}
@@ -419,7 +441,7 @@ func (t *installSourceTool) uninstallSearchScopes(req request) []string {
 	return append(scopes, "global")
 }
 
-func (t *installSourceTool) uninstallActionsForScope(name, scope string) []action {
+func (t *Tool) uninstallActionsForScope(name, scope string) []action {
 	var actions []action
 	cfgPath := t.configPath(scope)
 	cfg := config.LoadForEdit(cfgPath)
@@ -487,35 +509,7 @@ func (t *installSourceTool) uninstallActionsForScope(name, scope string) []actio
 	return actions
 }
 
-// resolveSkillPath finds the on-disk location of a previously installed
-// skill of the given name in the chosen scope. The bool reports whether
-// the path is a real install (Lstat succeeded). Both flat (<name>.md) and
-// directory (<name>/) layouts are checked.
-func (t *installSourceTool) resolveSkillPath(name, scope string) (string, bool) {
-	if !config.IsValidSkillName(name) {
-		return "", false
-	}
-	var root string
-	if scope == "global" {
-		if t.reasonixHome == "" {
-			return "", false
-		}
-		root = filepath.Join(t.reasonixHome, skill.SkillsDirname)
-	} else {
-		root = filepath.Join(t.root, ".reasonix", skill.SkillsDirname)
-	}
-	flat := filepath.Join(root, name+".md")
-	if _, err := lstat(flat); err == nil {
-		return flat, true
-	}
-	dir := filepath.Join(root, name)
-	if _, err := lstat(filepath.Join(dir, skill.SkillFile)); err == nil {
-		return dir, true
-	}
-	return "", false
-}
-
-func (t *installSourceTool) resolveRegisteredSkillRoot(name, scope, cfgPath string, cfg *config.Config) (action, bool) {
+func (t *Tool) resolveRegisteredSkillRoot(name, scope, cfgPath string, cfg *config.Config) (action, bool) {
 	if !config.IsValidSkillName(name) {
 		return action{}, false
 	}
@@ -529,7 +523,7 @@ func (t *installSourceTool) resolveRegisteredSkillRoot(name, scope, cfgPath stri
 		found := false
 		for _, cand := range cands {
 			names = append(names, cand.Name)
-			if cand.Name == name {
+			if config.SkillNameKey(cand.Name) == config.SkillNameKey(name) {
 				found = true
 			}
 		}
@@ -555,16 +549,16 @@ func (t *installSourceTool) resolveRegisteredSkillRoot(name, scope, cfgPath stri
 	return action{}, false
 }
 
-func (t *installSourceTool) configPath(scope string) string {
+func (t *Tool) configPath(scope string) string {
 	if scope == "global" {
 		if p := config.UserConfigPath(); p != "" {
 			return p
 		}
 	}
-	return filepath.Join(t.root, "reasonix.toml")
+	return config.ProjectConfigPath(t.root)
 }
 
-func (t *installSourceTool) normalizeScope(scope string) (string, bool) {
+func (t *Tool) normalizeScope(scope string) (string, bool) {
 	switch strings.ToLower(strings.TrimSpace(scope)) {
 	case "project":
 		return "project", true
@@ -575,7 +569,7 @@ func (t *installSourceTool) normalizeScope(scope string) (string, bool) {
 	}
 }
 
-func (t *installSourceTool) installScope(req request, kind, source string) string {
+func (t *Tool) installScope(req request, kind, source string) string {
 	if req.scopeExplicit && req.Scope != "" {
 		return req.Scope
 	}
@@ -585,13 +579,10 @@ func (t *installSourceTool) installScope(req request, kind, source string) strin
 		}
 		return "global"
 	}
-	if strings.TrimSpace(t.root) != "" {
-		return "project"
-	}
 	return "global"
 }
 
-func (t *installSourceTool) isProjectMCPJSONSource(source string) bool {
+func (t *Tool) isProjectMCPJSONSource(source string) bool {
 	if isURL(source) || !strings.EqualFold(filepath.Base(source), ".mcp.json") {
 		return false
 	}
@@ -624,7 +615,7 @@ func commonActionScope(actions []action) string {
 	return scope
 }
 
-func (t *installSourceTool) resolvePath(p string) string {
+func (t *Tool) resolvePath(p string) string {
 	p = strings.TrimSpace(p)
 	if strings.HasPrefix(p, "~/") || strings.HasPrefix(p, `~\`) {
 		p = filepath.Join(t.home, p[2:])
@@ -640,13 +631,29 @@ func (t *installSourceTool) resolvePath(p string) string {
 	return filepath.Clean(p)
 }
 
-// computePlanID hashes the request plus the full public action set so a later
-// apply call with the same planId can be verified to be approving exactly the
-// same plan. It intentionally excludes Apply and PlanID; everything that changes
-// what will be written/connected must live either in req's planning fields or in
-// the action DTO.
+// refuseNetworkSource stops a local source spelled as a network path before
+// plan stats, walks or parses it: on Windows that lookup is a connection to the
+// named machine, and a plan-only call runs without approval. Only a path below a
+// network project root passes.
+func (t *Tool) refuseNetworkSource(source string) error {
+	if isURL(source) || strings.HasPrefix(source, "git:github.com/") {
+		return nil
+	}
+	roots := []string{t.root}
+	err := fileutil.NetworkScope(source, roots)
+	if err == nil {
+		err = fileutil.NetworkScope(t.resolvePath(source), roots)
+	}
+	if err != nil {
+		return networkSourceError{tool.Refusal{Code: fileutil.CodeNetworkPathOutsideScope, Message: fmt.Sprintf(
+			"install_source: `%s` is a network path, outside this workspace; it was refused by its spelling and never looked up", source)}}
+	}
+	return nil
+}
+
+// Approval binds operational material; display projection must never collapse distinct credentials.
 func computePlanID(req request, actions []action) string {
-	public := publicActions(actions)
+	public := append([]action(nil), actions...)
 	sort.Slice(public, func(i, j int) bool {
 		return actionPlanKey(public[i]) < actionPlanKey(public[j])
 	})
@@ -666,6 +673,7 @@ func computePlanID(req request, actions []action) string {
 		Replace   bool              `json:"replace"`
 		Strict    bool              `json:"strict"`
 		Actions   []action          `json:"actions"`
+		Digest    string            `json:"contentDigest,omitempty"`
 	}{
 		Op:        req.Op,
 		Source:    req.Source,
@@ -682,6 +690,7 @@ func computePlanID(req request, actions []action) string {
 		Replace:   req.Replace,
 		Strict:    req.strict(),
 		Actions:   public,
+		Digest:    contentDigest(actions),
 	}
 	body, _ := json.Marshal(payload)
 	h := sha256.New()
@@ -750,7 +759,7 @@ func nextForError(err error) string {
 	case errors.Is(err, ErrBinaryMissing):
 		return "Install the missing local runtime or use an absolute command path, then retry."
 	case errors.Is(err, ErrAlreadyExists):
-		return "Choose another name, remove the existing entry, or retry MCP installs with replace=true."
+		return "Choose another name, remove the existing entry, or retry MCP or plugin installs with replace=true."
 	case errors.Is(err, ErrUnsafeLinkTarget):
 		return "The link target escapes the project/home root. Pick a source path inside the workspace or home directory."
 	case errors.Is(err, ErrApprovalDenied):

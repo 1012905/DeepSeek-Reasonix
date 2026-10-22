@@ -323,9 +323,9 @@ func TestResolveSlashPromptFallsThroughToExtensionAction(t *testing.T) {
 	sess := &acpSession{id: "sess-1", ctrl: newExtActionController(t, client)}
 	svc := &service{}
 
-	got := svc.resolveSlashPrompt(context.Background(), sess, "/alpha:act1 k=v extra")
-	if got != "rerun scheduled" {
-		t.Fatalf("resolveSlashPrompt = %q, want the action result", got)
+	got, invoked := svc.resolveSlashPrompt(context.Background(), sess, "/alpha:act1 k=v extra")
+	if got != "rerun scheduled" || invoked != "" {
+		t.Fatalf("resolveSlashPrompt = (%q, %q), want the action result without a skill", got, invoked)
 	}
 	if client.got == nil || client.got.ActionID != "act1" ||
 		client.got.Args["k"] != "v" || client.got.Args["arg1"] != "extra" {
@@ -333,10 +333,10 @@ func TestResolveSlashPromptFallsThroughToExtensionAction(t *testing.T) {
 	}
 
 	// Undeclared actions and non-action lines pass through untouched.
-	if got := svc.resolveSlashPrompt(context.Background(), sess, "/alpha:other"); got != "/alpha:other" {
+	if got, _ := svc.resolveSlashPrompt(context.Background(), sess, "/alpha:other"); got != "/alpha:other" {
 		t.Fatalf("undeclared action rewrote to %q", got)
 	}
-	if got := svc.resolveSlashPrompt(context.Background(), sess, "/plain"); got != "/plain" {
+	if got, _ := svc.resolveSlashPrompt(context.Background(), sess, "/plain"); got != "/plain" {
 		t.Fatalf("plain slash rewrote to %q", got)
 	}
 
@@ -345,7 +345,26 @@ func TestResolveSlashPromptFallsThroughToExtensionAction(t *testing.T) {
 	failing := &acpSession{id: "sess-1", ctrl: newExtActionController(t, &extActionClient{
 		result: protocol.UIActionResult{Accepted: false, Message: "nope"},
 	})}
-	if got := svc.resolveSlashPrompt(context.Background(), failing, "/alpha:act1"); got != "/alpha:act1" {
+	if got, _ := svc.resolveSlashPrompt(context.Background(), failing, "/alpha:act1"); got != "/alpha:act1" {
 		t.Fatalf("failed action rewrote to %q", got)
+	}
+}
+
+// A coded warning keeps its identity on the wire, so an ACP client does not
+// have to read the sentence to know which notice it is.
+func TestUpdateSinkWarningCarriesItsNoticeCode(t *testing.T) {
+	fn := &fakeNotifier{}
+	sink := newUpdateSink(fn, "sess-1")
+	detail := event.ExtensionSkipped{Extension: "aipush-ask-bridge", Point: "tool.before", Reason: event.ExtensionSkipReasonNoLiveSidecar}.Encode()
+	sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Code: event.NoticeCodeExtensionSkipped, Text: "skipped", Detail: detail})
+	sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: "uncoded"})
+
+	update := fn.updateMap(t, 0)
+	notice, _ := update["metadata"].(map[string]any)["notice"].(map[string]any)
+	if notice["code"] != event.NoticeCodeExtensionSkipped || notice["payload"] != detail {
+		t.Fatalf("metadata.notice = %v", notice)
+	}
+	if _, has := fn.updateMap(t, 1)["metadata"]; has {
+		t.Fatalf("an uncoded warning must carry no notice metadata")
 	}
 }

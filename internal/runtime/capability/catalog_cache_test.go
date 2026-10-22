@@ -205,6 +205,7 @@ func TestBuildCatalogUnavailableServerOverridesRegistryCachedTool(t *testing.T) 
 			cat := BuildCatalog(CatalogOptions{
 				Tools: []tool.ContractEntry{{
 					Name:        plugin.ModelToolName(server, "search_issues"),
+					MCP:         &tool.MCPBinding{Server: server, RawName: "search_issues", CapabilityID: "mcp-tool:" + server + "/search_issues"},
 					Description: "search issues",
 					ReadOnly:    true,
 				}},
@@ -299,7 +300,8 @@ func TestCatalogKeepsProxyToolsAfterConnect(t *testing.T) {
 	}
 	// When the same server's tools are already on the registry, no duplicates.
 	cat = BuildCatalog(CatalogOptions{
-		Tools:      []tool.ContractEntry{{Name: plugin.ModelToolName("gh", "search_issues")}},
+		Tools: []tool.ContractEntry{{Name: plugin.ModelToolName("gh", "search_issues"),
+			MCP: &tool.MCPBinding{Server: "gh", RawName: "search_issues", CapabilityID: "mcp-tool:gh/search_issues"}}},
 		Plugins:    []config.PluginEntry{{Name: "gh", AutoStart: new(false)}},
 		Profile:    ProfileDelivery,
 		Connected:  map[string]bool{"gh": true},
@@ -330,5 +332,22 @@ func TestCatalogDoesNotRouteProxyToolsAfterFailure(t *testing.T) {
 	entry, ok := cat.Lookup("mcp-tool:gh/search_issues")
 	if !ok || entry.Status != StatusFailed {
 		t.Fatalf("failed server proxy tool = (%+v, %v), want failed catalog entry", entry, ok)
+	}
+}
+
+func TestDisabledToolsAreAbsentFromStaleCatalogSnapshots(t *testing.T) {
+	t.Setenv("REASONIX_CACHE_HOME", testenv.TempDir(t))
+	spec := plugin.Spec{Name: "filtered", Command: "mcp"}
+	if err := plugin.SaveCachedSchema(spec.Name, plugin.CachedSchema{CacheKey: plugin.SchemaCacheKey(spec), Tools: []plugin.CachedTool{{Name: "read"}, {Name: "write"}}}); err != nil {
+		t.Fatal(err)
+	}
+	spec.DisabledTools = []string{"write"}
+	cached, keyOK := LoadCachedToolsForSpecs([]plugin.Spec{spec})
+	cat := BuildCatalog(CatalogOptions{Plugins: []config.PluginEntry{{Name: spec.Name}}, CachedTools: cached, CacheKeyOK: keyOK})
+	if _, found := cat.Lookup("mcp-tool:filtered/write"); found {
+		t.Fatal("disabled stale tool remains discoverable")
+	}
+	if _, found := cat.Lookup("mcp-tool:filtered/read"); !found {
+		t.Fatal("allowed stale tool disappeared")
 	}
 }

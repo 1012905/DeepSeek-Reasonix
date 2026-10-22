@@ -17,6 +17,8 @@ type stubUpdateHost struct {
 	started      []string
 	install      update.Install
 	startErr     error
+	committed    []string
+	commitErr    error
 	progress     update.Progress
 }
 
@@ -28,6 +30,11 @@ func (s *stubUpdateHost) StartInstall(install update.Install, target string) err
 	return s.startErr
 }
 
+func (s *stubUpdateHost) CommitInstall(target string) error {
+	s.committed = append(s.committed, target)
+	return s.commitErr
+}
+
 func (s *stubUpdateHost) InstallProgress() update.Progress { return s.progress }
 
 // Sharing an update engine with a desktop application must not hand a
@@ -35,7 +42,7 @@ func (s *stubUpdateHost) InstallProgress() update.Progress { return s.progress }
 // makes the routes exist, so a hub without an owner has none to refuse.
 func TestUpdateRoutesExistOnlyWhereSomethingOwnsTheApplication(t *testing.T) {
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
-	bare := httptest.NewServer(NewHub(HubOptions{}).Handler())
+	bare := httptest.NewServer(operatorHandler(NewHub(HubOptions{})))
 	defer bare.Close()
 
 	resp, err := http.Post(bare.URL+"/update/health", "application/json", strings.NewReader(""))
@@ -53,7 +60,7 @@ func TestUpdateRoutesExistOnlyWhereSomethingOwnsTheApplication(t *testing.T) {
 func TestAnOwnedApplicationAcknowledgesItsOwnLaunch(t *testing.T) {
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
 	host := &stubUpdateHost{}
-	owned := httptest.NewServer(NewHub(HubOptions{Update: host}).Handler())
+	owned := httptest.NewServer(operatorHandler(NewHub(HubOptions{Update: host})))
 	defer owned.Close()
 
 	resp, err := http.Post(owned.URL+"/update/health", "application/json", strings.NewReader(`{"transaction":"somebody else's"}`))
@@ -77,7 +84,7 @@ func TestAnOwnedApplicationAcknowledgesItsOwnLaunch(t *testing.T) {
 func TestInstallRefusesWhereNoInstallWasDeclared(t *testing.T) {
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
 	host := &stubUpdateHost{}
-	owned := httptest.NewServer(NewHub(HubOptions{Update: host}).Handler())
+	owned := httptest.NewServer(operatorHandler(NewHub(HubOptions{Update: host})))
 	defer owned.Close()
 
 	resp, err := http.Post(owned.URL+"/update/install", "application/json", strings.NewReader(`{"version":"v2.0.0"}`))
@@ -100,7 +107,7 @@ func TestInstallCarriesTheHubsDeclaredInstall(t *testing.T) {
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
 	host := &stubUpdateHost{}
 	declared := update.Install{Version: "v1.0.0", Layout: update.Layout{Root: "/opt/studio", Executable: "/opt/studio/studio"}}
-	owned := httptest.NewServer(NewHub(HubOptions{Update: host, Install: &declared}).Handler())
+	owned := httptest.NewServer(operatorHandler(NewHub(HubOptions{Update: host, Install: &declared})))
 	defer owned.Close()
 
 	resp, err := http.Post(owned.URL+"/update/install", "application/json", strings.NewReader(`{"version":"v2.0.0"}`))
@@ -128,7 +135,7 @@ func TestASecondInstallIsRefusedAsAlreadyRunning(t *testing.T) {
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
 	declared := update.Install{Version: "v1.0.0", Layout: update.Layout{Root: "/opt/studio"}}
 	host := &stubUpdateHost{startErr: appupdate.ErrInstallInFlight}
-	owned := httptest.NewServer(NewHub(HubOptions{Update: host, Install: &declared}).Handler())
+	owned := httptest.NewServer(operatorHandler(NewHub(HubOptions{Update: host, Install: &declared})))
 	defer owned.Close()
 
 	resp, err := http.Post(owned.URL+"/update/install", "application/json", strings.NewReader(`{"version":"v2.0.0"}`))
@@ -156,7 +163,7 @@ func TestASecondInstallIsRefusedAsAlreadyRunning(t *testing.T) {
 func TestInstallProgressIsRead(t *testing.T) {
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
 	host := &stubUpdateHost{progress: update.Progress{Version: "v2.0.0", Phase: update.PhaseVerifying, Received: 7, Total: 7}}
-	owned := httptest.NewServer(NewHub(HubOptions{Update: host}).Handler())
+	owned := httptest.NewServer(operatorHandler(NewHub(HubOptions{Update: host})))
 	defer owned.Close()
 
 	resp, err := http.Get(owned.URL + "/update/install")
@@ -170,5 +177,49 @@ func TestInstallProgressIsRead(t *testing.T) {
 	}
 	if got != host.progress {
 		t.Fatalf("GET /update/install = %+v, want %+v", got, host.progress)
+	}
+}
+
+func postRestart(t *testing.T, url, body string) (int, string) {
+	t.Helper()
+	resp, err := http.Post(url+"/update/restart", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var got struct {
+		Code string `json:"code"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&got)
+	return resp.StatusCode, got.Code
+}
+
+// Downloading and restarting are two acts: the restart reaches the host only
+// when asked for, and names the release it restarts into.
+func TestRestartCommitsTheReadyRelease(t *testing.T) {
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	host := &stubUpdateHost{}
+	owned := httptest.NewServer(operatorHandler(NewHub(HubOptions{Update: host})))
+	defer owned.Close()
+
+	if status, _ := postRestart(t, owned.URL, `{"version":"v2.0.0"}`); status != http.StatusAccepted {
+		t.Fatalf("POST /update/restart = %d, want 202", status)
+	}
+	if len(host.committed) != 1 || host.committed[0] != "v2.0.0" {
+		t.Fatalf("committed %v, want one restart into v2.0.0", host.committed)
+	}
+}
+
+// Nothing verified to restart into is its own answer: the panel offers to
+// download again rather than reporting a failed install.
+func TestRestartWithNothingReadyIsRefusedByName(t *testing.T) {
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	host := &stubUpdateHost{commitErr: appupdate.ErrNothingReady}
+	owned := httptest.NewServer(operatorHandler(NewHub(HubOptions{Update: host})))
+	defer owned.Close()
+
+	status, code := postRestart(t, owned.URL, `{"version":"v2.0.0","force":true}`)
+	if status != http.StatusConflict || code != codeNothingToApply {
+		t.Fatalf("POST /update/restart = %d %q, want 409 %q", status, code, codeNothingToApply)
 	}
 }

@@ -29,11 +29,7 @@ func MigrateLegacyDeepSeekProtocolUserConfig() (bool, error) {
 // MigrateLegacyDeepSeekProtocolUserConfig upgrades the aliases in this
 // binding's user-global config.
 func (r Roots) MigrateLegacyDeepSeekProtocolUserConfig() (bool, error) {
-	path := r.userConfigLoadPath()
-	if strings.TrimSpace(path) == "" {
-		return false, nil
-	}
-	return editLegacyDeepSeekProtocolFile(path, "", true)
+	return r.MigrateLegacyDeepSeekProtocolUserConfigFrom(r.SnapshotUserConfig())
 }
 
 // IsDeepSeekProtocolConfigParseError reports whether migration failed while
@@ -141,7 +137,11 @@ func editLegacyDeepSeekProtocolFile(path, target string, automatic bool) (bool, 
 	if err != nil || !changed {
 		return changed, err
 	}
-	if err := fileutil.AtomicWriteFile(resolved, fileencoding.Encode(next, encoding), info.Mode().Perm()); err != nil {
+	encoded, err := fileencoding.Encode(next, encoding)
+	if err != nil {
+		return false, err
+	}
+	if err := fileutil.AtomicWriteFile(resolved, encoded, info.Mode().Perm()); err != nil {
 		return false, err
 	}
 	return true, nil

@@ -15,7 +15,17 @@ import (
 	"reasonix/internal/state/memory"
 	"reasonix/internal/state/workspacelease"
 	"reasonix/internal/tools/jobs"
+	"strings"
 )
+
+// Steerer is how the host speaks to a running sub-agent. Both methods report
+// whether the child was inside a run to take it: on false nothing was queued.
+// Steer is the user's guidance; SteerHostNotice is the runtime's own, which the
+// child is told the user did not send.
+type Steerer interface {
+	Steer(text string) bool
+	SteerHostNotice(text string) bool
+}
 
 // Options configures an Agent.
 type Options struct {
@@ -23,10 +33,14 @@ type Options struct {
 	// MaxStepsKey names the explicit runtime control shown when the MaxSteps guard
 	// is hit. Empty defaults to the generic max_steps tool/runtime parameter.
 	MaxStepsKey string
-	// ReasoningByteLimit bounds a single stream's hidden reasoning bytes. Zero
-	// uses the default guard; a negative value disables only this client guard.
+	// ReasoningByteLimit bounds the hidden reasoning bytes one stream retains;
+	// it never stops generation. Zero uses the default; negative retains all.
 	// Provider output budgets are a separate protocol/model capability.
 	ReasoningByteLimit int
+	// MaxPerseverationRetries opts into cutting a detected perseveration
+	// (mindless repetition) loop and nudging a retry. nil or *0 reports the
+	// loop through the progress-watch channel instead; negative disables the guard.
+	MaxPerseverationRetries *int
 	// MaxOutputTokens overrides the provider's configured/default total output
 	// budget. Zero delegates to the provider; a negative value asks optional
 	// protocols to omit the budget (Anthropic still requires max_tokens).
@@ -45,10 +59,16 @@ type Options struct {
 	// on rather than the turn's.
 	TriageModelRef string
 	TriagePricing  *provider.Pricing
+	// ScreenExternalContent sends external tool results past TriageProvider for
+	// an advisory prompt-injection verdict. Without a triage provider it is off.
+	ScreenExternalContent bool
 	// ModelRef names the canonical "provider/model" ref backing this agent's
 	// provider instance. It is attached to emitted Usage events so downstream
 	// usage accounting can attribute tokens to the exact model.
 	ModelRef string
+	// RequestEffort is the depth this agent's requests carry over its provider's
+	// built one: a sub-agent sharing its parent's provider starts on the parent's.
+	RequestEffort string
 	// EventSource names the producer of this agent's settled frames — executor
 	// unless a caller says otherwise, so a two-model stream says which model
 	// wrote each one rather than leaving it to be inferred.
@@ -57,6 +77,8 @@ type Options struct {
 	RequireVisibleFinal bool
 	// Gate is the per-call permission gate. nil disables gating.
 	Gate Gate
+	// CheckTargetAccess applies workspace path policy before hooks or previews.
+	CheckTargetAccess tool.TargetAccessCheck
 	// ReadOnlyExecution enables a permanent host-side read-only boundary for
 	// planner and research agents. It is intentionally independent of Plan mode
 	// so a stale collaboration flag cannot authorize a dynamic writer target.
@@ -113,12 +135,31 @@ type Options struct {
 	WriteScheduler *writeclaim.SubagentScheduler
 	// WriteWorkspaceRoot normalizes parent write reservations.
 	WriteWorkspaceRoot string
+	// OnStart receives the agent a delegated run executes as, once, before it
+	// runs, so the host can reach it while it works. Nothing else about the run
+	// changes: the guidance it admits is read at the next tool boundary.
+	OnStart func(Steerer)
+	// ObserveRoot is where an unclassified call's effect is observed by walking
+	// the workspace before and after it. Set it only for an agent no other
+	// foreground writer runs beside; empty falls back to WriteWorkspaceRoot.
+	ObserveRoot string
+	// ExtraWorkspaceRoots are granted folders that count as the workspace beside
+	// WriteWorkspaceRoot: observed for changes and part of the work product, so
+	// a write there owes verification like one at the root.
+	ExtraWorkspaceRoots []string
+	// WorkspaceScanLimit is a test seam: it can only lower the walk bound.
+	// Zero is the production limit.
+	WorkspaceScanLimit int
 	// RenderRoot is the workspace a written page or image is opened from to look
 	// at it. Empty when this agent has no browser or its model cannot see one.
 	RenderRoot string
 	// WorkspaceVCS names the workspace's version control ("" for none) for
 	// the turn block. Resolved once by the host, never probed per turn.
 	WorkspaceVCS string
+	// WorkspaceUnversioned says the host established that no version-control
+	// root encloses the workspace. Unset means unknown, which keeps the
+	// delivery contract whole.
+	WorkspaceUnversioned bool
 
 	// WorkspaceLease serializes Delivery mutations across sessions that target
 	// the same workspace. nil preserves source compatibility for direct Agent
@@ -129,12 +170,21 @@ type Options struct {
 	ProjectChecks         []instruction.VerifyCheck
 	ProjectSensitivePaths []string
 
+	// EvidenceSeal seals each turn's shadow evidence bundle into Trusted Host
+	// State. nil seals nothing.
+	EvidenceSeal *EvidenceSeal
+
 	// DeliveryProfile enforces acceptance criteria before mutations and requires
 	// post-change review, verification, and evidence-backed sign-off before a
 	// final answer. It changes host control flow, not tool schemas.
 	// Deprecated: prefer AgentPreset + turn TaskPolicy. Still honored when
 	// AgentPreset is empty for one compatibility version of direct constructors.
 	DeliveryProfile bool
+
+	// WaiveOwedChecks is the user's choice to drop the check, review and
+	// sign-off a turn that changed files owes before it may finish. It never
+	// comes from a project file.
+	WaiveOwedChecks bool
 
 	// AgentPreset is the session role setting (balanced|delivery). Empty
 	// falls back to balanced unless DeliveryProfile is true (then delivery).
@@ -188,6 +238,11 @@ type Options struct {
 	SubagentDepth    int
 	MaxSubagentDepth int
 
+	// ProviderRetries is how many times a failed connection or header phase is
+	// retried: 0 keeps the provider package's default, provider.RetriesUntilCancelled
+	// removes the limit.
+	ProviderRetries int
+
 	// Extensions is the frozen extension dispatcher for this agent's controller
 	// generation (Extension Protocol v2). Nil means no runtime packages are
 	// installed; the run loop then passes every intercept point through
@@ -199,4 +254,13 @@ type Options struct {
 	// (or cloned for) sub-agents. nil disables v2 capture. Does not affect
 	// provider-visible tool schemas or prompts.
 	MutationObserver *checkpoint.MutationObserver
+
+	ProgressWatch ProgressWatch // zero watches nothing, which is what a sub-agent gets
+}
+
+func (o Options) observeRoot() string {
+	if root := strings.TrimSpace(o.ObserveRoot); root != "" {
+		return root
+	}
+	return strings.TrimSpace(o.WriteWorkspaceRoot)
 }

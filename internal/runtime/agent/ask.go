@@ -3,10 +3,13 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"reasonix/internal/contract/event"
+	"reasonix/internal/contract/tool"
 )
 
 // AskTool obtains what only the user can supply: a decision that is theirs, or a
@@ -70,6 +73,8 @@ func (*AskTool) DecisionBarrier() bool { return true }
 // and stays available in plan mode (clarifying scope while planning is fine).
 func (*AskTool) ReadOnly() bool { return true }
 
+func (*AskTool) Reach() tool.Reach { return tool.ReachHostControl }
+
 func (*AskTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
 	var p struct {
 		Questions []struct {
@@ -130,6 +135,9 @@ func (*AskTool) Execute(ctx context.Context, args json.RawMessage) (string, erro
 	}
 
 	answers, err := asker.Ask(ctx, qs)
+	if timedOut, ok := errors.AsType[*AskTimedOutError](err); ok {
+		return timedOut.result(), nil
+	}
 	if err != nil {
 		return "", fmt.Errorf("ask: %w", err)
 	}
@@ -180,4 +188,20 @@ func askReason(raw string) string {
 		return event.AskReasonMissingValue
 	}
 	return event.AskReasonUserDecision
+}
+
+// AskTimedOutError is the asker's word that nobody answered within the user's
+// ask-timeout setting. It is the host's own cause, so the model gets it as one
+// instead of an empty answer it could read as the user declining.
+type AskTimedOutError struct{ After time.Duration }
+
+func (e *AskTimedOutError) Error() string {
+	return fmt.Sprintf("no answer within %d seconds", int(e.After.Seconds()))
+}
+
+func (e *AskTimedOutError) result() string {
+	return fmt.Sprintf("skipped: the user did not answer within %d seconds, so the host skipped this question under their ask-timeout setting. "+
+		"That is a timeout, not an answer: no option was chosen for them and none counts as their preference. "+
+		"Carry on with whatever the task allows without this decision and state the assumption you proceed under in your reply, "+
+		"or call conclude_blocked naming the decision that is missing.", int(e.After.Seconds()))
 }

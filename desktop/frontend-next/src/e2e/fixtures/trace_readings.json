@@ -4,6 +4,7 @@
   "live": [
    {
     "kind": "turn_started",
+    "text": "go",
     "authoredTurn": 1,
     "msgIndex": 1,
     "modelRef": "test-model/x"
@@ -54,6 +55,17 @@
     "source": "executor"
    },
    {
+    "kind": "tool_dispatch",
+    "tool": {
+     "id": "call-write",
+     "name": "write_file",
+     "readOnly": false,
+     "refreshed": true,
+     "issuer": "model"
+    },
+    "source": "executor"
+   },
+   {
     "kind": "approval_request",
     "approval": {
      "id": "b1",
@@ -126,7 +138,7 @@
    {
     "kind": "notice",
     "text": "finishing what this turn still owes",
-    "detail": "This turn ended with work still outstanding:\n- run a relevant verification command after the latest write for the current role setting\nDo the remaining work, then verify it. Mark each finished item with complete_step — that is what advances the list; a todo_write that flips an item to completed is rejected. If an item should no longer be done — the request changed, or it was superseded — send a todo_write without it. If one turns on a decision only the user can make, put it to them with ask; not having heard back is not an answer to assume one from. If one cannot go on until the user says something only they can say, call await_user naming it — the list is kept and this message stops. If one cannot be done as specified, call conclude_blocked with the evidence for why.",
+    "detail": "This turn ended with work still outstanding:\n- run a relevant verification command after the latest write for the current role setting (not documentation-only: \"note.txt\" changed)\nDo the remaining work, then verify it. Mark each finished item with complete_step — that is what advances the list; a todo_write that flips an item to completed is rejected. If an item should no longer be done — the request changed, or it was superseded — send a todo_write without it. If one turns on a decision only the user can make, put it to them with ask; not having heard back is not an answer to assume one from. If one cannot go on until the user says something only they can say, call await_user naming it — the list is kept and this message stops. If one cannot be done as specified, call conclude_blocked with the evidence for why.",
     "level": "info"
    },
    {
@@ -167,7 +179,7 @@
    {
     "kind": "notice",
     "text": "finishing what this turn still owes",
-    "detail": "This turn ended with work still outstanding:\n- run a relevant verification command after the latest write for the current role setting\nDo the remaining work, then verify it. Mark each finished item with complete_step — that is what advances the list; a todo_write that flips an item to completed is rejected. If an item should no longer be done — the request changed, or it was superseded — send a todo_write without it. If one turns on a decision only the user can make, put it to them with ask; not having heard back is not an answer to assume one from. If one cannot go on until the user says something only they can say, call await_user naming it — the list is kept and this message stops. If one cannot be done as specified, call conclude_blocked with the evidence for why.",
+    "detail": "This turn ended with work still outstanding:\n- the verification owed after the latest write is still owed, as already explained: run a relevant verification command after it\nDo the remaining work, then verify it. Mark each finished item with complete_step — that is what advances the list; a todo_write that flips an item to completed is rejected. If an item should no longer be done — the request changed, or it was superseded — send a todo_write without it. If one turns on a decision only the user can make, put it to them with ask; not having heard back is not an answer to assume one from. If one cannot go on until the user says something only they can say, call await_user naming it — the list is kept and this message stops. If one cannot be done as specified, call conclude_blocked with the evidence for why.",
     "level": "info"
    },
    {
@@ -209,6 +221,7 @@
   "replay": [
    {
     "kind": "turn_started",
+    "text": "go",
     "authoredTurn": 1,
     "msgIndex": 1,
     "modelRef": "test-model/x"
@@ -244,6 +257,17 @@
      "id": "call-write",
      "name": "write_file",
      "readOnly": false,
+     "issuer": "model"
+    },
+    "source": "executor"
+   },
+   {
+    "kind": "tool_dispatch",
+    "tool": {
+     "id": "call-write",
+     "name": "write_file",
+     "readOnly": false,
+     "refreshed": true,
      "issuer": "model"
     },
     "source": "executor"
@@ -317,7 +341,7 @@
    {
     "kind": "notice",
     "text": "finishing what this turn still owes",
-    "detail": "This turn ended with work still outstanding:\n- run a relevant verification command after the latest write for the current role setting\nDo the remaining work, then verify it. Mark each finished item with complete_step — that is what advances the list; a todo_write that flips an item to completed is rejected. If an item should no longer be done — the request changed, or it was superseded — send a todo_write without it. If one turns on a decision only the user can make, put it to them with ask; not having heard back is not an answer to assume one from. If one cannot go on until the user says something only they can say, call await_user naming it — the list is kept and this message stops. If one cannot be done as specified, call conclude_blocked with the evidence for why.",
+    "detail": "This turn ended with work still outstanding:\n- run a relevant verification command after the latest write for the current role setting (not documentation-only: \"note.txt\" changed)\nDo the remaining work, then verify it. Mark each finished item with complete_step — that is what advances the list; a todo_write that flips an item to completed is rejected. If an item should no longer be done — the request changed, or it was superseded — send a todo_write without it. If one turns on a decision only the user can make, put it to them with ask; not having heard back is not an answer to assume one from. If one cannot go on until the user says something only they can say, call await_user naming it — the list is kept and this message stops. If one cannot be done as specified, call conclude_blocked with the evidence for why.",
     "level": "info"
    },
    {
@@ -348,7 +372,7 @@
    {
     "kind": "notice",
     "text": "finishing what this turn still owes",
-    "detail": "This turn ended with work still outstanding:\n- run a relevant verification command after the latest write for the current role setting\nDo the remaining work, then verify it. Mark each finished item with complete_step — that is what advances the list; a todo_write that flips an item to completed is rejected. If an item should no longer be done — the request changed, or it was superseded — send a todo_write without it. If one turns on a decision only the user can make, put it to them with ask; not having heard back is not an answer to assume one from. If one cannot go on until the user says something only they can say, call await_user naming it — the list is kept and this message stops. If one cannot be done as specified, call conclude_blocked with the evidence for why.",
+    "detail": "This turn ended with work still outstanding:\n- the verification owed after the latest write is still owed, as already explained: run a relevant verification command after it\nDo the remaining work, then verify it. Mark each finished item with complete_step — that is what advances the list; a todo_write that flips an item to completed is rejected. If an item should no longer be done — the request changed, or it was superseded — send a todo_write without it. If one turns on a decision only the user can make, put it to them with ask; not having heard back is not an answer to assume one from. If one cannot go on until the user says something only they can say, call await_user naming it — the list is kept and this message stops. If one cannot be done as specified, call conclude_blocked with the evidence for why.",
     "level": "info"
    },
    {
@@ -383,6 +407,7 @@
   "live": [
    {
     "kind": "turn_started",
+    "text": "[Reasonix: plan-first] build it",
     "authoredTurn": 1,
     "msgIndex": 1,
     "modelRef": "test-model/x"
@@ -517,11 +542,18 @@
      "attempt": 1,
      "max": 6
     }
+   },
+   {
+    "kind": "turn_done",
+    "checkpointTurn": 0,
+    "workDurationMs": 1,
+    "workStartedAt": 1
    }
   ],
   "replay": [
    {
     "kind": "turn_started",
+    "text": "[Reasonix: plan-first] build it",
     "authoredTurn": 1,
     "msgIndex": 1,
     "modelRef": "test-model/x"
@@ -620,6 +652,12 @@
      "attempt": 1,
      "max": 6
     }
+   },
+   {
+    "kind": "turn_done",
+    "checkpointTurn": 0,
+    "workDurationMs": 1,
+    "workStartedAt": 1
    }
   ]
  },
@@ -628,6 +666,7 @@
   "live": [
    {
     "kind": "turn_started",
+    "text": "go",
     "authoredTurn": 1,
     "msgIndex": 1,
     "modelRef": "test-model/x"
@@ -680,12 +719,15 @@
    },
    {
     "kind": "turn_done",
-    "checkpointTurn": 0
+    "checkpointTurn": 0,
+    "workDurationMs": 1,
+    "workStartedAt": 1
    }
   ],
   "replay": [
    {
     "kind": "turn_started",
+    "text": "go",
     "authoredTurn": 1,
     "msgIndex": 1,
     "modelRef": "test-model/x"
@@ -728,7 +770,9 @@
    },
    {
     "kind": "turn_done",
-    "checkpointTurn": 0
+    "checkpointTurn": 0,
+    "workDurationMs": 1,
+    "workStartedAt": 1
    }
   ]
  },
@@ -737,6 +781,7 @@
   "live": [
    {
     "kind": "turn_started",
+    "text": "go",
     "authoredTurn": 1,
     "msgIndex": 1,
     "modelRef": "test-model/x"
@@ -878,11 +923,18 @@
      "attempt": 1,
      "max": 6
     }
+   },
+   {
+    "kind": "turn_done",
+    "checkpointTurn": 0,
+    "workDurationMs": 1,
+    "workStartedAt": 1
    }
   ],
   "replay": [
    {
     "kind": "turn_started",
+    "text": "go",
     "authoredTurn": 1,
     "msgIndex": 1,
     "modelRef": "test-model/x"
@@ -1002,6 +1054,12 @@
      "attempt": 1,
      "max": 6
     }
+   },
+   {
+    "kind": "turn_done",
+    "checkpointTurn": 0,
+    "workDurationMs": 1,
+    "workStartedAt": 1
    }
   ]
  }

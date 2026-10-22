@@ -61,6 +61,24 @@ func (m *Manager) SetCompletionObserver(o CompletionObserver) {
 	m.mu.Unlock()
 }
 
+// Recorder is the installed task recorder, nil when none.
+func (m *Manager) Recorder() TaskRecorder { return m.taskRecorder }
+
+// ObservedBy reports whether o is the installed completion observer, and
+// Observed whether any is. A controller that adopts this manager uses them to
+// tell a manager it owns from one it only borrows until its switch is decided.
+func (m *Manager) ObservedBy(o CompletionObserver) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.completionObserver == o
+}
+
+func (m *Manager) Observed() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.completionObserver != nil
+}
+
 // publishCompletion hands the event to the observer and, when it reports the
 // event durable, drops the manager's own copy so the completion is not folded
 // into the next user turn as well.
@@ -140,17 +158,27 @@ func (m *Manager) recordCompletion(parentSession, id, kind, label, resultRef str
 		m.taskRecorder.RecordDone(id, st, err)
 	}
 
-	level, text := event.LevelInfo, fmt.Sprintf("background %s finished: %s", kind, id)
-	detail := ""
+	ne := event.Event{Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeJobFinished,
+		Text: fmt.Sprintf("background %s finished: %s", kind, id)}
+	payload := event.JobNotice{Kind: kind, ID: id, Label: label}.Encode()
 	switch st {
 	case Failed:
-		level, text = event.LevelWarn, fmt.Sprintf("background %s failed: needs attention", kind)
-		detail = fmt.Sprintf("background %s failed: %s — %v", kind, id, err)
+		ne.Level, ne.Code = event.LevelWarn, event.NoticeCodeJobFailed
+		ne.Text = fmt.Sprintf("background %s failed: %s — %v", kind, id, err)
+		failed := event.JobNotice{Kind: kind, ID: id, Label: label, Error: fmt.Sprint(err)}
+		if ex, ok := exitOf(err); ok {
+			failed.ExitCode, failed.Signal = &ex.Code, ex.Signal
+		}
+		ne.Detail = failed.Encode()
 	case Killed:
-		text = fmt.Sprintf("background %s killed: %s", kind, id)
+		ne.Code = event.NoticeCodeJobKilled
+		ne.Text = fmt.Sprintf("background %s killed: %s", kind, id)
+		ne.Detail = payload
+	default:
+		ne.Detail = payload
 	}
 	if shouldEmit {
-		m.sink.Emit(event.Event{Kind: event.Notice, Level: level, Text: text, Detail: detail})
+		m.sink.Emit(ne)
 	}
 	return ev
 }

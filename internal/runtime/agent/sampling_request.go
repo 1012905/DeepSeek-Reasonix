@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"time"
 
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
@@ -17,10 +19,20 @@ type samplingRequest struct {
 	// rejection by folding. The recovery is one-shot: a second rejection means
 	// the fold did not reach far enough, not that another one will.
 	overflowFolded bool
+	// overflowRecovery is why that fold did not produce a smaller request, kept
+	// so the failure the user sees names the recovery that was tried.
+	overflowRecovery error
+	// sent is what the visible view held when this request was built, the basis
+	// the provider's reported size is later anchored to.
+	sent usageAnchor
 }
 
 func (a *Agent) streamProviderRequest(ctx context.Context, req provider.Request) (<-chan provider.Chunk, error) {
-	return a.svc.prov.Stream(ctx, req)
+	ch, err := a.svc.prov.Stream(ctx, req)
+	if err == nil {
+		a.window().rememberSummaryPrefix(req)
+	}
+	return ch, err
 }
 
 func (a *Agent) handleSamplingError(
@@ -35,24 +47,29 @@ func (a *Agent) handleSamplingError(
 	if provider.IsStreamInterrupted(result.err) && attempt < maxSamplingAttempts {
 		streamSink.Discard()
 		reason := provider.StreamInterruptReason(result.err)
-		a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, reason, result.err)
+		a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, reason, result.err, 0)
+		delay := streamRetryDelay(attempt)
 		a.svc.sink.Emit(event.Event{
 			Kind: event.Retrying, RetryAttempt: attempt, RetryMax: maxStreamRecoveries,
-			RetryScope: event.RetryScopeStream,
+			RetryScope: event.RetryScopeStream, RetryCause: provider.RetryCauseOfStreamInterrupt(reason),
+			RetryDelayMs: delay.Milliseconds(),
 		})
-		if !streamRetrySleep(ctx, attempt) {
+		if !streamRetrySleep(ctx, delay) {
 			return false, streamedTurn{usage: finalizeSamplingUsage(billable, result.usage), attemptID: attemptID, interrupted: true, err: ctx.Err()}
 		}
 		return true, streamedTurn{}
 	}
-	if attempt < maxSamplingAttempts && a.recoverContextOverflow(ctx, frozen, result.err) {
+	if attempt < maxSamplingAttempts && a.window().recoverContextOverflow(ctx, frozen, result.err) {
 		streamSink.Discard()
-		a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, "context overflow", result.err)
+		a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, "context overflow", result.err, 0)
 		return true, streamedTurn{}
 	}
 	// Exhausted retries or non-retryable error: leave the last speculative UI
 	// visible (no discard) so LocalOnly can mirror it.
 	streamSink.Flush()
+	if frozen != nil && frozen.overflowRecovery != nil && last.err != nil {
+		last.err = fmt.Errorf("%w (context recovery did not help: %w)", last.err, frozen.overflowRecovery)
+	}
 	last.usage = finalizeSamplingUsage(billable, result.usage)
 	return false, last
 }
@@ -65,9 +82,9 @@ func (a *Agent) prepareSamplingRequest(ctx context.Context) (samplingRequest, er
 	if err != nil {
 		return samplingRequest{}, err
 	}
-	if budget, clipped, budgetErr := a.effectiveOutputBudget(frozen.req); budgetErr != nil {
+	if budget, clipped, budgetErr := a.window().effectiveOutputBudget(frozen.req); budgetErr != nil {
 		// One-shot physical overflow recovery. Do not loop.
-		if _, perr := a.contextManager().Prepare(ctx, ContextPreparePolicy{
+		if _, perr := a.window().contextManager().Prepare(ctx, ContextPreparePolicy{
 			Trigger: CompactionTriggerOverflow,
 		}); perr != nil {
 			return samplingRequest{}, budgetErr
@@ -76,29 +93,31 @@ func (a *Agent) prepareSamplingRequest(ctx context.Context) (samplingRequest, er
 		if rerr != nil {
 			return samplingRequest{}, rerr
 		}
-		if _, _, budgetErr2 := a.effectiveOutputBudget(rebuilt.req); budgetErr2 != nil {
+		if _, _, budgetErr2 := a.window().effectiveOutputBudget(rebuilt.req); budgetErr2 != nil {
 			return samplingRequest{}, budgetErr2
 		}
 		// Re-apply clipping on the recovered view.
-		if budget2, clipped2, err2 := a.effectiveOutputBudget(rebuilt.req); err2 == nil && clipped2 {
+		if budget2, clipped2, err2 := a.window().effectiveOutputBudget(rebuilt.req); err2 == nil && clipped2 {
 			rebuilt.req.MaxTokens = budget2
 		}
-		shape := a.requestCalibrationShape(rebuilt.req)
+		shape := a.window().requestCalibrationShape(rebuilt.req)
 		a.sess.output.activeReqShape.Store(&shape)
-		return samplingRequest{req: freezeProviderRequest(rebuilt.req)}, nil
+		a.sess.output.usageAnchor.Store(&rebuilt.sent)
+		return samplingRequest{req: freezeProviderRequest(rebuilt.req), sent: rebuilt.sent}, nil
 	} else if clipped {
 		frozen.req.MaxTokens = budget
 	}
-	shape := a.requestCalibrationShape(frozen.req)
+	shape := a.window().requestCalibrationShape(frozen.req)
 	a.sess.output.activeReqShape.Store(&shape)
-	return samplingRequest{req: freezeProviderRequest(frozen.req)}, nil
+	a.sess.output.usageAnchor.Store(&frozen.sent)
+	return samplingRequest{req: freezeProviderRequest(frozen.req), sent: frozen.sent}, nil
 }
 
 func (a *Agent) buildSamplingRequest(ctx context.Context, trigger string) (samplingRequest, error) {
 	// CreatedAt is durable UI metadata, not model input. Strip it from the
 	// transport copy so wall-clock differences never invalidate the provider's
 	// prompt-cache prefix (and custom providers cannot accidentally send it).
-	prepared, err := a.contextManager().Prepare(ctx, ContextPreparePolicy{Trigger: trigger})
+	prepared, err := a.window().contextManager().Prepare(ctx, ContextPreparePolicy{Trigger: trigger})
 	if err != nil {
 		return samplingRequest{}, err
 	}
@@ -129,7 +148,18 @@ func (a *Agent) buildSamplingRequest(ctx context.Context, trigger string) (sampl
 	if err != nil {
 		return samplingRequest{}, err
 	}
-	return samplingRequest{req: req}, nil
+	// Host-owned and set after the extension ruling: the payload it rewrites
+	// has no mode, and a replaced request must not drop the session's choice.
+	req.Mode = a.sess.mode.get()
+	// The same rule for the session's switched depth; an unset one leaves any override an extension set.
+	if level := a.sess.effort.get(); level != "" {
+		req.EffortOverride = level
+	}
+	sent := usageAnchor{
+		visible:           a.window().visibleRequestShape(prepared.Messages),
+		projectionVersion: prepared.ProjectionVersion,
+	}
+	return samplingRequest{req: req, sent: sent}, nil
 }
 
 // providerProjectionMessages applies provider-specific role compatibility to a
@@ -182,4 +212,26 @@ func freezeProviderRequest(req provider.Request) provider.Request {
 		out.ResponseFormat = &rf
 	}
 	return out
+}
+
+// withHeaderRetries makes a request report its connection retries to the sink
+// and, when the user set one, apply their retry limit.
+func withHeaderRetries(ctx context.Context, sink event.Sink, limit int) context.Context {
+	ctx = provider.WithRetryNotify(ctx, headerRetryNotice(sink))
+	if limit != 0 {
+		ctx = provider.WithRetryLimit(ctx, limit)
+	}
+	return ctx
+}
+
+// headerRetryNotice turns a connection+header backoff into the Retrying event a
+// frontend words, carrying what the provider knew about why it failed.
+func headerRetryNotice(sink event.Sink) provider.RetryNotify {
+	return func(info provider.RetryInfo) {
+		sink.Emit(event.Event{
+			Kind: event.Retrying, RetryAttempt: info.Attempt, RetryMax: info.Max, RetryScope: event.RetryScopeHeaders,
+			RetryCause: info.Cause, RetryStatus: info.Status,
+			RetryDelayMs: info.Delay.Milliseconds(), RetryTimeoutSecs: int(info.Timeout / time.Second),
+		})
+	}
 }

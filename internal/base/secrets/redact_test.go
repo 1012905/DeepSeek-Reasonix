@@ -42,8 +42,13 @@ func TestRedactLongConcurrentTranscriptAvoidsRegexpBacktracking(t *testing.T) {
 	}
 	input := transcript.String()
 
-	const workers = 24
-	const iterations = 20
+	workers, iterations := 24, 20
+	// Under -race the full load runs close to the ten-minute test limit. A few
+	// concurrent workers still expose a data race; the full load is the check
+	// on backtracking, and the ordinary run keeps it.
+	if raceDetector {
+		workers, iterations = 4, 2
+	}
 	var wg sync.WaitGroup
 	errs := make(chan string, workers)
 	for range workers {
@@ -299,4 +304,21 @@ func TestProcessEnvAlwaysFiltersRegisteredCredentialKeys(t *testing.T) {
 	if !strings.Contains(joined, "REASONIX_TEST_BENIGN_ENV=visible") {
 		t.Fatalf("ordinary env was removed with opt-in filtering off:\n%s", joined)
 	}
+}
+
+func TestProcessEnvMarksSubprocessesAsAgentChildren(t *testing.T) {
+	t.Setenv(AgentChildEnv, "0")
+	for _, filtered := range []bool{false, true} {
+		SetFilterSubprocessEnv(filtered)
+		var marks []string
+		for _, item := range ProcessEnv() {
+			if strings.HasPrefix(item, AgentChildEnv+"=") {
+				marks = append(marks, item)
+			}
+		}
+		if len(marks) != 1 || marks[0] != AgentChildEnv+"=1" {
+			t.Fatalf("filter=%v: marker = %v, want exactly one %s=1", filtered, marks, AgentChildEnv)
+		}
+	}
+	SetFilterSubprocessEnv(false)
 }

@@ -86,7 +86,7 @@ func TestDisplayName(t *testing.T) {
 }
 
 func TestRunForegroundSuccess(t *testing.T) {
-	argv, sh := shellArgv(t, "printf 'ok\\n'")
+	argv, sh := shellArgv(t, "echo ok")
 	res := RunForeground(context.Background(), Request{
 		Argv:      argv,
 		ShellKind: sh.Kind.String(),
@@ -149,20 +149,20 @@ func TestRunForegroundTimeout(t *testing.T) {
 }
 
 // A run that printed before the deadline is a different situation from one that
-// printed nothing, and the output alone cannot distinguish them.
+// printed nothing, and the output alone cannot distinguish them. The child is
+// injected: the deadline starts at launch, so with a real interpreter whether
+// "started" lands before it is a race against interpreter startup.
 func TestRunForegroundTimeoutKeepsQuietWhenOutputExists(t *testing.T) {
-	cmd := "printf started; sleep 5"
-	sh := sandbox.ResolveShell("auto", "", nil)
-	if sh.Kind == sandbox.ShellPowerShell {
-		cmd = "Write-Output started; Start-Sleep -Seconds 5"
-	}
-	argv, _ := shellArgv(t, cmd)
 	res := RunForeground(context.Background(), Request{
-		Argv:      argv,
-		Timeout:   500 * time.Millisecond,
-		ShellKind: sh.Kind.String(),
-		ShellPath: sh.Path,
-		Track:     true,
+		Argv:    []string{"unused"},
+		Timeout: 50 * time.Millisecond,
+		Run: func(ctx context.Context, cmd *exec.Cmd, _ proc.RunOptions) (*proc.TrackedCommand, error) {
+			if _, err := io.WriteString(cmd.Stdout, "started"); err != nil {
+				return nil, err
+			}
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
 	})
 	if res.State != tool.ShellStateTimedOut {
 		t.Fatalf("state = %s err=%v", res.State, res.Err)
@@ -205,9 +205,10 @@ func TestRunForegroundLaunchFailure(t *testing.T) {
 
 func TestRunForegroundOutputTailBounded(t *testing.T) {
 	payload := strings.Repeat("中文", 3000)
-	// Keep the command under typical argv length limits.
+	// Keep the command under typical argv length limits, on a character
+	// boundary: the child's output ends where it stopped writing, not at a cut.
 	if len(payload) > 4000 {
-		payload = payload[:4000]
+		payload = strings.ToValidUTF8(payload[:4000], "")
 	}
 	sh := sandbox.ResolveShell("auto", "", nil)
 	var command string

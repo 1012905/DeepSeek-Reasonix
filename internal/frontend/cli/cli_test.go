@@ -193,10 +193,9 @@ func hasPluginNamed(cfg *config.Config, name string) bool {
 }
 
 func TestMetadataCommandsDoNotProbeTerminalTheme(t *testing.T) {
-	defer func(prev func() (terminalRGB, bool)) { terminalProbe = prev }(terminalProbe)
-	terminalProbe = func() (terminalRGB, bool) {
+	defer func(prev func()) { configureThemeForTTYOutput = prev }(configureThemeForTTYOutput)
+	configureThemeForTTYOutput = func() {
 		t.Fatal("metadata command should not query terminal background")
-		return terminalRGB{}, false
 	}
 
 	out := captureStdout(t, func() {
@@ -218,6 +217,71 @@ func TestMetadataCommandsDoNotProbeTerminalTheme(t *testing.T) {
 	}
 	if !strings.Contains(out, "reasonix run [--model NAME] [--max-steps N] [-c|--continue] [--resume PATH] [--copy] [--output-format FORMAT] <task>") {
 		t.Fatalf("help output missing run resume flags:\n%s", out)
+	}
+}
+
+// --continue with no saved session reports the miss and starts a fresh session
+// instead of aborting. In the isolated home the run then stops at provider
+// resolution, which proves it advanced past the resume check.
+func TestRunContinueWithoutSessionsStartsFresh(t *testing.T) {
+	isolateCLIConfigHome(t)
+
+	var rc int
+	stderr := captureStderr(t, func() {
+		rc = runAgent([]string{"--continue", "hello"}, "test-version")
+	})
+	if strings.Contains(stderr, i18n.M.NoSessionToResume) {
+		t.Fatalf("--continue aborted on the missing-session check: %q", stderr)
+	}
+	if !strings.Contains(stderr, i18n.M.NoSessionToResumeStartingNew) {
+		t.Fatalf("--continue did not report the fresh-session fallback: %q", stderr)
+	}
+	if !strings.Contains(stderr, "provider") {
+		t.Fatalf("--continue did not reach provider resolution after the fallback: %q", stderr)
+	}
+	if rc == 0 {
+		t.Fatalf("run rc = 0, want non-zero (the isolated home has no provider)")
+	}
+}
+
+// --continue --copy with no saved session has nothing to duplicate; it starts a
+// fresh session instead of failing on the --copy check. As above, reaching
+// provider resolution proves it advanced past both checks.
+func TestRunContinueCopyWithoutSessionsStartsFresh(t *testing.T) {
+	isolateCLIConfigHome(t)
+
+	var rc int
+	stderr := captureStderr(t, func() {
+		rc = runAgent([]string{"--continue", "--copy", "hello"}, "test-version")
+	})
+	if strings.Contains(stderr, "--copy requires") {
+		t.Fatalf("--continue --copy failed on the --copy check: %q", stderr)
+	}
+	if !strings.Contains(stderr, i18n.M.NoSessionToResumeStartingNew) {
+		t.Fatalf("--continue --copy did not report the fresh-session fallback: %q", stderr)
+	}
+	if !strings.Contains(stderr, "provider") {
+		t.Fatalf("--continue --copy did not reach provider resolution: %q", stderr)
+	}
+	if rc == 0 {
+		t.Fatalf("run rc = 0, want non-zero (the isolated home has no provider)")
+	}
+}
+
+// --copy with neither --resume nor --continue has nothing to duplicate, so it
+// stays a usage error.
+func TestRunCopyWithNoResumeIsUsageError(t *testing.T) {
+	isolateCLIConfigHome(t)
+
+	var rc int
+	stderr := captureStderr(t, func() {
+		rc = runAgent([]string{"--copy", "hello"}, "test-version")
+	})
+	if rc != 2 {
+		t.Fatalf("run --copy rc = %d, want 2", rc)
+	}
+	if !strings.Contains(stderr, "--copy requires --resume or --continue") {
+		t.Fatalf("run --copy stderr = %q", stderr)
 	}
 }
 
@@ -334,6 +398,10 @@ func TestParsePermissionModeClaudeAliases(t *testing.T) {
 		"dontAsk":           {approval: control.ToolApprovalDontAsk},
 		"plan":              {approval: control.ToolApprovalAsk, plan: true},
 		"bypassPermissions": {approval: control.ToolApprovalYolo},
+		// 1.x's names, so a 1.x command line keeps working.
+		"workspace-write":    {approval: control.ToolApprovalAuto},
+		"danger-full-access": {approval: control.ToolApprovalYolo},
+		"read-only":          {approval: control.ToolApprovalReadOnly},
 	}
 	for input, want := range tests {
 		got, err := parsePermissionMode(input)
@@ -344,13 +412,13 @@ func TestParsePermissionModeClaudeAliases(t *testing.T) {
 }
 
 func TestResolveRunPermissionModeRequiresExplicitAuto(t *testing.T) {
-	if got, err := resolveRunPermissionMode("ask", false, false); err != nil || got != "ask" {
+	if got, err := resolveRunPermissionMode("ask", false, false, false); err != nil || got != "ask" {
 		t.Fatalf("default run permission mode = (%q, %v), want ask", got, err)
 	}
-	if got, err := resolveRunPermissionMode("ask", true, false); err != nil || got != "auto" {
+	if got, err := resolveRunPermissionMode("ask", true, false, false); err != nil || got != "auto" {
 		t.Fatalf("-y run permission mode = (%q, %v), want auto", got, err)
 	}
-	if got, err := resolveRunPermissionMode("dontAsk", true, true); err == nil || got != "" {
+	if got, err := resolveRunPermissionMode("dontAsk", true, false, true); err == nil || got != "" {
 		t.Fatalf("combined permission flags = (%q, %v), want conflict", got, err)
 	}
 }
@@ -384,7 +452,7 @@ command = "legacy-bin"
 	if err != nil {
 		t.Fatalf("read migrated user config: %v", err)
 	}
-	for _, want := range []string{`config_version = 6`, `[desktop]`, `name    = "legacy-cli"`} {
+	for _, want := range []string{`config_version = 12`, `[desktop]`, `name    = "legacy-cli"`} {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("migrated config missing %q:\n%s", want, body)
 		}
@@ -677,14 +745,14 @@ func TestConfigCompactRatioLocalCreatesMinimalProjectOverride(t *testing.T) {
 func TestConfigCompactRatioRejectsValuesOutsideEditableRange(t *testing.T) {
 	isolateCLIConfigHome(t)
 
-	for _, value := range []string{"64", "86", "NaN", "+Inf", "not-a-number"} {
+	for _, value := range []string{"0", "100", "NaN", "+Inf", "not-a-number", "", "70%", "-1"} {
 		t.Run(value, func(t *testing.T) {
 			errOut := captureStderr(t, func() {
-				if rc := Run([]string{"config", "compact-ratio", value}, "test-version"); rc != 2 {
+				if rc := Run([]string{"config", "compact-ratio", "--", value}, "test-version"); rc != 2 {
 					t.Fatalf("config compact-ratio %s rc = %d, want 2", value, rc)
 				}
 			})
-			if !strings.Contains(errOut, "percentage between 65 and 85") {
+			if !strings.Contains(errOut, "percentage above 0 and below 100") {
 				t.Fatalf("config compact-ratio %s stderr = %q", value, errOut)
 			}
 		})
@@ -840,6 +908,36 @@ func TestWithNotificationsWrapsCLISinkWithConfiguredSender(t *testing.T) {
 	}
 	if sender.messages[0].Body != i18n.M.NotifyTurnDone {
 		t.Fatalf("notification body = %q, want %q", sender.messages[0].Body, i18n.M.NotifyTurnDone)
+	}
+}
+
+type cliChimeSender struct {
+	cliRecordSender
+	chimes int
+}
+
+func (s *cliChimeSender) Chime() error {
+	s.chimes++
+	return nil
+}
+
+func TestWithNotificationsChimesForSoundAloneAndNeverByDefault(t *testing.T) {
+	sender := &cliChimeSender{}
+	prev := newNotificationSender
+	newNotificationSender = func() notify.Sender { return sender }
+	t.Cleanup(func() { newNotificationSender = prev })
+
+	quiet := withNotifications(&cliRecordSink{}, config.Default())
+	quiet.Emit(event.Event{Kind: event.TurnDone})
+	if sender.chimes != 0 || len(sender.messages) != 0 {
+		t.Fatalf("a default config made noise: chimes=%d messages=%d", sender.chimes, len(sender.messages))
+	}
+
+	cfg := config.Default()
+	cfg.Notifications.Sound = true
+	withNotifications(&cliRecordSink{}, cfg).Emit(event.Event{Kind: event.TurnDone})
+	if sender.chimes != 1 || len(sender.messages) != 0 {
+		t.Fatalf("sound alone: chimes=%d messages=%d, want 1 chime and no toast", sender.chimes, len(sender.messages))
 	}
 }
 
@@ -1938,23 +2036,7 @@ func TestWriteDefaultConfigOmitsLegacyInternalMCPSections(t *testing.T) {
 
 func captureStderr(t *testing.T, fn func()) string {
 	t.Helper()
-	old := os.Stderr
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.Stderr = w
-	defer func() { os.Stderr = old }()
-
-	fn()
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	data, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(data)
+	return captureProcessOutput(t, &os.Stderr, fn)
 }
 
 func captureCLIOutput(t *testing.T, fn func()) (stdout, stderr string) {

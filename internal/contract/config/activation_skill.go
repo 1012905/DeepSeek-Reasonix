@@ -129,3 +129,10 @@ func (s *ActivationStore) SkillOverrideScope(name, root string) (ActivationScope
 	scope, found := resolver.Scope(name)
 	return scope, found, nil
 }
+
+// ImplicitSkillInvocationEnabled reports whether the model may discover and
+// invoke skills without an explicit user slash command. The zero value keeps
+// the historical default enabled for old configs.
+func (c *Config) ImplicitSkillInvocationEnabled() bool {
+	return c == nil || !c.Skills.DisableImplicitInvocation
+}

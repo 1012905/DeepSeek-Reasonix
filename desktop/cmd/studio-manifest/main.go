@@ -23,17 +23,24 @@ import (
 const artifactPrefix = "ReasonixStudio-"
 
 func main() {
-	if len(os.Args) != 4 {
-		fmt.Fprintln(os.Stderr, "usage: studio-manifest <dir> <version> <tag>")
+	if len(os.Args) != 4 && len(os.Args) != 5 {
+		fmt.Fprintln(os.Stderr, "usage: studio-manifest <dir> <version> <tag> [delta-dir]")
 		os.Exit(2)
 	}
-	if err := run(os.Args[1], os.Args[2], os.Args[3]); err != nil {
+	deltaDir := ""
+	if len(os.Args) == 5 {
+		deltaDir = os.Args[4]
+	}
+	// HAS_R2 is the release workflow's own gate on uploading the mirror, so the
+	// manifest names mirror addresses exactly when that upload will run.
+	mirrored := os.Getenv("HAS_R2") == "true"
+	if err := run(os.Args[1], os.Args[2], os.Args[3], deltaDir, mirrored); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run(dir, version, tag string) error {
+func run(dir, version, tag, deltaDir string, mirrored bool) error {
 	repo := os.Getenv("GITHUB_REPOSITORY")
 	if strings.TrimSpace(repo) == "" {
 		return fmt.Errorf("studio-manifest: GITHUB_REPOSITORY is unset, so asset URLs cannot be built")
@@ -62,8 +69,8 @@ func run(dir, version, tag string) error {
 		if err != nil {
 			return err
 		}
-		url := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", repo, tag, name)
-		asset := update.Asset{URL: url, Sig: url + ".minisig", Size: size, SHA256: sum}
+		asset := releaseAsset(repo, tag, name, mirrored)
+		asset.Size, asset.SHA256 = size, sum
 		// Downloads is what a person is offered, so it lists what installs
 		// itself. A portable archive stays a release asset, but offering it
 		// beside the installer only asks the reader to choose blind.
@@ -74,6 +81,12 @@ func run(dir, version, tag string) error {
 		// A .deb installs through dpkg, which carries a binary and the SPA tree
 		// alike, so Linux updates through its package.
 		if key, ok := nativePackageKey(name); ok {
+			m.NativePackages[key] = asset
+			fmt.Printf("native package: %s -> %s\n", name, key)
+		}
+		// The .rpm rides beside the .deb under its own key: the deb's key is the
+		// one every installed client already reads.
+		if key, ok := rpmPackageKey(name); ok {
 			m.NativePackages[key] = asset
 			fmt.Printf("native package: %s -> %s\n", name, key)
 		}
@@ -95,6 +108,11 @@ func run(dir, version, tag string) error {
 	if seen == 0 {
 		return fmt.Errorf("studio-manifest: no %s* artifacts in %s", artifactPrefix, dir)
 	}
+	if deltaDir != "" {
+		if m.Deltas, err = deltas(deltaDir, tag); err != nil {
+			return err
+		}
+	}
 	b, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err
@@ -102,13 +120,31 @@ func run(dir, version, tag string) error {
 	return os.WriteFile(filepath.Join(dir, "latest.json"), append(b, '\n'), 0o644)
 }
 
-// installable reports whether an artifact installs itself rather than expecting
-// the reader to place it: a disk image to drag from, an installer to run, a
-// package for dpkg.
+// releaseAsset addresses one artifact. The mirror serves it first when there is
+// one: GitHub's release CDN is what a CN route reaches slowest, and it stays as
+// the fallback for a mirror that is down.
+func releaseAsset(repo, tag, name string, mirrored bool) update.Asset {
+	github := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", repo, tag, name)
+	if !mirrored {
+		return update.Asset{URL: github, Sig: github + ".minisig"}
+	}
+	mirror := fmt.Sprintf("%s/%s/%s", update.StudioMirror, tag, name)
+	return update.Asset{
+		URL: mirror, Sig: mirror + ".minisig",
+		Fallback: github, FallbackSig: github + ".minisig",
+	}
+}
+
+// installable reports whether an artifact is a download a person is offered: a
+// disk image to drag from, an installer to run, a package for dpkg or rpm, or an
+// AppImage to run in place. The AppImage is a download only; no native_packages
+// key names it, so no client replaces one.
 func installable(name string) bool {
 	return strings.HasSuffix(name, ".dmg") ||
 		strings.HasSuffix(name, "-installer.exe") ||
-		strings.HasSuffix(name, ".deb")
+		strings.HasSuffix(name, ".deb") ||
+		strings.HasSuffix(name, ".rpm") ||
+		strings.HasSuffix(name, ".AppImage")
 }
 
 // macArchiveKeys maps a macOS archive to the platforms it can install. The
@@ -156,6 +192,20 @@ func nativePackageKey(name string) (string, bool) {
 		return "", false
 	}
 	return update.PlatformKey("linux", arch), true
+}
+
+// rpmPackageKey maps a ReasonixStudio-linux-<arch>.rpm artifact to its
+// native_packages key.
+func rpmPackageKey(name string) (string, bool) {
+	base, ok := strings.CutSuffix(name, ".rpm")
+	if !ok {
+		return "", false
+	}
+	arch, ok := strings.CutPrefix(base, artifactPrefix+"linux-")
+	if !ok || arch == "" {
+		return "", false
+	}
+	return update.RPMPackageKey("linux", arch), true
 }
 
 func hashFile(path string) (int64, string, error) {

@@ -431,11 +431,17 @@ func (c *Controller) resolveSkillInvocation(input string) (skill.Skill, string, 
 // runAs=subagent skills: direct slash invocation executes those through the
 // isolated SkillRunner instead.
 func (c *Controller) RunSkill(input string) (sent string, found bool) {
+	sent, _, found = c.RunSkillWithName(input)
+	return sent, found
+}
+
+// RunSkillWithName returns the resolved skill name with its rendered invocation.
+func (c *Controller) RunSkillWithName(input string) (sent, name string, found bool) {
 	sk, task, ok := c.resolveSkillInvocation(input)
 	if !ok {
-		return "", false
+		return "", "", false
 	}
-	return c.skills.render(sk, task), true
+	return c.skills.renderInvocation(sk, task), sk.Name, true
 }
 
 // MCPPrompt resolves a "/mcp__server__prompt args…" line: it maps the positional
@@ -469,7 +475,12 @@ func (c *Controller) MCPPrompt(ctx context.Context, input string) (sent string, 
 	}
 	text, err := prompts[idx].Get(ctx, args)
 	if err != nil {
-		return "", true, err
+		if ctx.Err() != nil {
+			return "", true, err
+		}
+		failure := &MCPPromptError{Prompt: name, Server: prompts[idx].Server, Stage: mcpPromptStageGet, Err: err}
+		c.mcp.promptFailures.owe(failure.turnNote())
+		return "", true, failure
 	}
 	return text, true, nil
 }

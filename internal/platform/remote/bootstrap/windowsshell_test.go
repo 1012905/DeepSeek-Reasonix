@@ -1,10 +1,15 @@
 package bootstrap
 
 import (
+	"context"
 	"encoding/base64"
+	"errors"
 	"strings"
 	"testing"
 	"unicode/utf16"
+
+	"reasonix/internal/platform/remote"
+	"reasonix/internal/platform/remote/sftpfs"
 )
 
 // decodePS reads back what cmd would have handed PowerShell, so a test can
@@ -15,15 +20,10 @@ func decodePS(t *testing.T, command string) string {
 	if !ok {
 		t.Fatalf("command is not encoded: %s", command)
 	}
-	raw, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
+	if _, err := base64.StdEncoding.DecodeString(encoded); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	units := make([]uint16, 0, len(raw)/2)
-	for i := 0; i+1 < len(raw); i += 2 {
-		units = append(units, uint16(raw[i])|uint16(raw[i+1])<<8)
-	}
-	return string(utf16.Decode(units))
+	return decodeB64UTF16(encoded)
 }
 
 func hostileWindowsPaths(t *testing.T) (StatePaths, string, string) {
@@ -67,6 +67,9 @@ func TestWindowsLaunchQuotesHostilePaths(t *testing.T) {
 	paths, bin, workspace := hostileWindowsPaths(t)
 	outer := decodePS(t, windowsShell{}.Launch(LaunchSpec{Bin: bin, Workspace: workspace}, paths))
 
+	if strings.Contains(outer, "Remove-Item") {
+		t.Fatalf("the launch deletes files a running serve may have published:\n%s", outer)
+	}
 	// The apostrophe in the home directory reaches the script doubled, which is
 	// how PowerShell spells a literal one.
 	if !strings.Contains(outer, "O''Hara") {
@@ -76,9 +79,8 @@ func TestWindowsLaunchQuotesHostilePaths(t *testing.T) {
 	if strings.Contains(outer, "; rm -rf ") && !strings.Contains(outer, "'") {
 		t.Fatal("workspace escaped its quotes")
 	}
-	// The inner script is itself encoded, so the serve's own arguments never
-	// pass through a second round of shell parsing.
-	inner := decodePS(t, "-EncodedCommand "+innerPayload(t, outer))
+	_, script := (windowsShell{}).LaunchScript(LaunchSpec{Bin: bin, Workspace: workspace}, paths)
+	inner := string(script)
 	if !strings.Contains(inner, "--token-file") || !strings.Contains(inner, "--port-file") {
 		t.Fatalf("inner script does not start a serve:\n%s", inner)
 	}
@@ -90,22 +92,6 @@ func TestWindowsLaunchQuotesHostilePaths(t *testing.T) {
 	if !strings.Contains(inner, "%USERPROFILE%") {
 		t.Fatalf("a literal %%USERPROFILE%% was lost:\n%s", inner)
 	}
-}
-
-// innerPayload pulls the nested -EncodedCommand argument out of the launcher.
-func innerPayload(t *testing.T, outer string) string {
-	t.Helper()
-	const marker = "-EncodedCommand "
-	at := strings.LastIndex(outer, marker)
-	if at < 0 {
-		t.Fatalf("no nested command in:\n%s", outer)
-	}
-	rest := outer[at+len(marker):]
-	end := strings.IndexAny(rest, "'\" ")
-	if end < 0 {
-		t.Fatalf("nested command does not end:\n%s", outer)
-	}
-	return rest[:end]
 }
 
 // The two spellings of one path: the file layer addresses /C:/Users/..., the
@@ -138,6 +124,70 @@ func TestParseWindowsEnv(t *testing.T) {
 	for _, out := range []string{"", "%OS% %PROCESSOR_ARCHITECTURE%", "Windows_NT IA64", "Linux x86_64"} {
 		if _, _, err := ParseWindowsEnv(out); err == nil {
 			t.Fatalf("ParseWindowsEnv(%q) was accepted", out)
+		}
+	}
+}
+
+// loginShell stands in for whichever shell OpenSSH on Windows was configured to
+// start. Each one runs powershell.exe the same way; they differ in what they
+// make of uname and of cmd's %VAR% syntax.
+type loginShell struct {
+	uname   string // stdout of `uname -sm`, empty when the shell has no uname
+	percent bool   // whether %VAR% expands, which only cmd does
+}
+
+func (s loginShell) Exec(_ context.Context, cmd string) (remote.ExecResult, error) {
+	if strings.HasPrefix(cmd, "powershell ") {
+		_, encoded, _ := strings.Cut(cmd, "-EncodedCommand ")
+		if strings.ContainsAny(encoded, " \t") {
+			return remote.ExecResult{ExitCode: 1}, nil
+		}
+		if strings.Contains(decodeB64UTF16(encoded), "$env:PROCESSOR_ARCHITECTURE") {
+			return remote.ExecResult{Stdout: []byte("Windows_NT AMD64\r\n")}, nil
+		}
+		return remote.ExecResult{}, nil
+	}
+	if cmd == "uname -sm" {
+		if s.uname == "" {
+			return remote.ExecResult{ExitCode: 1, Stderr: []byte("'uname' is not recognized")}, nil
+		}
+		return remote.ExecResult{Stdout: []byte(s.uname)}, nil
+	}
+	if out, ok := strings.CutPrefix(cmd, "echo "); ok {
+		if s.percent {
+			out = strings.NewReplacer("%OS%", "Windows_NT", "%PROCESSOR_ARCHITECTURE%", "AMD64").Replace(out)
+		}
+		return remote.ExecResult{Stdout: []byte(out + "\n")}, nil
+	}
+	return remote.ExecResult{ExitCode: 127}, nil
+}
+
+func (loginShell) Files() (sftpfs.Files, error) { return nil, errors.New("no file layer here") }
+
+func decodeB64UTF16(encoded string) string {
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return ""
+	}
+	units := make([]uint16, 0, len(raw)/2)
+	for i := 0; i+1 < len(raw); i += 2 {
+		units = append(units, uint16(raw[i])|uint16(raw[i+1])<<8)
+	}
+	return string(utf16.Decode(units))
+}
+
+// OpenSSH's DefaultShell can be cmd, PowerShell or Git Bash, and the machine
+// behind all three is the same Windows host the rest of windowsShell drives.
+func TestWindowsIsIdentifiedWhateverTheLoginShell(t *testing.T) {
+	for name, shell := range map[string]loginShell{
+		"cmd":        {percent: true},
+		"powershell": {},
+		"git bash":   {uname: "MSYS_NT-10.0-26200 x86_64\n"},
+		"mingw":      {uname: "MINGW64_NT-10.0-19045 x86_64\n"},
+	} {
+		goos, goarch, err := detectPlatform(context.Background(), shell)
+		if err != nil || goos != "windows" || goarch != "amd64" {
+			t.Fatalf("%s: detectPlatform = %q/%q, %v; want windows/amd64", name, goos, goarch, err)
 		}
 	}
 }

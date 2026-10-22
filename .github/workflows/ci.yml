@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Cheap path gate for pull requests. PRs confined to docs/release-notes
@@ -26,20 +26,24 @@ jobs:
   # merges. Gated jobs skip only on an explicit `false` output: wrapped in
   # `always()`, a failed `changes` job (or a missing output) makes them run
   # the full matrix instead of silently passing required checks as skipped.
-  # Pushes to main-v2 always run everything.
+  # Pushes to main-v2 always run everything. Pull requests run the macOS and
+  # Windows legs only when `platform` is not 'false'; the rule lives in
+  # scripts/ci-platform-scope.sh and fails toward running them.
   changes:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
       desktop: ${{ steps.filter.outputs.desktop }}
       sdk: ${{ steps.filter.outputs.sdk }}
+      scripts: ${{ steps.filter.outputs.scripts }}
+      platform: ${{ steps.filter.outputs.platform }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       - id: filter
         run: |
-          code=true; desktop=true; sdk=true
+          code=true; desktop=true; sdk=true; scripts=true; platform=true
           base=""
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base="${{ github.event.pull_request.base.sha }}"
@@ -47,9 +51,9 @@ jobs:
             base="${{ github.event.before }}"
           fi
           if [ -n "$base" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then
-            files=$(git diff --name-only "$base" HEAD)
+            files=$(git diff --name-only --no-renames "$base" HEAD)
             if [ -n "$files" ]; then
-              code=false; desktop=false; sdk=false
+              code=false; desktop=false; sdk=false; scripts=false
               # Root-module CI: desktop/ is a separate module, so only the
               # clearly unrelated paths below can skip it.
               if echo "$files" | grep -qvE '^(docs/|release-notes/|desktop/|workers/|[^/]+\.md$)'; then code=true; fi
@@ -60,9 +64,31 @@ jobs:
               # its DTOs are generated from internal/ext/extension/protocol, so
               # both paths must trigger the sdk job.
               if echo "$files" | grep -qE '^(sdk/|internal/ext/extension/)'; then sdk=true; fi
+              # The release-note tests render every committed Studio note; npm/ holds the publish tests.
+              if echo "$files" | grep -qE '^(scripts/|npm/|release-notes/studio/|\.github/workflows/release-studio\.yml$)'; then scripts=true; fi
+              platform=$(git diff -z --name-only --no-renames "$base" HEAD | bash scripts/ci-platform-scope.sh)
             fi
           fi
-          { echo "code=$code"; echo "desktop=$desktop"; echo "sdk=$sdk"; } >> "$GITHUB_OUTPUT"
+          { echo "code=$code"; echo "desktop=$desktop"; echo "sdk=$sdk"; echo "scripts=$scripts"; echo "platform=$platform"; } >> "$GITHUB_OUTPUT"
+
+  release-notes-scripts:
+    needs: changes
+    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.scripts != 'false')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "22"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: node --test scripts/linux-install-smoke.test.mjs scripts/studio-artifacts.test.mjs scripts/ci-platform-scope.test.mjs scripts/cli-archive-build.test.mjs scripts/cli-archive-contents.test.mjs scripts/release-credits.test.mjs scripts/update-contributors.test.mjs scripts/update-acknowledgments.test.mjs scripts/markdown-refs.test.mjs scripts/studio-release-notes.test.mjs scripts/publish-cli-pointer.test.mjs scripts/studio-release-flags.test.mjs scripts/studio-notes-publish.test.mjs scripts/withdraw-version.test.mjs scripts/brew-cask-guard.test.mjs scripts/feedback-sync.test.mjs npm/publish.test.mjs
 
   # The ruleset requires the per-OS check names (test (ubuntu-latest) etc.).
   # A matrix job skipped at job level reports no per-leg checks at all, so
@@ -71,6 +97,9 @@ jobs:
   # detector reports the diff is unrelated, every step skips and each leg
   # reports success in seconds. `always()` also keeps the legs alive when
   # the changes job itself fails (fail-open: an empty output != 'false').
+  # A pull request with no platform-relevant change moves the macOS and
+  # Windows legs onto an ubuntu runner with every step skipped: the check
+  # names the ruleset requires still report, without a scarce runner.
   test:
     needs: changes
     if: always()
@@ -78,15 +107,15 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ github.event_name == 'pull_request' && needs.changes.outputs.platform == 'false' && 'ubuntu-latest' || matrix.os }}
     env:
-      RUN_STEPS: ${{ github.event_name != 'pull_request' || needs.changes.outputs.code != 'false' }}
+      RUN_STEPS: ${{ github.event_name != 'pull_request' || (needs.changes.outputs.code != 'false' && (matrix.os == 'ubuntu-latest' || needs.changes.outputs.platform != 'false')) }}
     steps:
       - if: env.RUN_STEPS == 'true'
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - if: env.RUN_STEPS == 'true'
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
           cache: true
@@ -150,6 +179,23 @@ jobs:
           REASONIX_RELEASE_CACHE_GUARD: "1"
         run: go test ./...
 
+      - name: test (Windows composition links)
+        if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -count=1 -timeout=3m -json -run '^Test(CaptureDirectoryMaterializesContainedLinks|CaptureDirectoryRefusesUnsafeLinks|CaptureHookFileFlattensContainedLink|MaterializeStillRejectsLinkedRetainedFilesAndRoot|WindowsCompositionJunctions|WindowsLiveSkillJunctions|CompositionRetainsLinkedSkillAcrossRestart|CompositionLinkedSkillRejectsLinkedResources|CompositionLinkedExtensionResources|CompositionLinkedHookResources)$' ./internal/state/agentpreset ./internal/ext/skill ./internal/assembly/boot | tee "$RUNNER_TEMP/composition-links.jsonl"
+          jq -se '
+            ["TestCaptureDirectoryMaterializesContainedLinks", "TestCaptureDirectoryRefusesUnsafeLinks",
+             "TestCaptureHookFileFlattensContainedLink", "TestMaterializeStillRejectsLinkedRetainedFilesAndRoot",
+             "TestWindowsCompositionJunctions", "TestWindowsLiveSkillJunctions", "TestCompositionRetainsLinkedSkillAcrossRestart",
+             "TestCompositionLinkedSkillRejectsLinkedResources", "TestCompositionLinkedExtensionResources",
+             "TestCompositionLinkedHookResources"] as $required |
+            [.[] | select(.Action == "pass") | .Test] as $passed |
+            all(.[]; .Action != "skip") and (($required - $passed) | length == 0)
+          ' "$RUNNER_TEMP/composition-links.jsonl"
+
       # Pull requests run a Windows smoke suite: the packages that actually
       # carry *_windows.go code, the startup/checkpoint packages with portable
       # filesystem contracts, plus cmd/. The full ./... sweep stays on pushes
@@ -157,19 +203,30 @@ jobs:
       # budget above normal 7-9 minute runner variance; each package test binary
       # remains independently bounded by Go's per-package timeout below.
       #
-      # That timeout is 8m, not 3m: across four consecutive runs of the same
-      # code, internal/assembly/boot measured 133s, 146s, 162s and then hit 180s, and
-      # internal/runtime/agent 82s, 92s, 144s and 180s — a 2.2x spread from runner
-      # variance alone, with four heavy packages sharing four vCPUs. At 3m the
-      # step failed on slow runners without a code change; a hang still trips
-      # the 15 minute job budget above.
+      # The per-package timeout is 18m: internal/assembly/boot took 478-717s
+      # (12 push runs) on the Windows runner, so 18m is 1.5x the worst. A hang
+      # still trips the step budget (25m smoke, 35m full).
+      #
+      # Every root-module `go test` that runs on Windows passes -count=1. With
+      # the result cache on, go test records each file and environment access
+      # a test binary makes, and before and after the run resolves every
+      # recorded path outside the module through filepath.EvalSymlinks.
+      # internal/assembly/boot records about 1.9M accesses; on a Windows runner
+      # that bookkeeping costs minutes per pass while nothing is printed.
+      # internal/base/testenv holds every such step to it.
       - name: test (Windows smoke)
         if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
-        timeout-minutes: 15
+        timeout-minutes: 25
         env:
           REASONIX_RELEASE_CACHE_GUARD: "1"
           WINDOWS_SANDBOX_WAIT_MS: "20000"
-        run: go test -p 4 -timeout=8m ./internal/runtime/agent/... ./internal/platform/appidentity/... ./internal/assembly/boot/... ./internal/state/checkpoint/... ./internal/frontend/cli/... ./internal/session/control/... ./internal/base/filelock/... ./internal/base/fileutil/... ./internal/ext/hook/... ./internal/state/instruction/... ./internal/ext/mcplaunch/... ./internal/platform/notify/... ./internal/base/proc/... ./internal/platform/remote/... ./internal/platform/repair/... ./internal/safety/sandbox/... ./internal/base/sysproxy/... ./internal/state/workspacelease/... ./cmd/...
+        run: go test -count=1 -p 4 -timeout=18m ./internal/runtime/agent/... ./internal/platform/appidentity/... ./internal/assembly/boot/... ./internal/state/checkpoint/... ./internal/frontend/cli/... ./internal/session/control/... ./internal/base/filelock/... ./internal/base/fileutil/... ./internal/ext/hook/... ./internal/state/instruction/... ./internal/ext/mcplaunch/... ./internal/platform/notify/... ./internal/base/proc/... ./internal/platform/remote/... ./internal/platform/repair/... ./internal/safety/sandbox/... ./internal/base/sysproxy/... ./internal/state/workspacelease/... ./cmd/...
+
+      # Worktree rollback is absent from the broad Windows PR smoke list.
+      - name: test (Windows worktree rollback)
+        if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        timeout-minutes: 3
+        run: go test -count=1 -timeout=2m -run '^TestDiscardUnpublished.*OnWindows$|^TestCreateFromDetachedHEADAndOccupiedBranch$' ./internal/platform/worktree
 
       # The general Windows PR smoke list intentionally omits internal/contract/tool.
       # Keep the session-temp portability contract covered without widening the
@@ -178,7 +235,7 @@ jobs:
       - name: test (Windows session temp)
         if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
         timeout-minutes: 3
-        run: go test -timeout=2m -run '^TestBashSharesSessionTempAcrossCalls$' ./internal/tools/builtin
+        run: go test -count=1 -timeout=2m -run '^TestBashSharesSessionTempAcrossCalls$' ./internal/tools/builtin
 
       # Shell execution contract: PowerShell identity, Chinese workspace paths,
       # UTF-8 output, and ExitCode retention must gate PRs on native Windows.
@@ -186,18 +243,14 @@ jobs:
       - name: test (Windows shell execution contract)
         if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
         timeout-minutes: 5
-        run: go test -timeout=3m -run '^TestBashPowerShellExecuteDetailedContract$|^TestBashPowerShell51PreflightRejectsAndAndDetailed$|^TestBashPowerShellOutputIsUTF8$|^TestBashPowerShellSurfacesNonZeroExit$|^TestBashPowerShellRejectsChaining$' ./internal/tools/builtin
+        run: go test -count=1 -timeout=3m -run '^TestBashPowerShellExecuteDetailedContract$|^TestBashPowerShell51PreflightRejectsAndAndDetailed$|^TestBashPowerShellOutputIsUTF8$|^TestBashPowerShellSurfacesNonZeroExit$|^TestBashPowerShellRejectsChaining$' ./internal/tools/builtin
 
-      # Full push suite still uses the same 8m package budget as Windows smoke:
-      # agent/boot/control already hit 180s package timeouts under runner load,
-      # so 3m fails on slow machines without a code regression. The step budget
-      # is what runner variance costs rather than what the suite takes: green
-      # runs on this branch spread 520s-976s while three pushes timed out at
-      # 1287-1305s, so 20m sat inside the distribution and reported a slow
-      # runner as failed tests. A hang still dies here rather than on a package.
+      # Full push suite uses the same 18m package timeout as Windows smoke and a
+      # 35m step budget above it. -count=1 as at the smoke step. A failure prints
+      # the failed tests' output and the 15 slowest boot tests.
       - name: test (full)
         if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name != 'pull_request'
-        timeout-minutes: 30
+        timeout-minutes: 35
         env:
           # Run the prompt-cache prefix-stability guard (TestCacheHit*) in CI: a
           # regression there silently tanks the cache hit rate the project is
@@ -206,16 +259,36 @@ jobs:
           # Bound sandbox helper children in Windows tests so a failed OS-level
           # launch cannot pin the Actions step after Go's package timeout fires.
           WINDOWS_SANDBOX_WAIT_MS: "20000"
-        run: go test -p 4 -timeout=8m ./...
+        shell: bash
+        run: |
+          # internal/assembly/boot alone takes 14-15 minutes on a Windows runner;
+          # the package limit leaves headroom inside the step limit above.
+          go test -count=1 -p 4 -timeout=28m -json ./... | tee "$RUNNER_TEMP/full.jsonl" |
+            jq -rj --unbuffered 'select(.Action == "output" and .Test == null) | .Output'
+
+      - name: test (full) failure detail
+        if: failure() && env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          f="$RUNNER_TEMP/full.jsonl"
+          [ -s "$f" ] || exit 0
+          echo "::group::output of failed tests"
+          jq -rn '[inputs | select(.Test != null)] | group_by(.Package + "/" + .Test)
+            | map(select(any(.[]; .Action == "fail")))[]
+            | map(select(.Action == "output") | .Output) | join("")' "$f" || true
+          echo "::endgroup::"
+          echo "slowest internal/assembly/boot tests (seconds, name):"
+          jq -rn '[inputs | select((.Package | endswith("/internal/assembly/boot")) and .Test != null and .Action == "pass")]
+            | sort_by(-.Elapsed)[:15][] | "\(.Elapsed)\t\(.Test)"' "$f" || true
 
   race:
     needs: changes
     if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.code != 'false')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
           cache: true
@@ -242,7 +315,7 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           REASONIX_RELEASE_CACHE_GUARD: "1"
-        run: go test -race ./internal/runtime/agent/... ./internal/ext/plugin/... ./internal/runtime/jobs/... ./internal/base/proc/... ./internal/safety/sandbox/... ./internal/base/filelock/... ./internal/contract/eventwire/... ./internal/platform/remote/... ./internal/ext/extension/... ./internal/assembly/boot/... ./internal/session/control/... ./internal/contract/tool/...
+        run: go test -race ./internal/runtime/agent/... ./internal/ext/plugin/... ./internal/tools/jobs/... ./internal/base/proc/... ./internal/safety/sandbox/... ./internal/base/filelock/... ./internal/contract/eventwire/... ./internal/platform/remote/... ./internal/ext/extension/... ./internal/assembly/boot/... ./internal/session/control/... ./internal/contract/tool/...
 
       - name: test -race (full)
         if: github.event_name != 'pull_request'
@@ -261,18 +334,18 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ github.event_name == 'pull_request' && needs.changes.outputs.platform == 'false' && 'ubuntu-latest' || matrix.os }}
     env:
-      RUN_STEPS: ${{ github.event_name != 'pull_request' || needs.changes.outputs.sdk != 'false' }}
+      RUN_STEPS: ${{ github.event_name != 'pull_request' || (needs.changes.outputs.sdk != 'false' && (matrix.os == 'ubuntu-latest' || needs.changes.outputs.platform != 'false')) }}
     defaults:
       run:
         working-directory: sdk/go
     steps:
       - if: env.RUN_STEPS == 'true'
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - if: env.RUN_STEPS == 'true'
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: sdk/go/go.mod
 
@@ -317,9 +390,9 @@ jobs:
       run:
         working-directory: desktop
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: desktop/go.mod
           cache: true
@@ -347,7 +420,7 @@ jobs:
         run: go vet ./...
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: v2.12.2
           working-directory: desktop
@@ -368,15 +441,15 @@ jobs:
   # compile it against a real macOS toolchain.
   desktop-macos:
     needs: changes
-    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.desktop != 'false')
+    if: always() && (github.event_name != 'pull_request' || (needs.changes.outputs.desktop != 'false' && needs.changes.outputs.platform != 'false'))
     runs-on: macos-latest
     defaults:
       run:
         working-directory: desktop
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: desktop/go.mod
           cache: true
@@ -386,7 +459,7 @@ jobs:
         run: go test -race ./...
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: v2.12.2
           working-directory: desktop
@@ -396,16 +469,16 @@ jobs:
   # (//go:build windows), so the ubuntu leg above never compiles them.
   desktop-windows:
     needs: changes
-    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.desktop != 'false')
+    if: always() && (github.event_name != 'pull_request' || (needs.changes.outputs.desktop != 'false' && needs.changes.outputs.platform != 'false'))
     runs-on: windows-latest
     defaults:
       run:
         shell: bash
         working-directory: desktop
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: desktop/go.mod
           cache: true
@@ -422,9 +495,9 @@ jobs:
     if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.code != 'false' || needs.changes.outputs.desktop != 'false' || needs.changes.outputs.sdk != 'false')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
           cache: true
@@ -443,7 +516,7 @@ jobs:
         run: echo "version=$(cat .golangci-version)" >> "$GITHUB_OUTPUT"
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: ${{ steps.golangci.outputs.version }}
           args: --timeout=5m
@@ -467,7 +540,9 @@ jobs:
         run: |
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 \
             -ignore 'label "windows-11-arm" is unknown' \
+            -ignore 'label "ubuntu-22.04-arm" is unknown' \
             .github/workflows/release-studio.yml \
+            .github/workflows/studio-certum-signing-smoke.yml \
             .github/workflows/ci.yml
 
   govulncheck:
@@ -476,9 +551,9 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true # informational — stdlib vulns need a Go patch release
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
           cache: true
@@ -494,9 +569,9 @@ jobs:
     if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.code != 'false')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
           cache: true
@@ -505,7 +580,7 @@ jobs:
         run: go test -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: upload coverage
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: coverage-report
           path: coverage.out

@@ -4,7 +4,7 @@
 // cleanly falls back to the terminal block rather than being forced into a
 // list — a wrong list reads as authoritative, a raw block only reads as raw.
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { t } from "../../i18n";
 import { useStartsOpen } from "../../state/foldpref";
 import { bytes } from "../../i18n/format";
@@ -183,33 +183,23 @@ export function Hits({ rows, note }: { rows: Row3[]; note?: string }) {
   );
 }
 
-// The terminal fills in line by line: the first few land on the beat, the rest
-// tighten up so a long block still finishes inside SETTLED.
-const HEAD = 5;
-const BEAT = 34;
-const TIGHT = 8;
-const SETTLED = 700;
-// Past this, splitting into one node per line costs more than the entrance is
-// worth, so the block arrives whole.
-const SPLIT_MAX = 300;
+// A progress meter redraws by returning to column zero, and a browser draws a
+// carriage return as a space, so each line is resolved the way a terminal
+// would leave it: every frame overwrites the start of the one before.
+function overstrike(text: string): string {
+  if (!text.includes("\r")) return text;
+  return text
+    .split("\n")
+    .map((line) => {
+      const frames = (line.endsWith("\r") ? line.slice(0, -1) : line).split("\r");
+      return frames.reduce((shown, frame) => frame + shown.slice(frame.length));
+    })
+    .join("\n");
+}
 
-export function Term({ text, one }: { text: string; one?: boolean }) {
-  const lines = text.split("\n");
-  if (lines.length > SPLIT_MAX) return <pre className="term">{text}</pre>;
-  return (
-    <pre className="term" data-one={one ? "" : undefined}>
-      {lines.map((l, i) => (
-        <span
-          className="term-l"
-          key={i}
-          style={{ animationDelay: `${Math.min(i < HEAD ? i * BEAT : HEAD * BEAT + (i - HEAD) * TIGHT, SETTLED)}ms` }}
-        >
-          {l}
-          {i < lines.length - 1 ? "\n" : ""}
-        </span>
-      ))}
-    </pre>
-  );
+export function Term({ text: raw, one }: { text: string; one?: boolean }) {
+  const text = useMemo(() => overstrike(raw), [raw]);
+  return <pre className="term" data-one={one ? "" : undefined}>{text}</pre>;
 }
 
 // A provider-run search returns the listing the kernel formats for the model:
@@ -340,7 +330,7 @@ function Clip({ id, deps, children }: { id?: string; deps?: unknown; children: R
 // The three outcomes are not the same news, and a card that renders them alike
 // is why "folded" and "the model never saw this" looked identical. Only
 // truncation is a warning; the other two say where the rest is.
-function BoundNote({ bound }: { bound?: Bound }) {
+export function BoundNote({ bound }: { bound?: Bound }) {
   if (!bound) return null;
   if (bound.kind === "spilled") {
     return (

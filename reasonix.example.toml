@@ -6,13 +6,19 @@
 
 default_model = "deepseek"   # a provider name (→ its default model) or "provider/model"
 # language      = "zh"   # ui language; empty = auto-detect from $LANG / $REASONIX_LANG
+# auto_submit   = true   # commit a multi-question ask once its last question is answered; user/global only
 
 [ui]
 theme = "auto"   # auto|dark|light; controls CLI colors only; REASONIX_THEME can override per run
 # theme_style = "graphite"   # graphite|aurora|slate|carbon|nocturne|amber and legacy aliases
 # shortcut_layout = "desktop"   # classic|desktop; compatibility setting; Shift+Tab toggles Plan, Ctrl+Y toggles YOLO
 # cursor_shape = "bar"   # block|underline|bar; text input cursor shape; slim default avoids covering CJK characters
+# commandmode = "vi"   # ""|vi; "vi" gives the CLI prompt a vi command mode (Esc enters command mode, ^C interrupts a stream, ^D exits)
 show_turn_usage = true   # CLI/TUI: show per-request token and cost receipts in transcript scrollback
+
+[cli]   # user/global only; ./reasonix.toml cannot override
+# diff_fences = true   # render a fenced ```diff/```patch block through the colourised diff renderer instead of the plain code rail; default false
+# diff_formatter = "delta --color-only --paging=never"   # optional external argv (no shell) that formats a fenced ```diff/```patch block, a writer tool's diff card, and a whole-diff shell result; the diff is piped on stdin and its stdout is re-emitted with non-SGR escapes stripped
 
 [desktop]
 # language = "auto"   # auto|en|zh; auto follows the browser/OS locale
@@ -32,6 +38,19 @@ enabled = false   # system notifications for CLI and desktop turns; default off
 turn_done = true   # notify when a turn finishes
 approval_request = true   # notify when a tool approval is waiting
 ask_request = true   # notify when a question is waiting
+
+# User config only: a project reasonix.toml cannot set this section. The notice
+# above the composer is always on; only pausing changes what a run does.
+# [progress_watch]
+# pause = false         # end a run that stops producing observable effects; resumable, default off
+# rounds = 20           # tool rounds without a file change, check moving, task step, new read or delegated result
+# token_multiple = 8    # also when input spent since the last observable effect reaches this many context windows
+
+# User config only. Archives conversations idle for `days`; reversible, and never touches
+# pinned, running or mid-turn ones. Off by default.
+# [auto_archive]
+# enabled = false
+# days = 30
 
 [agent]
 # system_prompt = "You are ..."   # custom persona/prompt; unset or empty = built-in default
@@ -53,6 +72,15 @@ compact_ratio       = 0.85  # sole auto trigger; presets 0.70 (active) / 0.80 (s
 # max_parallel_writers = 3       # concurrent writers with non-overlapping write_paths
 # output_style = "explanatory"   # persona/tone folded into the prompt: explanatory | learning | concise,
 #                                  or a custom .reasonix/output-styles/<name>.md ; empty = default
+# [agent.persona]                  # the agent's identity, as opposed to output_style's tone.
+#                                  # prefix leads the system prompt, suffix follows the built-in guidance;
+#                                  # include_runtime_context = false drops the probed environment section and
+#                                  # the offline note. User-level only; applies on the next session build.
+# prefix = "You are the staff engineer who owns this change end to end."
+# suffix = "Close with the risk you did not verify."
+# include_runtime_context = true
+# embedded_diff_detection = true   # mark a shell result whose whole output is a unified diff (e.g. `git diff`)
+#                                  so the transcript renders it as a diff instead of flat text; default false
 
 # A provider is a vendor endpoint (one base_url + key) that offers one or more
 # models. Use `models = [...]` to expose several under a single entry — switching
@@ -79,6 +107,13 @@ context_window = 1000000
 # max_output_tokens = 32768   # ordinary coding / cost control
 # max_output_tokens = 65536   # heavy reasoning / long tool loops
 # max_output_tokens = 131072  # only after repeated finish_reason=length
+# Stream idle watchdog for this provider: how long a call may send nothing —
+# before response headers or between stream events — before it is read as
+# dropped. Per-provider only; there is no global setting. Default 300s; accepts
+# 1–32767 (0 or unset keeps the default). A silent pre-header wait (prefill) is
+# retried once, so the transport can hold for up to twice this value before the
+# call finally fails.
+# idle_timeout_seconds = 300
 # Optional per-model context budgets. Omitted models inherit context_window.
 # model_overrides = { "deepseek-flash" = { context_window = 1000000 } }
 # Official list prices are frozen per provider (billing_currency). Display
@@ -139,6 +174,9 @@ offline = false  # set true when outbound network access is unavailable; prevent
 [tools]
 enabled = []   # empty = all built-in tools
 bash_timeout_seconds = 120   # foreground safety cap; set 0 for no tool-local cap
+protect_changed_files = true   # refuse a whole-file write over a change made since the agent last read or wrote the file
+browser_tools = true   # built-in browser tools; the browser starts on first use
+# mcp_resources = true  # user file only; a read_mcp_resource tool for resources a connected MCP server lists; asks first; default off
 mcp_startup_timeout_seconds = 30   # background initialize + tools/list safety cap; per-server overrides may raise it
 mcp_call_timeout_seconds = 300   # default MCP call safety cap; per-plugin/tool overrides may raise it
 
@@ -167,6 +205,7 @@ stalled_warning_seconds = 900   # warn once per background job after this many q
 # excluded_paths = ["~/.agents/skills"]         # hide convention roots without deleting folders
 # disable_implicit_invocation = true             # keep /skill explicit; hide skill discovery and tools from the model
 # disabled_skills = ["review"]                  # hide from prompt, slash invocation, and skill tools
+# suppress_warnings = true                       # quiet non-fatal skill loading warnings; doctor still reports issues
 
 # Hooks run shell commands around the loop (PreToolUse / PostToolUse /
 # PermissionRequest / UserPromptSubmit / Stop). They are NOT configured here — put them in
@@ -181,7 +220,8 @@ stalled_warning_seconds = 900   # warn once per background job after this many q
 #       "Stop":        [ { "command": "notify-send 'turn done'" } ] } }
 
 # A custom status line: a command whose first stdout line replaces the built-in
-# data row. It receives {"model","contextUsed","contextWindow"} as JSON on stdin.
+# data row. It receives {"model","contextUsed","contextWindow","cwd"} as JSON on stdin.
+# user/global only: set it in <Reasonix home>/config.toml; ./reasonix.toml cannot.
 # [statusline]
 # command = "my-statusline.sh"
 
@@ -195,12 +235,14 @@ stalled_warning_seconds = 900   # warn once per background job after this many q
 # # call_timeout_seconds = 600
 # # Raw MCP tool names with per-tool call timeouts.
 # # tool_timeout_seconds = { "generate_video" = 1800 }
+# # Hide exact raw MCP tool names from the model, catalog, and tool counts.
+# # disabled_tools = ["write_file", "delete_file"]
 # # Enabled MCP servers connect automatically in the background after session
 # # start. Use /mcp or the desktop MCP panel to refresh, reconnect, or disable.
 
 [serve]
 # Authentication for the HTTP serve frontend (reasonix serve).
-# auth_mode = "none"      # none | token | password
+# auth_mode = "token"     # token (default) | password | none (changes and approvals still need the launch token)
 # token      = ""          # pre-shared token for auth_mode = "token" (auto-generated if empty)
 # password_hash = ""       # bcrypt hash for auth_mode = "password". Generate with: reasonix serve --hash-password <password>
 # behind_proxy = false      # set true when behind a trusted reverse proxy (nginx, Caddy, etc.) that sets X-Forwarded-* headers

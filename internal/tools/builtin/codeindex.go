@@ -22,7 +22,9 @@ func init() { tool.RegisterBuiltin(codeIndex{}) }
 
 type codeIndex struct {
 	workDir     string
+	netRoots    []string
 	forbidRoots []string
+	readRoots   []string
 }
 
 func (codeIndex) Name() string { return "code_index" }
@@ -46,6 +48,8 @@ func (codeIndex) Schema() json.RawMessage {
 }
 
 func (codeIndex) ReadOnly() bool { return true }
+
+func (codeIndex) Reach() tool.Reach { return tool.ReachLocalRead }
 
 const (
 	codeIndexDefaultLimit = 100
@@ -94,6 +98,9 @@ func (c codeIndex) Execute(ctx context.Context, args json.RawMessage) (string, e
 	}
 
 	root := resolveIn(c.workDir, p.Path)
+	if err := refuseNetworkPath(root, c.netRoots); err != nil {
+		return "", err
+	}
 	collectionLimit := p.Limit
 	if p.Action == "outline" && hasCodeSymbolFilter(p) {
 		collectionLimit = 0
@@ -111,6 +118,9 @@ func (c codeIndex) Execute(ctx context.Context, args json.RawMessage) (string, e
 }
 
 func (c codeIndex) collect(ctx context.Context, root string, limit int, outline bool) ([]codeSymbol, bool, error) {
+	if err := confineScope(c.readRoots, root); err != nil {
+		return nil, false, err
+	}
 	if confineRead(c.forbidRoots, root) {
 		return nil, false, nil
 	}
@@ -124,6 +134,7 @@ func (c codeIndex) collect(ctx context.Context, root string, limit int, outline 
 			files = append(files, root)
 		}
 	} else {
+		confine := newWalkConfine(c.forbidRoots, c.readRoots, root)
 		err = filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -132,7 +143,7 @@ func (c codeIndex) collect(ctx context.Context, root string, limit int, outline 
 				return nil
 			}
 			if d.IsDir() {
-				if skipForbidDir(path, c.forbidRoots) {
+				if confine.blocked(path, d) {
 					return filepath.SkipDir
 				}
 				if path != root && skipCodeIndexDir(d.Name()) {
@@ -140,7 +151,7 @@ func (c codeIndex) collect(ctx context.Context, root string, limit int, outline 
 				}
 				return nil
 			}
-			if supportedCodeIndexFile(path) && !confineRead(c.forbidRoots, path) {
+			if supportedCodeIndexFile(path) && !confine.blocked(path, d) {
 				files = append(files, path)
 				if len(files) >= codeIndexMaxFiles {
 					return filepath.SkipAll

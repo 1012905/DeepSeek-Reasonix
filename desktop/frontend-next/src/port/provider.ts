@@ -3,9 +3,13 @@
 
 export interface ProviderEntry {
   name: string;
+  // The label a person gave this source. Only ever shown: every ref, the
+  // default model and saved sessions keep pointing at name.
+  displayName?: string;
   kind: string;
   baseUrl: string;
   models: string[];
+  modelAliases?: Record<string, string>;
   default: string;
   hasKey: boolean;
   keyEnv?: string;
@@ -22,11 +26,17 @@ export interface ProviderEntry {
   // at all; webSearch whether it is on. They differ between an account's doors.
   canWebSearch?: boolean;
   webSearch?: boolean;
+  // False where the entry's protocol declares no model listing, so the editor
+  // offers no control to read one. Absent is a kernel that predates the field.
+  canListModels?: boolean;
   // Whether thinking/reasoning_effort may go on the wire. canSetThinking is
   // false where the protocol never carries them, so the switch appears only
   // where a relay can actually reject the request over it.
   canSetThinking?: boolean;
   sendsThinking?: boolean;
+  // Where a chosen effort level lands in this entry's request body, as a dotted
+  // path; absent when its resolved reasoning protocol reshapes the request.
+  effortField?: string;
   // How this endpoint carries context between turns, and whether its protocol
   // has the choice at all. "" is vendor detection, which is what an endpoint
   // nobody has characterised keeps doing.
@@ -40,6 +50,27 @@ export interface ProviderEntry {
   // level auto resolves to. Absent is no declaration.
   supportedEfforts?: string[];
   defaultEffort?: string;
+  // Per model, for a relay serving several vendors under one key: what a model
+  // declares for itself, the ladder it inherits when it declares nothing, and
+  // a reasoning protocol it declares for itself.
+  modelEfforts?: Record<string, ModelEffort>;
+  inheritedEfforts?: Record<string, ModelEffort>;
+  modelProtocols?: Record<string, string>;
+  // Per model: the window and output cap it declares for itself, and the ones
+  // it inherits when it declares none.
+  modelLimits?: Record<string, ModelLimit>;
+  inheritedLimits?: Record<string, ModelLimit>;
+  // Per model: the price per million tokens it declares for itself. A model
+  // with none is absent, which means unknown, not zero.
+  modelPrices?: Record<string, ModelRate>;
+  // payg, or subscription_equivalent where the figures are an API-priced estimate
+  // of a plan rather than what is billed.
+  billingMode?: string;
+  // A vendor's own endpoint: its table can say whether a stored price is its own.
+  officialPricing?: boolean;
+  // How the latest plain test of this saved entry ended, in this kernel process.
+  // Absent when none ran or the entry changed since.
+  lastCheck?: { at: number; ok: boolean; code?: string };
   // Removing the one in use would leave the session on a model that no longer
   // resolves, so the row offers no delete.
   inUse: boolean;
@@ -49,6 +80,18 @@ export interface ProviderEntry {
   // on top of the protocol.
   contextWindow?: number;
   maxOutputTokens?: number;
+  // Seconds the endpoint may stay silent before the call is read as dropped;
+  // absent is the built-in default.
+  idleTimeoutSeconds?: number;
+  // What a source without one waits; the kernel owns the number.
+  idleTimeoutDefault?: number;
+  // The wallet endpoint and the format its answer is read in. impliedBalanceFormat
+  // is what the saved address's own host implies when none is declared, empty for
+  // a relay, which must declare one; balanceFormats is the closed set to offer.
+  balanceUrl?: string;
+  balanceFormat?: string;
+  impliedBalanceFormat?: string;
+  balanceFormats?: string[];
   headers?: Record<string, string>;
   extraBody?: Record<string, unknown>;
 }
@@ -69,6 +112,27 @@ export interface Protocol {
   // whether thinking/effort fields ride it at all.
   serverWebSearch: boolean;
   reasoningParams: boolean;
+  effortField?: string;
+  // The reasoning protocols under which that field holds; empty when the wire
+  // fixes it whatever protocol is chosen.
+  effortUnder?: string[];
+}
+
+// A curated starting point the kernel offers. Choosing one creates the whole
+// declared entry — catalog, window, vision models, thinking shape — in the
+// kernel; the person supplies only a name and a key.
+export interface ProviderPreset {
+  id: string;
+  label: string;
+  kind: string;
+  baseUrl: string;
+}
+
+export interface ProviderPresetInstall {
+  presetId: string;
+  // Empty takes the preset's own name, made unique by the kernel.
+  name?: string;
+  apiKey: string;
 }
 
 // What an endpoint turned out to be. Every field is a guess the user confirms
@@ -76,6 +140,9 @@ export interface Protocol {
 // gateway speaks, only which ones it answers.
 export interface ProviderProbe {
   kind: string;
+  // The address chat must be rooted at: what was typed, completed with /v1 only
+  // when the model list answered there alone.
+  baseUrl?: string;
   // Every kind that listing may be driven with, kernel order. `kind` is the
   // pre-selection among them, not the only answer: DeepSeek serves both the
   // OpenAI chat wire and the Responses API off one model list.
@@ -94,11 +161,28 @@ export interface ProviderProbe {
   noProxy: boolean;
 }
 
-// What re-probing a saved provider found. `error` carries the endpoint's own
-// words, because "401" and "no chat models" send the user to different fixes.
+// What re-probing a saved provider found. A failure carries `code`, the dotted
+// identity the add flow's refusals use, because "401" and "no chat models" send
+// the user to different fixes; the endpoint's own words ride along as `detail`.
+export interface ProviderRemoval {
+  movedTo: string;
+  moved: string[];
+  cleared: string[];
+}
+
+/** The form's unsaved state, laid over the saved entry for one check. Blank
+ *  means what is saved. Nothing in it is written anywhere. */
+export interface ProviderCheckDraft {
+  baseUrl?: string;
+  apiKey?: string;
+  kind?: string;
+}
+
 export interface ProviderCheck {
   ok: boolean;
   kind?: string;
+  // Present only when the saved address is not the one chat needs.
+  baseUrl?: string;
   // Whether that answer is consistent with the kind the entry records. A
   // Responses source answers the OpenAI listing, so equality is the wrong test.
   matches?: boolean;
@@ -108,7 +192,14 @@ export interface ProviderCheck {
   vision?: string[];
   ambiguous?: boolean;
   noProxy?: boolean;
-  error?: string;
+  code?: string;
+  // The host a refused redirect pointed at.
+  target?: string;
+  // Only the numbers the code's sentence needs: `status`, `count`.
+  params?: Record<string, number>;
+  httpStatus?: number;
+  // The endpoint's error text, for display; never an input to `code`.
+  detail?: string;
 }
 
 export type ProviderModelCheckStatus = "available" | "unavailable" | "unknown";
@@ -119,6 +210,10 @@ export type ProviderModelCheckReason =
   | "rejected"
   | "network"
   | "timeout"
+  // Timed out against the machine's own address: the engine did not answer, not the network.
+  | "local_timeout"
+  // The address redirected to another host; the detail names it.
+  | "redirect_refused"
   // The endpoint answered chat and refused a tools array. Established by
   // sending the same request again without one, not by reading the refusal.
   | "tools";
@@ -130,6 +225,8 @@ export interface ProviderModelCheck {
   status: ProviderModelCheckStatus;
   reason?: ProviderModelCheckReason;
   httpStatus?: number;
+  // The endpoint's own error text, for display; never an input to status or reason.
+  detail?: string;
 }
 
 export interface ProviderModelCheckRequest {
@@ -145,6 +242,10 @@ export interface ProviderModelCheckRequest {
 // Changing a source that already exists: everything else on the entry stays.
 export interface ProviderEdit {
   name: string;
+  // Omitted preserves aliases; blank or missing values reset listed models.
+  modelAliases?: Record<string, string>;
+  // Omitted leaves the wire format alone.
+  kind?: string;
   baseUrl?: string;
   // Empty keeps the stored key.
   apiKey?: string;
@@ -156,14 +257,62 @@ export interface ProviderEdit {
   // compaction off for this source.
   contextWindow?: number;
   maxOutputTokens?: number;
+  // 0 is the built-in default; omitted leaves the stored value alone.
+  idleTimeoutSeconds?: number;
+  // The wallet endpoint and its format; omitted leaves them alone, an empty
+  // address removes the readout and its format.
+  balanceUrl?: string;
+  balanceFormat?: string;
   headers?: Record<string, string>;
   extraBody?: Record<string, unknown>;
   // Which request shape controls thinking here. "" is auto — no declaration,
   // which leaves the registry in charge. Omitted still means "leave it alone".
   reasoningProtocol?: string;
+  // Whether to use the endpoint-executed search tool, and how context reaches
+  // the next turn ("" is auto). Omitted leaves the stored choice alone.
+  webSearch?: boolean;
+  continuation?: string;
   // An empty list clears the declared vocabulary; omitted leaves it alone.
   supportedEfforts?: string[];
   defaultEffort?: string;
+  // The whole per-model answer for the listed models: a model left out
+  // inherits the connection's levels again. Omitted leaves every model alone.
+  modelEfforts?: Record<string, ModelEffort>;
+  // The whole per-model answer for the listed models: a model left out, or sent
+  // empty, inherits the connection's limits again. Omitted leaves every model alone.
+  modelLimits?: Record<string, ModelLimit>;
+  // The whole per-model answer for the listed models: a model sent null has no
+  // price of its own again. Omitted leaves every model alone.
+  modelPrices?: Record<string, ModelRate | null>;
+}
+
+// One model's price per million tokens, zeros included: free is a price.
+export interface ModelRate {
+  input: number;
+  output: number;
+  cacheHit: number;
+  currency: string;
+  // Where the price was read and on what UTC date (YYYY-MM-DD). They describe the
+  // price and take no part in quoting it.
+  sourceUrl?: string;
+  checked?: string;
+  // True when the card is one the vendor's table has; sent by the kernel, never back.
+  official?: boolean;
+}
+
+// One model's own context window and output cap; an absent field inherits.
+export interface ModelLimit {
+  contextWindow?: number;
+  maxOutputTokens?: number;
+}
+
+// One model's effort vocabulary and the level auto resolves to; no default is
+// the first level.
+export interface ModelEffort {
+  supportedEfforts: string[];
+  defaultEffort?: string;
+  // On an inherited ladder: the vendor's documented contract, not typed levels.
+  official?: boolean;
 }
 
 // What the panel sends back after the user has looked at the probe.
@@ -185,12 +334,16 @@ export interface ProviderDraft {
   reasoningProtocol?: string;
   headers?: Record<string, string>;
   extraBody?: Record<string, unknown>;
+  // Saving under a name already configured is refused unless this is set.
+  replace?: boolean;
 }
 
 // What the opening sequence still owes a machine with no usable key. GET
 // /provider-setup 404s once one exists, so null means "ready".
 export interface ProviderSetup {
   required: boolean;
+  // The runtime started with no provider at all: there is no model whose key could be missing.
+  noProvider?: boolean;
   provider?: string;
   model?: string;
   modelRef?: string;

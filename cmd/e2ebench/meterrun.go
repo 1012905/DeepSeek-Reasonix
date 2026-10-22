@@ -47,12 +47,14 @@ func (rm runMeter) close() {
 	}
 }
 
-// record attaches what the proxy observed. It stays separate from close so the
-// snapshot is taken while the run's numbers are still being assembled.
+// record attaches what the proxy observed. It stops the meter first, because a
+// handler's deferred write can land after the last response is read and stopping
+// is what waits for those handlers; a snapshot taken before that misses them.
 func (rm runMeter) record(r *result) {
 	if rm.m == nil {
 		return
 	}
+	rm.close()
 	observed := rm.m.snapshot()
 	r.Meter = &observed
 }
@@ -114,14 +116,15 @@ func renderMeterAccounting(results []result) string {
 		miss += r.Meter.CacheMissTokens
 		unmeasured += r.Meter.WithoutUsage
 		injected += r.Meter.Injected
-		// A run whose metrics file never landed has no harness number, so it
-		// stays out of both sides of the comparison; folding its meter tokens
-		// against a silent zero would invent a divergence.
-		if !r.Unaccounted {
-			selfReported++
-			harnessTokens += r.PromptTokens + r.CompletionTokens
-			comparableTokens += r.Meter.PromptTokens + r.Meter.CompletionTokens
+		// Whether the harness has a side to compare is the suite's state, not a
+		// token count: Unaccounted has no record and Partial stops at its last
+		// snapshot, so neither side is whole. A persisted zero is a measurement.
+		if r.Unaccounted || r.Partial {
+			continue
 		}
+		selfReported++
+		harnessTokens += r.PromptTokens + r.CompletionTokens
+		comparableTokens += r.Meter.PromptTokens + r.Meter.CompletionTokens
 	}
 	if metered == 0 {
 		return ""

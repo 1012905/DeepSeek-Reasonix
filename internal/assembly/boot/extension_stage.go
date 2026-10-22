@@ -24,15 +24,16 @@ import (
 // before model resolution, and the UI hub they call through. The controller
 // does not exist yet, so the hub reaches it through ctrl once published.
 type extensionStage struct {
-	generation uint64
-	sessionID  string
-	root       string
-	warn       func(string)
-	hub        *uihub.Hub
-	mgr        *sidecar.Manager
-	ctrl       atomic.Pointer[control.Controller]
-	ready      chan struct{} // closed when ctrl is published
-	failed     chan struct{} // closed when the build fails before assembly owns mgr
+	generation  uint64
+	sessionID   string
+	root        string
+	warn        func(string)
+	sidecarDown func(string, extension.InterceptorPoint)
+	hub         *uihub.Hub
+	mgr         *sidecar.Manager
+	ctrl        atomic.Pointer[control.Controller]
+	ready       chan struct{} // closed when ctrl is published
+	failed      chan struct{} // closed when the build fails before assembly owns mgr
 }
 
 // startExtensions starts the installed v2 runtime packages once, before model
@@ -51,6 +52,10 @@ func startExtensions(ctx context.Context, opts Options, roots config.Roots, root
 		redacted := secrets.RedactCredentials(msg)
 		slog.Warn("boot: extension runtime: "+redacted, "root", root)
 		report(sink, event.Event{Level: event.LevelWarn, Text: redacted})
+	}
+	ext.sidecarDown = func(pluginID string, point extension.InterceptorPoint) {
+		slog.Warn("boot: extension skipped: no live sidecar", "extension", pluginID, "point", point, "root", root)
+		report(sink, extensionSkippedEvent(pluginID, string(point)))
 	}
 	ext.hub = uihub.New(uihub.Options{
 		SessionID:  ext.sessionID,
@@ -72,8 +77,14 @@ func startExtensions(ctx context.Context, opts Options, roots config.Roots, root
 		Warn: func(msg string) {
 			slog.Warn("boot: extension UI hub: "+msg, "root", root)
 		},
+		Session: extensionSession{ctrl: ext.ctrl.Load},
 	})
-	mgr, err := preflightExtensionRuntimes(ctx, roots.Home(), ext.boot(), opts.Extensions, planForPreflight(opts, ext.generation))
+	home := roots.Home()
+	if opts.Observe != nil {
+		// Extension sidecars are programs the run would start; the posture holds none.
+		home = ""
+	}
+	mgr, err := preflightExtensionRuntimes(ctx, home, ext.boot(), opts.Extensions, planForPreflight(opts, ext.generation), opts.Composition)
 	if err != nil {
 		return nil, fmt.Errorf("boot: %w", err)
 	}
@@ -86,7 +97,7 @@ func (ext *extensionStage) session() protocol.SessionContext {
 }
 
 func (ext *extensionStage) boot() extensionBoot {
-	return extensionBoot{session: ext.session(), ui: ext.hub, onWarning: ext.warn}
+	return extensionBoot{session: ext.session(), ui: ext.hub, onWarning: ext.warn, onSidecarDown: ext.sidecarDown}
 }
 
 // publish hands the hub the controller; from here on host/ui/* traffic rides it.
@@ -121,7 +132,6 @@ func resolveProviders(opts Options, cfg *config.Config, proxySpec netclient.Prox
 	if err != nil {
 		return ps, fmt.Errorf("boot: %w", err)
 	}
-	installSidecarStreamRouters(mgr, merged)
 	ps.effective, ps.extension = merged, merged
 	return ps, nil
 }

@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 
 	fileencoding "reasonix/internal/base/fileutil/encoding"
 	"reasonix/internal/base/frontmatter"
+	"reasonix/internal/contract/config"
 )
 
 const (
@@ -29,7 +29,8 @@ var claudeHookEvents = map[string]bool{
 }
 
 type claudeHookDocument struct {
-	Hooks map[string][]struct {
+	Modules json.RawMessage `json:"modules"`
+	Hooks   map[string][]struct {
 		Matcher string `json:"matcher"`
 		Match   string `json:"match"`
 		Hooks   []struct {
@@ -56,7 +57,7 @@ type claudeHookDocument struct {
 var claudeStopBlockingEvents = map[string]bool{"Stop": true, "SubagentStop": true}
 
 // claudeToolScopedHookEvents are the events whose "matcher" field is
-// evaluated against a tool name (see internal/ext/hook's MatchesTool); other
+// evaluated against a tool name (see internal/ext/hook's matchTool); other
 // events ignore matcher entirely, so a matcher tool-name compatibility issue
 // doesn't apply to them.
 var claudeToolScopedHookEvents = map[string]bool{
@@ -103,7 +104,7 @@ func claudeMatcherNeverFires(matcher string) bool {
 }
 
 // claudeMatcherIncludesTool reports whether a Claude matcher can select the
-// given tool using the same anchored-regex semantics as hook.MatchesTool.
+// given tool using the same anchored-regex semantics as hook.matchTool.
 // Empty and "*" matchers select every tool. Malformed regexes select none at
 // runtime and therefore do not include the target here.
 func claudeMatcherIncludesTool(matcher, toolName string) bool {
@@ -154,6 +155,19 @@ func appendClaudeHooksFile(root, rel string, manifest *Manifest) ([]string, []Co
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return compatibilityFailure("hooks", rel, err)
 	}
+	var warnings []string
+	var issues []CompatibilityIssue
+	if mods, ok := claudeModulesList(raw.Modules); ok {
+		manifest.Mods = append(manifest.Mods, mods...)
+	} else if reason, declared := claudeModulesGap(raw.Modules); declared {
+		warnings = append(warnings, rel+": "+reason)
+		issues = append(issues, CompatibilityIssue{Capability: "modules", Path: rel, Reason: reason})
+	}
+	w, i := appendClaudeHookMap(rel, raw, manifest)
+	return append(warnings, w...), append(issues, i...)
+}
+
+func appendClaudeHookMap(rel string, raw claudeHookDocument, manifest *Manifest) ([]string, []CompatibilityIssue) {
 	if len(raw.Hooks) == 0 {
 		return nil, nil
 	}
@@ -269,6 +283,32 @@ func appendClaudeHooksFile(root, rel string, manifest *Manifest) ([]string, []Co
 	return uniqueSorted(warnings), issues
 }
 
+// claudeModulesList reads a well-formed modules list: exactly one non-empty path.
+// That is a mod, which runs when the user turns mods on.
+func claudeModulesList(raw json.RawMessage) ([]string, bool) {
+	var list []string
+	if err := json.Unmarshal(raw, &list); err != nil || len(list) != 1 || strings.TrimSpace(list[0]) == "" {
+		return nil, false
+	}
+	return list, true
+}
+
+// claudeModulesGap reports a declared Claude Code "modules" entry the host cannot
+// read: not a list of exactly one path. The reason carries no package-controlled text.
+func claudeModulesGap(raw json.RawMessage) (string, bool) {
+	var list []json.RawMessage
+	if err := json.Unmarshal(raw, &list); err == nil {
+		if len(list) == 0 {
+			return "", false
+		}
+		return fmt.Sprintf("the package declares %d Claude Code module(s) in a form Reasonix cannot read (a mod names exactly one module), so they will never run", len(list)), true
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		return "", false
+	}
+	return "the package declares a Claude Code \"modules\" entry that is not a list; a mod names exactly one module, so it will never run", true
+}
+
 func appendUniqueHook(hooks []Hook, candidate Hook) []Hook {
 	for _, existing := range hooks {
 		if hooksEqual(existing, candidate) {
@@ -315,6 +355,7 @@ func appendClaudeMCPFile(root string, manifest *Manifest) ([]string, []Compatibi
 			Headers     map[string]string `json:"headers"`
 			Title       string            `json:"title"`
 			Description string            `json:"description"`
+			AlwaysLoad  bool              `json:"alwaysLoad"`
 		} `json:"mcpServers"`
 	}
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -375,6 +416,10 @@ func appendClaudeMCPFile(root string, manifest *Manifest) ([]string, []Compatibi
 			continue
 		}
 		autoStart := false
+		load := ""
+		if spec.AlwaysLoad {
+			load = config.MCPLoadAlways
+		}
 		manifest.MCPServers[id] = MCPServer{
 			Type:        typ,
 			Command:     strings.TrimSpace(spec.Command),
@@ -383,6 +428,7 @@ func appendClaudeMCPFile(root string, manifest *Manifest) ([]string, []Compatibi
 			URL:         strings.TrimSpace(spec.URL),
 			Headers:     cloneHookEnv(spec.Headers),
 			AutoStart:   &autoStart,
+			Load:        load,
 			DisplayName: firstNonEmpty(strings.TrimSpace(spec.Title), strings.TrimSpace(displayName)),
 			Description: strings.TrimSpace(spec.Description),
 			Imported:    true,
@@ -463,6 +509,9 @@ func compatibilityFor(pkg Package, issues []CompatibilityIssue) Compatibility {
 	if mcp > 0 {
 		mapped = append(mapped, "mcp")
 	}
+	if len(pkg.Manifest.Mods) > 0 {
+		mapped = append(mapped, "mods")
+	}
 	status := "full"
 	if len(mapped) == 0 && pkg.ManifestKind != "reasonix" {
 		status = "none"
@@ -472,50 +521,63 @@ func compatibilityFor(pkg Package, issues []CompatibilityIssue) Compatibility {
 	return Compatibility{Status: status, Mapped: mapped, Skipped: issues}
 }
 
-func dirContainsAgentMd(dir string) bool { return len(loadAgentRefs(dir)) > 0 }
-
-func (p Package) agentRefs() []AgentRef {
-	var out []AgentRef
-	for _, root := range p.AgentRoots() {
-		out = append(out, loadAgentRefs(root)...)
+func (p Package) agentRefsWithWarnings() ([]AgentRef, []string) {
+	root, err := os.OpenRoot(p.Root)
+	if err != nil {
+		return nil, nil
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out
+	defer root.Close()
+	var dirs []string
+	for _, raw := range p.Manifest.Agents {
+		dir, err := cleanPortableRelativePath(raw)
+		if err != nil || strings.TrimSpace(raw) == "" || !filepath.IsLocal(dir) {
+			continue
+		}
+		dirs = append(dirs, filepath.FromSlash(dir))
+	}
+	slices.Sort(dirs)
+	var out []AgentRef
+	for _, dir := range dirs {
+		out = append(out, loadAgentRefs(root, dir)...)
+	}
+	return p.selectAgentRefs(out)
 }
 
-func loadAgentRefs(dir string) []AgentRef {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
+func loadAgentRefs(root *os.Root, dir string) []AgentRef {
+	if !filepath.IsLocal(dir) {
 		return nil
 	}
 	var out []AgentRef
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".md") {
-			continue
+	var seen []os.FileInfo
+	scanProfileSources(root, dir, 1, &seen, func(path, stem string, body []byte, depth int) bool {
+		ref, ok := parseAgentRef(root, path, stem, body)
+		if ok && (depth == 1 || ref.Description != "") {
+			out = append(out, ref)
 		}
-		path := filepath.Join(dir, entry.Name())
-		body, err := fileencoding.ReadFileUTF8(path)
-		if err != nil {
-			continue
-		}
-		fm, _ := frontmatter.SplitLegacy(string(body))
-		name := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
-		if declared := strings.TrimSpace(fm["name"]); IsValidName(declared) {
-			name = declared
-		}
-		if !IsValidName(name) {
-			continue
-		}
-		out = append(out, AgentRef{
-			Name:         name,
-			Description:  strings.TrimSpace(fm["description"]),
-			Path:         path,
-			Invocation:   "/" + name,
-			Model:        strings.TrimSpace(fm["model"]),
-			AllowedTools: splitCSV(fm["tools"]),
-		})
-	}
+		return ok
+	})
 	return out
+}
+
+func parseAgentRef(root *os.Root, path, stem string, body []byte) (AgentRef, bool) {
+	if !config.IsValidSkillName(stem) {
+		return AgentRef{}, false
+	}
+	content := strings.TrimPrefix(strings.ReplaceAll(string(body), "\r\n", "\n"), "\uFEFF")
+	fm, _ := frontmatter.SplitLegacy(content)
+	name := config.ResolveSkillName(stem, fm["name"])
+	tools := fm["allowed-tools"]
+	if strings.TrimSpace(tools) == "" {
+		tools = fm["tools"]
+	}
+	return AgentRef{
+		Name:         name,
+		Description:  strings.TrimSpace(fm["description"]),
+		Path:         filepath.Join(root.Name(), path),
+		Invocation:   "/" + name,
+		Model:        strings.TrimSpace(fm["model"]),
+		AllowedTools: splitCSV(tools),
+	}, true
 }
 
 func splitCSV(raw string) []string {

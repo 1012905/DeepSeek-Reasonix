@@ -1,9 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { t } from "../i18n";
+import { reason } from "../i18n/kernel";
 import type { AgentPort, BrowserTab } from "../port/port";
-import { host, type BrowserControl, type BrowserLoadFailure, type ViewRect } from "../port/host";
+import { host, type BrowserControl, type BrowserLoadFailure, type BrowserRefusal } from "../port/host";
 import { SWAP_MARK } from "./swap";
+import { occluded, visibleBox } from "./occlusion";
 import { BrowserFailure } from "./BrowserFailure";
+import { AgentPageNote } from "./AgentPageNote";
+import { readPageTabs } from "./browser_open";
 
 const START = "reasonix://start";
 
@@ -11,6 +15,9 @@ function normalise(value: string): string | null {
   const raw = value.trim();
   if (!raw) return START;
   if (/^reasonix:\/\//i.test(raw)) return START;
+  // This panel frames a web page, and a frame cannot show a file: a path on
+  // disk is refused here, never read as a host named by its drive letter.
+  if (/^(?:[a-z]:[\\/]|\\\\|\/)/i.test(raw)) return null;
   const local = /^(?:localhost|127(?:\.\d+){3}|10(?:\.\d+){3}|192\.168(?:\.\d+){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d+){2}|\[::1\]|[^./:]+)(?::\d+)?(?:\/|$)/i.test(raw);
   const candidate = local ? `http://${raw}` : /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
   try {
@@ -156,33 +163,46 @@ export const UNREAD_TABS: BrowserTab[] = [];
 export function useBrowserTabs(port: AgentPort, moved: number): BrowserTab[] {
   const [tabs, setTabs] = useState<BrowserTab[]>(UNREAD_TABS);
   useEffect(() => {
-    if (!host().drawsBrowserViews()) return;
     let live = true;
-    port.browserTabs().then((next) => live && setTabs(next), () => {});
+    readPageTabs(port).then((next) => live && setTabs(next), () => {});
     return () => { live = false; };
   }, [port, moved]);
   return tabs;
 }
 
-type Probe = (x: number, y: number) => Element | null;
-
-export function covered(slot: Element, rect: ViewRect, probe: Probe): boolean {
-  for (const fx of [0.08, 0.5, 0.92]) {
-    for (const fy of [0.08, 0.5, 0.92]) {
-      const hit = probe(rect.x + rect.width * fx, rect.y + rect.height * fy);
-      if (hit !== slot && !(hit && slot.contains(hit))) return true;
-    }
+export function localFilePath(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return "";
   }
-  return false;
+  if (parsed.protocol !== "file:" || parsed.host) return "";
+  try {
+    const path = decodeURIComponent(parsed.pathname);
+    return /^\/[A-Za-z]:\//.test(path) ? path.slice(1) : path;
+  } catch {
+    return "";
+  }
 }
 
-export function AgentBrowserPanel({ tabs, shown, showTabs = true }: { tabs: BrowserTab[]; shown: boolean; showTabs?: boolean }) {
+type OpenDocument = (path: string) => Promise<void>;
+
+export function AgentBrowserPanel(props: { tabs: BrowserTab[]; shown: boolean; showTabs?: boolean; onOpenDocument?: OpenDocument }) {
+  if (host().drawsBrowserViews()) return <AgentBrowserView {...props} />;
+  const current = props.tabs.find((tab) => tab.active) ?? props.tabs[0];
+  return <div className="bpanel">{current && <AgentPageNote tab={current} />}</div>;
+}
+
+function AgentBrowserView({ tabs, shown, showTabs = true, onOpenDocument }: { tabs: BrowserTab[]; shown: boolean; showTabs?: boolean; onOpenDocument?: OpenDocument }) {
   const slot = useRef<HTMLDivElement>(null);
   const [picked, setPicked] = useState("");
   const current = tabs.find((tab) => tab.target === picked) ?? tabs.find((tab) => tab.active) ?? tabs[0];
   const [address, setAddress] = useState(current?.url ?? "");
   const [failures, setFailures] = useState<Record<string, BrowserLoadFailure>>({});
-  const [refused, setRefused] = useState(false);
+  const [refused, setRefused] = useState<BrowserRefusal>("");
+  const [docFailed, setDocFailed] = useState("");
+  const [frame, setFrame] = useState("");
   const target = current?.target ?? "";
   const failure = failures[target];
 
@@ -201,34 +221,63 @@ export function AgentBrowserPanel({ tabs, shown, showTabs = true }: { tabs: Brow
     [],
   );
   // A page that did not load is put away, so the reason drawn in its slot is
-  // not hidden under the native view.
+  // not hidden under the native view. One the page covers is put away too, and
+  // its last picture stands in the slot until nothing covers it any more.
   useLayoutEffect(() => {
     const el = slot.current;
     const shell = host();
+    setFrame("");
     if (!el || !shown || !target || failure) {
       shell.hideBrowserView();
       return;
     }
-    let frame = 0;
+    let timer = 0;
+    let live = true;
+    // Which freeze is current: a picture answering an older one is stale.
+    let frozen = 0;
+    let freezes = 0;
     const place = () => {
-      frame = 0;
-      const box = el.getBoundingClientRect();
-      const rect = { x: box.left, y: box.top, width: box.width, height: box.height };
-      if (rect.width < 1 || rect.height < 1 || covered(el, rect, (x, y) => document.elementFromPoint(x, y))) shell.hideBrowserView();
-      else shell.showBrowserView(target, rect);
+      timer = 0;
+      const box = visibleBox(el);
+      if (!box) {
+        frozen = 0;
+        shell.hideBrowserView();
+        return;
+      }
+      if (document.documentElement.hasAttribute(SWAP_MARK) || occluded(el, box)) {
+        if (frozen) return;
+        const turn = (frozen = ++freezes);
+        void shell.freezeBrowserView().then((picture) => {
+          if (live && frozen === turn) setFrame(picture);
+        });
+        return;
+      }
+      if (frozen) setFrame("");
+      frozen = 0;
+      shell.showBrowserView(target, box);
     };
-    const schedule = () => { if (!frame) frame = window.setTimeout(place, 16); };
+    const schedule = () => { if (!timer) timer = window.setTimeout(place, 48); };
     place();
     const resize = new ResizeObserver(schedule);
     resize.observe(el);
     const overlays = new MutationObserver(schedule);
-    overlays.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "class", "style", "open", "data-prefs"] });
-    overlays.observe(document.documentElement, { attributes: true, attributeFilter: [SWAP_MARK] });
+    overlays.observe(document.body, { childList: true, subtree: true, attributes: true });
+    overlays.observe(document.documentElement, { attributes: true, attributeFilter: [SWAP_MARK, "style", "class"] });
+    // A layer can leave without touching the DOM: a transition or an animation
+    // ending, a hover, a scroll. The two events catch most of it; the poll is what
+    // makes a page that is no longer covered come back whatever moved.
+    document.addEventListener("transitionend", schedule, true);
+    document.addEventListener("animationend", schedule, true);
     addEventListener("resize", schedule);
+    const poll = window.setInterval(schedule, 400);
     return () => {
-      if (frame) clearTimeout(frame);
+      live = false;
+      if (timer) clearTimeout(timer);
+      clearInterval(poll);
       resize.disconnect();
       overlays.disconnect();
+      document.removeEventListener("transitionend", schedule, true);
+      document.removeEventListener("animationend", schedule, true);
       removeEventListener("resize", schedule);
       shell.hideBrowserView();
     };
@@ -239,7 +288,14 @@ export function AgentBrowserPanel({ tabs, shown, showTabs = true }: { tabs: Brow
     if (!target) return;
     void host()
       .navigateBrowserView(target, to)
-      .then((ok) => setRefused(!ok));
+      .then(setRefused);
+  };
+  const documentPath = onOpenDocument ? localFilePath(current?.url ?? "") : "";
+  useEffect(() => setDocFailed(""), [current?.url]);
+  const openDocument = () => {
+    if (!documentPath || !onOpenDocument) return;
+    setDocFailed("");
+    onOpenDocument(documentPath).catch((e) => setDocFailed(reason(e)));
   };
   const go = (event: FormEvent) => {
     event.preventDefault();
@@ -259,12 +315,19 @@ export function AgentBrowserPanel({ tabs, shown, showTabs = true }: { tabs: Brow
           <button className="bbtn" data-action="browser.control" data-target={current?.id} data-value="back" aria-label={t("后退")} onClick={() => control("back")}>←</button>
           <button className="bbtn" data-action="browser.control" data-target={current?.id} data-value="forward" aria-label={t("前进")} onClick={() => control("forward")}>→</button>
           <button className="bbtn" data-action="browser.control" data-target={current?.id} data-value="reload" aria-label={t("重新加载")} onClick={() => control("reload")}>↻</button>
+          <button className="bbtn" data-action="browser.external" disabled={!documentPath && !/^https?:\/\//i.test(current?.url ?? "")} aria-label={documentPath ? t("用系统默认程序打开这个文件") : t("用默认浏览器打开此页")} title={documentPath ? t("用系统默认程序打开这个文件") : t("用默认浏览器打开此页")} onClick={() => (documentPath ? openDocument() : current && void host().openExternal(current.url))}>↗</button>
           <form className="baddr" data-action="browser.navigate" data-target={current?.id} onSubmit={go}>
-            <input data-action="browser.navigate" data-target={current?.id} value={address} spellCheck={false} aria-label={t("网址")} onChange={(event) => { setAddress(event.target.value); setRefused(false); }} />
+            <input data-action="browser.navigate" data-target={current?.id} value={address} spellCheck={false} aria-label={t("网址")} onChange={(event) => { setAddress(event.target.value); setRefused(""); }} />
           </form>
         </div>
       </div>
-      {refused && <p className="studio-browser-error" role="alert">{t("请输入有效的 http 或 https 地址")}</p>}
+      {documentPath && <p className="studio-browser-note" data-action="browser.document-hint">{t("用系统默认程序打开这个文件，网页里的脚本会照常运行")}</p>}
+      {docFailed && <p className="studio-browser-error" role="alert">{docFailed}</p>}
+      {refused && (
+        <p className="studio-browser-error" role="alert">
+          {refused === "network_file" ? t("不能直接打开网络共享路径。请先把文件放到本机，再输入它的本机路径。") : t("请输入有效的 http 或 https 地址")}
+        </p>
+      )}
       <div className="bview" ref={slot}>
         {failure ? (
           <BrowserFailure
@@ -274,13 +337,13 @@ export function AgentBrowserPanel({ tabs, shown, showTabs = true }: { tabs: Brow
             onTrust={() => void host().trustBrowserCertificate(target)}
           />
         ) : (
-          <p className="bhint">{t("页面被遮住时暂停显示")}</p>
+          frame && <img className="bframe" src={frame} alt="" draggable={false} />
         )}
       </div>
     </div>
   );
 }
 
-export function BrowserPanel(props: ManualProps | { tabs: BrowserTab[]; shown: boolean }) {
+export function BrowserPanel(props: ManualProps | { tabs: BrowserTab[]; shown: boolean; onOpenDocument?: OpenDocument }) {
   return "tabs" in props ? <AgentBrowserPanel {...props} /> : <ManualBrowserPanel {...props} />;
 }

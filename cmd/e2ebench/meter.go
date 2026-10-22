@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // meter is the harness-neutral measuring point: a proxy every harness talks to
@@ -51,6 +53,10 @@ type meterUsage struct {
 	DivergedAt  int    `json:"diverged_at,omitempty"`
 	Divergence  string `json:"divergence,omitempty"`
 	TapeMissing int    `json:"tape_missing,omitempty"`
+	// TapeIncomplete counts recorded exchanges that could not be written, so a
+	// recording that cannot be replayed is reported rather than assumed.
+	TapeIncomplete int    `json:"tape_incomplete,omitempty"`
+	TapeError      string `json:"tape_error,omitempty"`
 }
 
 // faultScript decides which requests fail. Absolute indices pin a failure to
@@ -138,7 +144,16 @@ func (m *meter) serve() (base string, stop func(), err error) {
 	}
 	srv := &http.Server{Handler: m}
 	go func() { _ = srv.Serve(ln) }()
-	return "http://" + ln.Addr().String(), func() { _ = srv.Close() }, nil
+	// A handler records its tape after the client has read the last byte, so
+	// stopping waits for handlers instead of cutting them off.
+	stop = func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if srv.Shutdown(ctx) != nil {
+			_ = srv.Close()
+		}
+	}
+	return "http://" + ln.Addr().String(), stop, nil
 }
 
 func (m *meter) snapshot() meterUsage {
@@ -209,7 +224,16 @@ func (m *meter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	src := io.Reader(resp.Body)
 	if m.tape != nil {
 		src = io.TeeReader(resp.Body, &captured)
-		defer func() { m.tape.save(index, body, resp.StatusCode, resp.Header.Get("Content-Type"), captured.Bytes()) }()
+		defer func() {
+			if err := m.tape.save(index, body, resp.StatusCode, resp.Header.Get("Content-Type"), captured.Bytes()); err != nil {
+				m.mu.Lock()
+				m.TapeIncomplete++
+				if m.TapeError == "" {
+					m.TapeError = err.Error()
+				}
+				m.mu.Unlock()
+			}
+		}()
 	}
 	if strings.Contains(resp.Header.Get("Content-Type"), "event-stream") {
 		m.pipeStream(w, src)

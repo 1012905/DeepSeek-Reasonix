@@ -27,6 +27,7 @@ import (
 
 	"reasonix/internal/base/fileutil"
 	"reasonix/internal/base/netclient"
+	"reasonix/internal/contract/provider"
 )
 
 const (
@@ -219,6 +220,7 @@ func sendWithClient(ctx context.Context, client *http.Client, endpoint string, r
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	provider.ApplyClientIdentity(req)
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -371,6 +373,11 @@ func isCrashCaptureFrame(functionName string) bool {
 		strings.HasPrefix(functionName, "runtime.") ||
 		strings.Contains(functionName, ".runWithCrashCapture.func")
 }
+
+// Redact masks what a person would not want published from free text: home
+// directories, emails, credentials and long opaque tokens. Every outbound
+// report goes through this one implementation.
+func Redact(value string, max int) string { return sanitizeText(value, max) }
 
 func sanitizeField(value string, max int) string {
 	return sanitizeText(value, max)

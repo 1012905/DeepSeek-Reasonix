@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"reasonix/internal/base/testenv"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
 )
@@ -12,7 +13,7 @@ import (
 // isSummarizerRequest tells the compaction summarizer's own call apart from the
 // agent's. Only the agent's requests carry the projection under test.
 func isSummarizerRequest(req provider.Request) bool {
-	return len(req.Messages) > 0 && strings.Contains(req.Messages[0].Content, "compacting the earlier part")
+	return req.Summary
 }
 
 func countUserTag(req provider.Request, tag string) int {
@@ -31,9 +32,9 @@ func countUserTag(req provider.Request, tag string) int {
 // grows - retained user turns carry their copy through every later fold - so a
 // long session pays for the same block once per turn it ever ran.
 func TestEffectFoldDropsSupersededStandingState(t *testing.T) {
-	isolateConfigHome(t)
-	dir := robustTempDir(t)
-	t.Chdir(dir)
+	t.Parallel()
+	home := statedBootHome(t)
+	dir := testenv.TempDir(t)
 
 	rec := &compactionEffectProvider{bulk: strings.Repeat("work output line with detail. ", 400)}
 	provider.Register("boot-superseded-effect", func(provider.Config) (provider.Provider, error) {
@@ -51,10 +52,11 @@ recent_keep = 2
 name = "test-model"
 kind = "boot-superseded-effect"
 model = "x"
-context_window = 32000
+context_window = 32500
 `)
+	approveWorkspaceAt(t, home, dir)
 
-	ctrl, err := Build(context.Background(), Options{Sink: event.Discard})
+	ctrl, err := Build(context.Background(), Options{Home: home, WorkspaceRoot: dir, Sink: event.Discard})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}

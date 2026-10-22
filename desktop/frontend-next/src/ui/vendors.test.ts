@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accountLabel, disambiguate, nameFrom, vendorLabel } from "./vendors";
+import { accountLabel, disambiguate, nameFrom, sourceNameUsable, vendorLabel } from "./vendors";
 
 describe("nameFrom", () => {
   it("derives the config name from the host", () => {
@@ -40,6 +40,12 @@ describe("accountLabel", () => {
     expect(accountLabel("api.moonshot.cn", [{ name: "kimi-cn", preset: true }])).toBe("moonshot");
   });
 
+  it("puts a display name ahead of every name, curated or typed", () => {
+    const doors = [{ name: "deepseek", preset: true }, { name: "deepseek-anthropic", preset: true, displayName: " 公司账号 " }];
+    expect(accountLabel("api.deepseek.com", doors)).toBe("公司账号");
+    expect(accountLabel(host, [{ name: "Agnes", displayName: "   " }])).toBe("Agnes");
+  });
+
   it("finds the chosen name behind a door the config lists first", () => {
     const doors = [{ name: "apihub" }, { name: "Agnes" }];
     expect(accountLabel(host, doors)).toBe("Agnes");
@@ -56,5 +62,37 @@ describe("disambiguate", () => {
       { host: "h", label: "apihub", hint: "work" },
     ]);
     expect(two.map((v) => v.label)).toEqual(["apihub", "apihub · work"]);
+  });
+
+  it("leaves two accounts on one host alone once the user named them apart", () => {
+    const named = disambiguate([
+      { host: "h", label: "个人", hint: "apihub" },
+      { host: "h", label: "公司", hint: "apihub-2" },
+    ]);
+    expect(named.map((v) => v.label)).toEqual(["个人", "公司"]);
+  });
+});
+
+describe("sourceNameUsable", () => {
+  it.each([
+    ["", false], ["   ", false],
+    ["a", true], ["a".repeat(64), true], ["a".repeat(65), false],
+    [".a", false], ["-a", false], ["_a", false], ["a.", true], ["a b", false], ["a/b", false],
+    ["公司中转站", false], ["ｒｅｌａｙ", false], ["relay\u0301", false], ["relay-1.x_y", true],
+    [" company-relay.1_x ", true], ["Relay_1.x-y", true],
+  ])("%j -> %s", (name, ok) => expect(sourceNameUsable(name)).toBe(ok));
+});
+
+describe("hostOf", () => {
+  it("keeps a port that is not the scheme's default, so two ports are two accounts", async () => {
+    const { accountKey, hostOf } = await import("./vendors");
+    expect(hostOf("http://127.0.0.1:8788/v1")).toBe("127.0.0.1:8788");
+    expect(hostOf("https://API.DeepSeek.com:443/v1")).toBe("api.deepseek.com");
+    expect(accountKey(hostOf("http://127.0.0.1:8788/v1"), "K")).not.toBe(accountKey(hostOf("http://127.0.0.1:8756/v1"), "K"));
+  });
+
+  it("leaves the port out of every name", () => {
+    expect(vendorLabel("relay.example:8788")).toBe(vendorLabel("relay.example"));
+    expect(nameFrom("http://relay.example:8788/v1")).toBe("relay");
   });
 });

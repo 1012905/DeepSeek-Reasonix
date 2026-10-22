@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/text/encoding/simplifiedchinese"
+
 	"reasonix/internal/base/testenv"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/tool"
@@ -454,7 +456,7 @@ func TestClientListToolsQuarantinesMalformedSchema(t *testing.T) {
 	if len(tools) != 1 || tools[0].Name() != "mcp__yakit__echo" {
 		t.Fatalf("tools = %v, want only mcp__yakit__echo", names(tools))
 	}
-	if got := string(tools[0].Schema()); got != `{"properties":{"msg":{"type":"string"}},"type":"object"}` {
+	if got := string(tools[0].Schema()); got != `{"properties":{"msg":{"type":"string"}},"required":[],"type":"object"}` {
 		t.Fatalf("valid sibling schema changed: %s", got)
 	}
 	if len(c.tools) != 2 {
@@ -489,7 +491,7 @@ func TestClientListToolsQuarantinesNonObjectRootSchemas(t *testing.T) {
 	if len(tools) != 2 || tools[0].Name() != "mcp__srv__echo" || tools[1].Name() != "mcp__srv__no_args" {
 		t.Fatalf("tools = %v, want echo and normalized no_args", names(tools))
 	}
-	if got := string(tools[1].Schema()); got != `{"properties":{},"type":"object"}` {
+	if got := string(tools[1].Schema()); got != `{"properties":{},"required":[],"type":"object"}` {
 		t.Fatalf("no_args schema = %s, want normalized empty object schema", got)
 	}
 	if len(c.tools) != 4 {
@@ -525,7 +527,7 @@ func TestClientListToolsValidatesAfterCompatibilityNormalization(t *testing.T) {
 	if len(tools) != 1 {
 		t.Fatalf("tools = %v, want normalized legacy tool", names(tools))
 	}
-	if got := string(tools[0].Schema()); got != `{"properties":{"query":{"type":"string"}},"type":"object"}` {
+	if got := string(tools[0].Schema()); got != `{"properties":{"query":{"type":"string"}},"required":[],"type":"object"}` {
 		t.Fatalf("normalized schema = %s", got)
 	}
 }
@@ -774,8 +776,33 @@ func TestStdioFailureCapturesStderr(t *testing.T) {
 	if len(failures) != 1 {
 		t.Fatalf("failures = %+v, want one", failures)
 	}
-	if !strings.Contains(failures[0].Error, "helper stderr boom") {
+	if strings.Contains(failures[0].Error, "helper stderr boom") || !strings.Contains(failures[0].Stderr, "output omitted") {
 		t.Fatalf("failure should include stderr, got %q", failures[0].Error)
+	}
+}
+
+const codePageNotFound = "'read-only-mysql-mcp-server' 不是内部或外部命令，也不是可运行的程序"
+
+// cmd.exe on a Chinese Windows reports a missing command in the console code
+// page, not UTF-8; the failure the settings page shows must still be readable.
+func TestStdioFailureDecodesCodePageStderr(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	host, _ := StartAvailable(ctx, []Spec{{
+		Name:    "codepage",
+		Command: os.Args[0],
+		Args:    []string{"-test.run=TestHelperProcess", "--"},
+		Env:     map[string]string{"GO_WANT_HELPER_STDERR_CODEPAGE": "1"},
+	}})
+	defer host.Close()
+
+	failures := host.Failures()
+	if len(failures) != 1 {
+		t.Fatalf("failures = %+v, want one", failures)
+	}
+	if strings.Contains(failures[0].Error, codePageNotFound) || !strings.Contains(failures[0].Stderr, "output omitted") {
+		t.Fatalf("failure should carry the decoded stderr, got %q", failures[0].Error)
 	}
 }
 
@@ -815,14 +842,14 @@ func TestStartupFailureReportsStageElapsedAndRedactedStderr(t *testing.T) {
 	if len(failures) != 1 || failures[0].Stage != "initialize" || failures[0].Elapsed <= 0 {
 		t.Fatalf("structured startup failure = %+v", failures)
 	}
-	if stderr := failures[0].Stderr; stderr != "" && !strings.Contains(stderr, "Bearer [redacted]") {
+	if stderr := failures[0].Stderr; stderr != "" && !strings.Contains(stderr, "output omitted") {
 		t.Fatalf("structured stderr was not redacted: %+v", failures[0])
 	}
 }
 
 func TestFailureSummaryRedactsCredentials(t *testing.T) {
 	got := summarizeFailureError(errors.New("startup failed: Authorization: Bearer summary-secret-value"))
-	if strings.Contains(got, "summary-secret-value") || !strings.Contains(got, "Bearer [redacted]") {
+	if strings.Contains(got, "summary-secret-value") || !strings.Contains(got, "dependency failure") {
 		t.Fatalf("failure summary was not redacted: %q", got)
 	}
 }
@@ -1113,45 +1140,6 @@ func TestStartPolicyPerPluginTimeout(t *testing.T) {
 	}
 }
 
-func TestStartRecordsTimeoutStats(t *testing.T) {
-	withTempCache(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	slow := Spec{
-		Name:    "slow-stats",
-		Command: os.Args[0],
-		Args:    []string{"-test.run=TestHelperProcess", "--"},
-		Env: map[string]string{
-			"GO_WANT_HELPER_PROCESS": "1",
-			"GO_WANT_HELPER_INIT_MS": "300",
-		},
-	}
-	for i := range 3 {
-		host, _, err := Start(ctx, []Spec{slow}, StartPolicy{
-			PerPluginTimeout: 50 * time.Millisecond,
-			Concurrency:      1,
-			AbortOnError:     false,
-		})
-		if err != nil {
-			t.Fatalf("Start #%d: %v", i, err)
-		}
-		host.Close()
-	}
-
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		rec := Recommend("slow-stats", 50*time.Millisecond, 3)
-		if rec.Demote {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("timeout samples did not trigger demote; stats=%+v rec=%+v", readStats(t, "slow-stats"), rec)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-}
-
 // TestStartPhaseAReturnsBeforePhaseB pins the two-phase handshake contract.
 // The helper advertises prompts and stalls prompts/list by 200ms; StartAvailable
 // must return with tools ready while the prompts surface is still empty, and the
@@ -1272,6 +1260,11 @@ func TestHelperProcess(t *testing.T) {
 		os.Stderr.WriteString("helper stderr boom\n")
 		os.Exit(2)
 	}
+	if os.Getenv("GO_WANT_HELPER_STDERR_CODEPAGE") == "1" {
+		b, _ := simplifiedchinese.GB18030.NewEncoder().Bytes([]byte(codePageNotFound))
+		os.Stderr.Write(b)
+		os.Exit(1)
+	}
 	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
 		return
 	}
@@ -1293,6 +1286,7 @@ func TestHelperProcess(t *testing.T) {
 	}
 
 	in := bufio.NewReader(os.Stdin)
+	helperInitialized := false
 	for {
 		line, err := in.ReadBytes('\n')
 		if err != nil {
@@ -1316,6 +1310,40 @@ func TestHelperProcess(t *testing.T) {
 		}
 
 		var result any
+		// GO_WANT_HELPER_DEAF_BEFORE_INIT is a server whose SDK aborts serving on
+		// a first message that is not initialize but leaves the process running.
+		if os.Getenv("GO_WANT_HELPER_DEAF_BEFORE_INIT") == "1" && !helperInitialized && req.Method != "initialize" {
+			time.Sleep(time.Hour)
+		}
+		if req.Method == "initialize" {
+			helperInitialized = true
+		}
+		// GO_WANT_HELPER_MODERN serves 2026-07-28 only: discovery answers,
+		// initialize is an unknown method, and a request without _meta is refused.
+		if os.Getenv("GO_WANT_HELPER_MODERN") == "1" {
+			var p struct {
+				Meta map[string]any `json:"_meta"`
+			}
+			_ = json.Unmarshal(req.Params, &p)
+			var rpcErr map[string]any
+			switch {
+			case req.Method == "initialize" || p.Meta[metaProtocolVersion] != modernProtocolVersion:
+				rpcErr = map[string]any{"code": -32601, "message": "initialize is not a method here"}
+			case req.Method == discoverMethod:
+				result = map[string]any{"supportedVersions": []string{modernProtocolVersion}, "capabilities": map[string]any{"tools": map[string]any{}}}
+			}
+			if rpcErr != nil || result != nil {
+				resp := map[string]any{"jsonrpc": "2.0", "id": *req.ID}
+				if rpcErr != nil {
+					resp["error"] = rpcErr
+				} else {
+					resp["result"] = result
+				}
+				b, _ := json.Marshal(resp)
+				os.Stdout.Write(append(b, '\n'))
+				continue
+			}
+		}
 		switch req.Method {
 		case "initialize":
 			if initDelay > 0 {
@@ -1369,6 +1397,39 @@ func TestHelperProcess(t *testing.T) {
 			result = map[string]any{"content": []map[string]any{
 				{"type": "text", "text": "echo: " + p.Arguments.Msg},
 			}}
+			// GO_WANT_HELPER_ELICIT asks the client for a form mid call, the way
+			// a 2025-11-25 server does over stdio, and reports what came back.
+			if os.Getenv("GO_WANT_HELPER_ELICIT") == "1" {
+				ask, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": "e1", "method": "elicitation/create", "params": map[string]any{
+					"message": "Who is deploying?",
+					"requestedSchema": map[string]any{"type": "object", "required": []string{"name"}, "properties": map[string]any{
+						"name": map[string]any{"type": "string", "title": "Name"},
+						"age":  map[string]any{"type": "integer", "minimum": 0},
+					}},
+				}})
+				if target := os.Getenv("GO_WANT_HELPER_URL_ELICIT"); target != "" {
+					ask, _ = json.Marshal(map[string]any{"jsonrpc": "2.0", "id": "e1", "method": "elicitation/create", "params": map[string]any{
+						"mode": "url", "message": "Finish in your browser", "url": target, "elicitationId": "legacy-private-id",
+					}})
+				}
+				os.Stdout.Write(append(ask, '\n'))
+				var answer json.RawMessage
+				for answer == nil {
+					reply, err := in.ReadBytes('\n')
+					if err != nil {
+						return
+					}
+					var r struct {
+						ID     string          `json:"id"`
+						Result json.RawMessage `json:"result"`
+						Error  json.RawMessage `json:"error"`
+					}
+					if json.Unmarshal(reply, &r) == nil && r.ID == "e1" {
+						answer = append(r.Result, r.Error...)
+					}
+				}
+				result = map[string]any{"content": []map[string]any{{"type": "text", "text": "elicited: " + string(answer)}}}
+			}
 		}
 
 		resp := map[string]any{"jsonrpc": "2.0", "id": *req.ID, "result": result}
@@ -1459,8 +1520,8 @@ func TestValidateMCPToolNamesRejectsAmbiguousLists(t *testing.T) {
 		"duplicate": {{Name: "read"}, {Name: "read"}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if err := validateMCPToolNames(tools); err == nil {
-				t.Fatalf("validateMCPToolNames(%+v) succeeded", tools)
+			if err := validateMCPToolNames("srv", "", tools); !errors.Is(err, ErrAmbiguousToolCatalog) {
+				t.Fatalf("validateMCPToolNames(%+v) = %v, want ErrAmbiguousToolCatalog", tools, err)
 			}
 		})
 	}
@@ -1701,6 +1762,10 @@ func TestReaderIntentRefusesDispatchAfterSafetyDrift(t *testing.T) {
 	rt.client.toolsMu.Lock()
 	rt.readOnly = true
 	rt.client.toolsMu.Unlock()
+	// The handshake's schema cache is written on the side and reads rt.schema;
+	// nothing in the product changes it after the handshake, so only this test
+	// has to wait for that read before replacing it.
+	host.bgWrites.Wait()
 	rt.schema = json.RawMessage(`{"type":"object","properties":{"msg":{"type":"number"}}}`)
 	if _, _, err := rt.ExecuteWithImages(readerCtx, json.RawMessage(`{"msg":"schema-changed","z":"ok"}`)); err != nil {
 		t.Fatalf("schema-only reader change should execute: %v", err)

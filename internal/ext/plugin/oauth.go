@@ -18,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"reasonix/internal/base/secrets"
 	"reasonix/internal/contract/mcpdiag"
 )
 
@@ -64,6 +63,8 @@ type authorizationServerMetadata struct {
 	RegistrationEndpoint              string   `json:"registration_endpoint"`
 	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"`
 	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
+	// RFC 9207: a server that says it sends iss must send it on every response.
+	AuthorizationResponseIssParameterSupported bool `json:"authorization_response_iss_parameter_supported"`
 }
 
 type dynamicClientRegistration struct {
@@ -120,14 +121,8 @@ func AuthorizeHTTPMCP(ctx context.Context, spec Spec, openURL func(string) error
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(authMeta.AuthorizationEndpoint) == "" || strings.TrimSpace(authMeta.TokenEndpoint) == "" {
-		return fmt.Errorf("MCP OAuth: authorization server metadata is missing authorization_endpoint or token_endpoint")
-	}
-	if len(authMeta.CodeChallengeMethodsSupported) == 0 && !spec.OAuthAllowMissingPKCEMetadata {
-		return fmt.Errorf("%w (set oauth_allow_missing_pkce_metadata = true on server %q in your own config to proceed)", ErrOAuthPKCEUnadvertised, spec.Name)
-	}
-	if len(authMeta.CodeChallengeMethodsSupported) > 0 && !slices.Contains(authMeta.CodeChallengeMethodsSupported, "S256") {
-		return fmt.Errorf("MCP OAuth: authorization server does not support PKCE S256")
+	if err := checkAuthorizationServer(spec, authMeta); err != nil {
+		return err
 	}
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -149,14 +144,16 @@ func AuthorizeHTTPMCP(ctx context.Context, spec Spec, openURL func(string) error
 	if err != nil {
 		return fmt.Errorf("MCP OAuth state: %w", err)
 	}
-	scope := strings.TrimSpace(challengedScope)
-	if scope == "" {
-		scope = strings.Join(resourceMeta.ScopesSupported, " ")
+	scope, err := authorizationScope(spec, challengedScope, resourceMeta, resource)
+	if err != nil {
+		return err
 	}
 
 	callbackResult := make(chan oauthCallbackResult, 1)
 	callbackServer := &http.Server{ReadHeaderTimeout: 5 * time.Second}
-	callbackServer.Handler = oauthCallbackHandler(requestState, callbackResult)
+	callbackServer.Handler = oauthCallbackHandler(oauthCallbackExpect{
+		state: requestState, issuer: authMeta.Issuer, issRequired: authMeta.AuthorizationResponseIssParameterSupported,
+	}, callbackResult)
 	serveDone := make(chan error, 1)
 	go func() {
 		err := callbackServer.Serve(listener)
@@ -207,7 +204,13 @@ func AuthorizeHTTPMCP(ctx context.Context, spec Spec, openURL func(string) error
 		return err
 	}
 	applyTokenResponse(&state, token, time.Now())
-	return saveMCPOAuthStateIfGenerationUnchanged(ctx, spec.StateDir, generation, state)
+	if err := saveMCPOAuthStateIfGenerationUnchanged(ctx, spec.StateDir, generation, state); err != nil {
+		return err
+	}
+	if spec.OAuthScopeUpgrade {
+		ClearScopeUpgrade(spec.StateDir)
+	}
+	return nil
 }
 
 func validateHTTPMCPAuthorization(spec Spec, openURL func(string) error) error {
@@ -256,6 +259,9 @@ func reconcileHTTPMCPOAuth(spec Spec, remainingResource string) (bool, error) {
 		}
 	}
 	if err := bumpMCPOAuthGeneration(spec.StateDir); err != nil {
+		return false, fmt.Errorf("clear MCP OAuth state: %w", err)
+	}
+	if err := ForgetSignInConsent(spec.StateDir); err != nil {
 		return false, fmt.Errorf("clear MCP OAuth state: %w", err)
 	}
 	if err := os.Remove(path); err != nil {
@@ -406,7 +412,10 @@ func registerOAuthClient(ctx context.Context, client *http.Client, metadata auth
 	}
 	method := chooseTokenEndpointAuthMethod(metadata.TokenEndpointAuthMethodsSupported)
 	body, err := json.Marshal(map[string]any{
-		"client_name":                "Reasonix",
+		"client_name": "Reasonix",
+		// A desktop client with a loopback redirect is a native application;
+		// saying so keeps an OpenID provider from refusing that redirect.
+		"application_type":           "native",
 		"redirect_uris":              []string{redirectURI},
 		"grant_types":                []string{"authorization_code", "refresh_token"},
 		"response_types":             []string{"code"},
@@ -487,7 +496,7 @@ func requestOAuthToken(ctx context.Context, client *http.Client, state mcpOAuthS
 		return oauthTokenResponse{}, err
 	}
 	if token.Error != "" {
-		return oauthTokenResponse{}, fmt.Errorf("%s: %s", secrets.RedactCredentials(token.Error), secrets.RedactCredentials(token.Description))
+		return oauthTokenResponse{}, errOAuthTokenResponse
 	}
 	if strings.TrimSpace(token.AccessToken) == "" {
 		return oauthTokenResponse{}, fmt.Errorf("token response has no access_token")
@@ -519,7 +528,16 @@ type oauthCallbackResult struct {
 	Err  error
 }
 
-func oauthCallbackHandler(expectedState string, result chan<- oauthCallbackResult) http.Handler {
+// oauthCallbackExpect is what a genuine authorization response must carry:
+// this flow's state, and the issuer the code came from (RFC 9207), which is
+// what stops a code minted by another authorization server being redeemed.
+type oauthCallbackExpect struct {
+	state       string
+	issuer      string
+	issRequired bool
+}
+
+func oauthCallbackHandler(expect oauthCallbackExpect, result chan<- oauthCallbackResult) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/oauth/callback" {
 			http.NotFound(w, r)
@@ -528,10 +546,12 @@ func oauthCallbackHandler(expectedState string, result chan<- oauthCallbackResul
 		query := r.URL.Query()
 		var callback oauthCallbackResult
 		switch {
-		case query.Get("state") != expectedState:
+		case query.Get("state") != expect.state:
 			callback.Err = fmt.Errorf("MCP OAuth callback state did not match")
+		case !issuerMatches(query, expect):
+			callback.Err = ErrOAuthIssuerMismatch
 		case query.Get("error") != "":
-			callback.Err = fmt.Errorf("MCP OAuth authorization failed: %s: %s", secrets.RedactCredentials(query.Get("error")), secrets.RedactCredentials(query.Get("error_description")))
+			callback.Err = errOAuthAuthorizationResponse
 		case strings.TrimSpace(query.Get("code")) == "":
 			callback.Err = fmt.Errorf("MCP OAuth callback did not include an authorization code")
 		default:
@@ -628,11 +648,16 @@ func authorizationServerMetadataURLs(issuer *url.URL) []string {
 }
 
 func parseBearerChallenge(header string) (metadataURL, scope string, ok bool) {
+	c, ok := parseBearerChallengeFull(header)
+	return c.MetadataURL, c.Scope, ok
+}
+
+func parseBearerChallengeFull(header string) (bearerChallenge, bool) {
 	lower := strings.ToLower(header)
 	for offset := 0; offset < len(header); {
 		idx := strings.Index(lower[offset:], "bearer")
 		if idx < 0 {
-			return "", "", false
+			return bearerChallenge{}, false
 		}
 		idx += offset
 		beforeOK := idx == 0 || header[idx-1] == ',' || header[idx-1] == ' ' || header[idx-1] == '\t'
@@ -640,11 +665,11 @@ func parseBearerChallenge(header string) (metadataURL, scope string, ok bool) {
 		afterOK := after == len(header) || header[after] == ' ' || header[after] == '\t'
 		if beforeOK && afterOK {
 			params := parseAuthParams(header[after:])
-			return params["resource_metadata"], params["scope"], true
+			return bearerChallenge{MetadataURL: params["resource_metadata"], Scope: params["scope"], Error: params["error"]}, true
 		}
 		offset = after
 	}
-	return "", "", false
+	return bearerChallenge{}, false
 }
 
 func parseAuthParams(raw string) map[string]string {
@@ -693,7 +718,7 @@ func decodeLimitedJSON(r io.Reader, out any) error {
 
 func oauthHTTPError(action string, resp *http.Response) error {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	return fmt.Errorf("%s: HTTP %d: %s", action, resp.StatusCode, secrets.RedactCredentials(strings.TrimSpace(string(body))))
+	return fmt.Errorf("%s: %w", action, &httpStatusError{Status: resp.StatusCode, BodyBytes: len(body)})
 }
 
 func newOAuthHTTPClient(base *http.Client) *http.Client {
@@ -754,4 +779,17 @@ func isHTTPMCPTransport(transport string) bool {
 	default:
 		return false
 	}
+}
+
+func checkAuthorizationServer(spec Spec, authMeta authorizationServerMetadata) error {
+	if strings.TrimSpace(authMeta.AuthorizationEndpoint) == "" || strings.TrimSpace(authMeta.TokenEndpoint) == "" {
+		return fmt.Errorf("MCP OAuth: authorization server metadata is missing authorization_endpoint or token_endpoint")
+	}
+	if len(authMeta.CodeChallengeMethodsSupported) == 0 && !spec.OAuthAllowMissingPKCEMetadata {
+		return fmt.Errorf("%w (set oauth_allow_missing_pkce_metadata = true on server %q in your own config to proceed)", ErrOAuthPKCEUnadvertised, spec.Name)
+	}
+	if len(authMeta.CodeChallengeMethodsSupported) > 0 && !slices.Contains(authMeta.CodeChallengeMethodsSupported, "S256") {
+		return fmt.Errorf("MCP OAuth: authorization server does not support PKCE S256")
+	}
+	return nil
 }

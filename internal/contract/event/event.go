@@ -13,11 +13,13 @@ package event
 
 import (
 	"encoding/json"
+	"reasonix/internal/contract/delivery"
 	"reasonix/internal/contract/hostaudit"
 	"reasonix/internal/contract/pricing"
 
 	"reasonix/internal/contract/agentgraph"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/contract/surfacespec"
 )
 
 // Kind tags an Event. Read the field(s) documented for that kind.
@@ -75,16 +77,17 @@ const (
 	// ToolResult for long tools like bash so a frontend can show live progress.
 	// Appended last to keep the Kind values before it wire-stable.
 	ToolProgress
-	// MCPSurfaceReady fires once per server when its background-loaded surface
-	// (prompts or resources) finishes after startup. Lets UIs refresh /mcp
-	// status without polling. Text carries "<server>: <surface> ready (<count>
-	// items)". Appended last to keep the Kind values before it wire-stable.
+	// MCPSurfaceReady fires whenever the answer to /mcp changes — a surface
+	// loads, a spawn begins, an attempt fails, a project MCP awaits approval —
+	// not once per server. Text carries "<server>: <what changed>", and a
+	// consumer re-reads the status. Appended last to keep the Kind values
+	// before it wire-stable.
 	MCPSurfaceReady
 	// Retrying fires before each backoff sleep while the provider re-attempts the
 	// connection+header phase after a transient failure (RetryAttempt of RetryMax).
 	// A frontend shows a transient "retrying (n/m)" indicator that the next stream
-	// event — or TurnDone — clears. Appended last to keep the Kind values before
-	// it wire-stable.
+	// event — or TurnDone — clears. RetryCause names why. Appended last to keep
+	// the Kind values before it wire-stable.
 	Retrying
 	// Steer fires when a mid-turn steer message is consumed from the queue and
 	// injected as a user message. Text carries the raw steer content (without the
@@ -128,7 +131,8 @@ const (
 	// CompactionProgress streams the digest as the summarizer writes it (Text =
 	// the new chunk), between CompactionStarted and CompactionDone. A fold can
 	// take a minute, and a placeholder that says nothing for a minute is
-	// indistinguishable from one that has hung.
+	// indistinguishable from one that has hung. A frame with no Text restarts
+	// the digest: the attempt streamed so far was discarded.
 	CompactionProgress
 	// InboxChanged reports that the durable session inbox moved. Content-free:
 	// the queue is read back from the kernel, so one authority answers every
@@ -150,6 +154,15 @@ const (
 	// switched or navigated a tab. Content-free: a window reads the tabs back,
 	// from the session that owns them.
 	BrowserTabsChanged
+	// ProgressWatchEvent reports whether the run is still producing effects the
+	// host can observe (ProgressWatch). Said to the person, never to the model.
+	ProgressWatchEvent
+	// RewindChanged signals that the undo offer must be read again.
+	RewindChanged
+	// AskEngaged says the person has taken the question Ask.ID over, so the host
+	// will no longer skip it. It never asks anything: AskRequest stays the only
+	// kind that puts a question on screen.
+	AskEngaged
 	// KindCount is a sentinel one past the last real Kind. New event kinds must
 	// be inserted above it so completeness tests cover them automatically.
 	KindCount
@@ -191,9 +204,15 @@ type StreamAttemptInfo struct {
 	Attempt int // 1-based attempt number
 	Max     int // total attempts including the first (typically 6)
 	Reason  string
+	// FirstTokenMs is, on a commit, the host-measured time from sending the
+	// request to the first output; 0 = not measured.
+	FirstTokenMs int64
 }
 
 const TurnOutcomeFinalReadiness = "final_readiness"
+
+// TurnOutcomeNoProgress marks a run the user's progress-watch setting paused.
+const TurnOutcomeNoProgress = "no_progress"
 
 // TurnOutcomeRecoveryPaused marked an Auto recovery retry-budget stop. Nothing
 // emits it any more; sessions recorded before the budgets were removed still
@@ -228,6 +247,8 @@ type Profile struct {
 	Count  int
 	Model  string
 	Effort string
+	// Label is the task's own short description, set only for a single sub-agent.
+	Label string
 }
 
 // Tool describes a tool call for ToolDispatch / ToolResult events. On dispatch
@@ -235,9 +256,11 @@ type Profile struct {
 // Output/Err/Bound are filled in. Args is the raw JSON arguments — a sink
 // compacts it for display.
 type Tool struct {
-	ID   string
-	Name string
-	Args string
+	Deliveries            []delivery.File
+	ID                    string
+	Name                  string
+	Args                  string
+	ArgumentNormalization *provider.ArgumentNormalization
 	// ResolvedName/CapabilityID describe the real target behind a stable proxy
 	// while Name/Args remain the provider-visible call. They are optional local
 	// display metadata and never enter provider requests.
@@ -247,12 +270,23 @@ type Tool struct {
 	// Images are what the call showed the model, as data URLs. The result text
 	// only names them, so a window with nothing else to go on shows a person a
 	// placeholder where the agent had a picture.
-	Images      []string
-	Err         string // ToolResult: non-empty when the call failed or was blocked
-	RefusalCode string // ToolResult: dotted identity of a host refusal; Err is only its wording
-	ReadOnly    bool
-	Bound       OutputBound // ToolResult: how Output was fitted into context
-	DurationMs  int64       // ToolResult: wall-clock execution time in milliseconds
+	Images []string
+	// Videos are video files the call handed to the model to watch natively. A
+	// window shows the file and where it went; the bytes never ride an event.
+	Videos         []VideoShown
+	Err            string // ToolResult: non-empty when the call failed or was blocked
+	RefusalCode    string // ToolResult: dotted identity of a host refusal; Err is only its wording
+	WorkspaceLease *WorkspaceLease
+	// OutputDiff marks a ToolResult whose whole output is a unified diff (e.g. a
+	// shell running `git diff`), set only when [agent].embedded_diff_detection is
+	// on. A frontend renders it as a diff instead of flat text.
+	OutputDiff bool
+	ReadOnly   bool
+	Bound      OutputBound // ToolResult: how Output was fitted into context
+	DurationMs int64       // ToolResult: wall-clock execution time in milliseconds
+	// RateTokensPerSec is the estimated rate a sub-agent is streaming at, on its
+	// status channel only while it reasons or answers. An estimate, not provider usage.
+	RateTokensPerSec int
 	// StartedAt/EndedAt are unix-millisecond execution bounds (ToolResult).
 	// Zero when the call never ran (dependency-skipped, cancelled, synthetic).
 	StartedAt int64
@@ -291,6 +325,8 @@ type Tool struct {
 	WorkspaceMutation bool
 	WorkspacePaths    []string
 	WorkspaceAllPaths bool
+	// Executed marks a ToolResult whose call cleared every gate and ran. Host-only.
+	Executed bool
 }
 
 // ShellExecution mirrors tool.ShellExecution for event sinks without importing
@@ -335,7 +371,10 @@ type Approval struct {
 	// RawInput is the exact structured tool input. ACP permission clients use it
 	// together with locations/reason instead of parsing a human title.
 	RawInput json.RawMessage
-	Fresh    bool // current human decision required; do not offer remembered grants
+	// Scope names what approving authorizes beyond the call itself, as the
+	// tool declares it (tool.ApprovalScoper); empty for the call alone.
+	Scope string
+	Fresh bool // current human decision required; do not offer remembered grants
 	// Which answers beyond "once" this host will honour: a grant for the rest of
 	// the session, and writing the answer down as a rule. A frontend that offers
 	// one the host drops promises what it cannot keep.
@@ -381,8 +420,24 @@ type AskQuestion struct {
 	Prompt  string // the question text
 	Reason  string // AskReasonUserDecision or AskReasonMissingValue
 	Options []AskOption
-	Multi   bool // allow selecting more than one option
+	Multi   bool     // allow selecting more than one option
+	Default []string // prefilled answer, for a form sent back to be corrected
+	Surface *surfacespec.Spec
+	CallID  string
 }
+
+// AskOrigin names the external party behind an AskRequest the agent did not
+// write, so a frontend can say who is asking. A nil origin is the agent's ask.
+type AskOrigin struct {
+	Kind    string // AskOriginMCP
+	Source  string // the party, e.g. the MCP server's configured name
+	Message string // what the party said it needs
+	Note    string // the host's remark, e.g. why the last answer was refused
+	URL     string // an external interaction shown only to the person
+}
+
+// AskOriginMCP is an MCP server's elicitation.
+const AskOriginMCP = "mcp"
 
 // Ask carries an AskRequest: a batch of questions and the ID that correlates the
 // controller's AnswerQuestion(ID, …) reply.
@@ -397,6 +452,9 @@ const (
 type Ask struct {
 	ID        string
 	Questions []AskQuestion
+	Origin    *AskOrigin
+	// SkipInMs is the wait left before the host skips this question, 0 if it never will.
+	SkipInMs int64
 }
 
 // Compaction carries a context-compaction pass for the CompactionStarted /
@@ -418,6 +476,10 @@ type Compaction struct {
 	CoverageBackstopped bool   // the host wrote the dropped facts in itself
 	Boundary            string // "capacity" | "economic": which threshold sent this fold
 	TriggerTokens       int    // ...and its size, so a card need not say only "a threshold"
+	Code                string // Done with nothing folded: the class of refusal or failure, empty when none applies
+	// Done: what the prompt still holds after the fold, set only when that is a
+	// large share of the window, so a card can say what the rest is made of.
+	Remains *ContextComposition
 }
 
 // ContextMaintenance is the typed wire-safe receipt for snip/prune/noop/
@@ -473,6 +535,7 @@ type GuardianResult struct {
 type AskAnswer struct {
 	QuestionID string
 	Selected   []string
+	Value      json.RawMessage `json:",omitempty"`
 }
 
 // FinalReadiness carries machine-readable recovery requirements on TurnDone.
@@ -494,6 +557,17 @@ const (
 	UsageSourceRecoveryReviewer = "recovery-reviewer"
 	UsageSourceGoalEvaluator    = "goal-evaluator"
 	UsageSourcePromptRefine     = "prompt-refine"
+	UsageSourceCommitMessage    = "commit-message"
+	UsageSourceInjectionScreen  = "injection-screen"
+	UsageSourceAdvisor          = "advisor"
+	UsageSourceBestOf           = "best-of"
+	UsageSourceBestOfJudge      = "best-of-judge"
+	// UsageSourceDeepSeekSearch is a request to the DeepSeek Search API, billed per successful request.
+	UsageSourceDeepSeekSearch = "deepseek-search"
+	// UsageSourceDeepSeekFetch is a request to the DeepSeek Fetch API, billed per successful request.
+	UsageSourceDeepSeekFetch = "deepseek-fetch"
+	// UsageSourceSide is a side conversation: asked beside the session, billed to it.
+	UsageSourceSide = "side"
 )
 
 // Event is one increment in a turn's event stream. Read the field(s) documented
@@ -507,6 +581,7 @@ type Event struct {
 	Detail           string                    // Notice: optional diagnostic text for expandable details
 	Code             string                    // Notice: stable id for frontend localization; empty = unmapped
 	Reasoning        string                    // Message: the full reasoning chain
+	ThoughtMs        int64                     // Message: host-measured thinking time; 0 = none
 	MemoryCitations  []provider.MemoryCitation // Message: local memory references displayed by rich frontends
 	Tool             Tool                      // ToolDispatch / ToolResult
 	Usage            *provider.Usage           // Usage
@@ -533,21 +608,41 @@ type Event struct {
 	Readiness      *FinalReadiness          // TurnDone: structured final-readiness recovery state
 	Receipt        *CompletionReceipt       // TurnDone: what the host verified, and what it could not
 	CheckpointTurn *int                     // TurnDone: authoritative checkpoint for this turn's visible user message
+	// TurnDone: wall-clock ms the turn's runs took up to their final answers,
+	// approval and tool waits included, summed over goal continuations; 0 when the
+	// turn failed, was cancelled, or gave no final answer.
+	WorkDurationMs int64
+	// TurnDone: unix ms the turn began; set only alongside WorkDurationMs.
+	WorkStartedAt int64
 	// TurnStarted: which message this turn is about — the conversation's own
 	// turn number, and the session index that message takes. Both nil when the
 	// turn opened no authored message.
-	AuthoredTurn    *int
-	MsgIndex        *int
-	Compaction      Compaction          // Compaction
-	Maintenance     *ContextMaintenance // ContextMaintenanceEvent
-	TodoProgress    *TodoProgress       // TodoProgressEvent
-	WorkspaceLease  *WorkspaceLease     // WorkspaceLeaseEvent
-	Guardian        GuardianResult
-	DecisionReceipt *provider.DecisionReceipt // Notice: durable user decision receipt
-	RetryAttempt    int                       // Retrying: 1-based attempt about to be made
-	RetryMax        int                       // Retrying: total attempts before giving up
-	RetryScope      RetryScope                // Retrying: optional "headers" | "stream"; empty for older emitters
-	StreamAttempt   StreamAttemptInfo         // StreamAttempt lifecycle
+	AuthoredTurn *int
+	MsgIndex     *int
+	// TurnStarted / Steer: the paired device the message came from; nil is
+	// the window. Text carries the message itself, which a client that did not
+	// send it has no other way to draw.
+	Via *provider.Via
+	// TurnStarted / Steer: the stored attachments the message references, as
+	// the host resolved them.
+	Attachments []Attachment
+	// Steer: the host wrote this guidance, so no client draws it as the user's.
+	HostAuthored     bool
+	Compaction       Compaction          // Compaction
+	Maintenance      *ContextMaintenance // ContextMaintenanceEvent
+	TodoProgress     *TodoProgress       // TodoProgressEvent
+	ProgressWatch    *ProgressWatch      // ProgressWatchEvent
+	WorkspaceLease   *WorkspaceLease     // WorkspaceLeaseEvent
+	Guardian         GuardianResult
+	DecisionReceipt  *provider.DecisionReceipt // Notice: durable user decision receipt
+	RetryAttempt     int                       // Retrying: 1-based attempt about to be made
+	RetryMax         int                       // Retrying: total attempts before giving up
+	RetryScope       RetryScope                // Retrying: optional "headers" | "stream"; empty for older emitters
+	RetryCause       provider.RetryCause       // Retrying: why the failed attempt is retried; empty when unknown
+	RetryStatus      int                       // Retrying: the HTTP status when RetryCause is upstream_status
+	RetryDelayMs     int64                     // Retrying: backoff before the next attempt starts
+	RetryTimeoutSecs int                       // Retrying: seconds the next attempt waits for headers before counting as no answer
+	StreamAttempt    StreamAttemptInfo         // StreamAttempt lifecycle
 	// ItemID correlates Steer / unapplied-steer / TurnDone with a durable
 	// session-inbox entry. Empty for legacy callers that still use text only.
 	ItemID    string
@@ -626,3 +721,12 @@ func (f FuncSink) Emit(e Event) {
 // Discard is a Sink that drops every event. Useful in tests and for runs that
 // only care about the final session state.
 var Discard Sink = FuncSink(func(Event) {})
+
+// VideoShown is one video a tool call handed to the model natively.
+type VideoShown struct {
+	Name       string
+	Size       int64
+	DurationMs int64
+	// Model is the model it was sent to.
+	Model string
+}

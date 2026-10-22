@@ -4,28 +4,42 @@ package control
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"reasonix/internal/runtime/taskmonitor"
 	"reasonix/internal/state/sessioninbox"
+	"reasonix/internal/state/sessionstore"
 	"reasonix/internal/tools/jobs"
 )
 
 // hostContinuationSource labels inbox items the runtime authored for itself.
 const hostContinuationSource = "host:background-job"
 
-// observeJobs attaches what watches the background-job table: the task-store
-// recorder, and this controller as the completion observer. The recorder
-// swallows its own failures, and resolves the session id lazily because the
-// session path is only fixed once the first turn begins.
+// borrowsJobs reports whether the job manager and write lease still belong to
+// another controller: one that adopted them is not the one they answer to until
+// TakeOverJobs, so a switch that never publishes leaves them as they were.
+func (c *Controller) borrowsJobs() bool {
+	return c.jobs != nil && c.jobs.Observed() && !c.jobs.ObservedBy(c)
+}
+
+// observeJobs binds what the job table and the write lease answer to — the
+// session identity the claim is filed under, the task-store recorder, and this
+// controller as the completion observer — unless they are still borrowed. The
+// recorder swallows its own failures, and resolves the session id lazily because
+// the session path is only fixed once the first turn begins.
 func (c *Controller) observeJobs(taskStore taskmonitor.WriteStore) {
+	if c.borrowsJobs() {
+		return
+	}
+	c.workspaceLease.SetSessionID(func() string { return sessionstore.BranchID(c.SessionPath()) })
 	if c.jobs == nil {
 		return
 	}
-	if c.workspaceRoot != "" {
+	if rec, ok := c.jobs.Recorder().(*taskmonitor.TaskRecorder); ok && rec != nil {
+		rec.Rebind(func() string { return c.parentSessionID() })
+	} else if c.workspaceRoot != "" {
 		if taskStore == nil {
-			taskStore = taskmonitor.NewFileStore(filepath.Join(".reasonix", "tasks"))
+			taskStore = taskmonitor.NewFileStore(taskmonitor.StoreDir)
 		}
 		c.jobs.SetTaskRecorder(taskmonitor.NewTaskRecorder(taskStore, c.workspaceRoot,
 			func() string { return c.parentSessionID() }))
@@ -33,6 +47,17 @@ func (c *Controller) observeJobs(taskStore taskmonitor.WriteStore) {
 	// The manager keeps its own note either way, so a controller that cannot
 	// take an event costs nothing.
 	c.jobs.SetCompletionObserver(c)
+	c.jobs.SetActiveSessionPath(c.parentSessionID(), c.SessionPath())
+}
+
+// TakeOverJobs makes this controller the owner of the job manager and write
+// lease it adopted. A switch calls it once the replacement is published, so a
+// completion arriving before then still reaches the controller that is serving.
+func (c *Controller) TakeOverJobs() {
+	if c.jobs != nil {
+		c.jobs.SetCompletionObserver(nil)
+	}
+	c.observeJobs(c.taskStore)
 }
 
 // OnJobCompletion implements jobs.CompletionObserver: a terminal background job
@@ -152,10 +177,28 @@ func (c *Controller) KillJob(id string) bool {
 	return c.jobs.Kill(id)
 }
 
+// JobPeek is the end of one running job's output, for a person looking at it.
+// It does not consume what the model's bash_output has yet to read.
+func (c *Controller) JobPeek(id string, max int) (jobs.Peek, bool) {
+	if c.jobs == nil {
+		return jobs.Peek{}, false
+	}
+	return c.jobs.PeekForSession(c.parentSessionID(), id, max)
+}
+
 // CancelJob stops one background job owned by this controller's session.
 func (c *Controller) CancelJob(id string) bool {
 	if c.jobs == nil {
 		return false
 	}
 	return c.jobs.KillForSession(c.parentSessionID(), id)
+}
+
+// CancelToolCall stops one running tool call of the active turn. The turn goes
+// on: the model is told the call was stopped and why.
+func (c *Controller) CancelToolCall(id string) bool {
+	if c.executor == nil {
+		return false
+	}
+	return c.executor.CancelToolCall(id)
 }

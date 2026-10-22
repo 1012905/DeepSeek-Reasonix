@@ -34,6 +34,9 @@ func (s *capturingSink) RecordContractShadow(ContractShadowAudit) {
 func (s *capturingSink) RecordCompletionReport(CompletionReportAudit) {
 	s.recorded = append(s.recorded, "CompletionReport")
 }
+func (s *capturingSink) RecordEvidenceBundle(EvidenceBundleAudit) {
+	s.recorded = append(s.recorded, "EvidenceBundle")
+}
 func (s *capturingSink) RecordMemoryRecall(MemoryRecallAudit) {
 	s.recorded = append(s.recorded, "MemoryRecall")
 }
@@ -64,6 +67,7 @@ func recordAll(s Sink) {
 	RecordProtocolRecovery(s, ProtocolRecoveryAudit{})
 	RecordContractShadow(s, ContractShadowAudit{})
 	RecordCompletionReport(s, CompletionReportAudit{})
+	RecordEvidenceBundle(s, EvidenceBundleAudit{})
 	RecordMemoryRecall(s, MemoryRecallAudit{})
 	RecordOutcomeProgress(s, hostaudit.OutcomeSample{})
 	RecordWorkspaceMutation(s, WorkspaceMutation{})
@@ -102,6 +106,7 @@ func TestWrappersForwardEveryCapability(t *testing.T) {
 		"Sync":          Sync(inner),
 		"Coalesce":      Coalesce(inner, DefaultStreamDeltaWindow),
 		"CostQuoteSink": NewCostQuoteSink(inner, nil),
+		"NoticeWindow":  NewNoticeLedger().Begin(inner),
 	}
 	for name, w := range wrappers {
 		t.Run(name, func(t *testing.T) {

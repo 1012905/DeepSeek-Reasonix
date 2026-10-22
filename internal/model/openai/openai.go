@@ -6,8 +6,9 @@
 //     reasoning_effort as a depth hint.
 //   - api.minimaxi.com → emits thinking.type=adaptive|disabled (M3's binary
 //     knob) instead of reasoning_effort, since M3 has no level scale.
-//   - open.bigmodel.cn / api.z.ai (Zhipu GLM) → emits thinking.type=enabled|
-//     disabled instead of reasoning_effort, which Zhipu silently ignores.
+//   - open.bigmodel.cn / api.z.ai or the glm protocol (Zhipu GLM) → emits
+//     thinking.type; the documented depth models also accept reasoning_effort
+//     (provider.ZhipuEffortContract). Older GLM keeps thinking.type only.
 //   - api.longcat.chat → emits thinking.type=enabled|disabled and omits
 //     reasoning_effort, matching LongCat's OpenAI-compatible API.
 //   - ollama.com → accepts hosted Ollama Cloud's reasoning_effort scale,
@@ -36,6 +37,7 @@ import (
 
 	"reasonix/internal/base/netclient"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/safety/endpointclient"
 )
 
 // defaultStreamIdleTimeout caps how long a started SSE stream may go without any
@@ -45,7 +47,7 @@ import (
 // live streams emit tokens/keepalives far more often. Stored per-client
 // (client.idleTimeout) so a test can shorten it without a shared global that
 // would race other streams' watchdogs.
-const defaultStreamIdleTimeout = 120 * time.Second
+const defaultStreamIdleTimeout = provider.StreamIdleTimeout
 
 // maxPrefixContinuations keeps automatic recovery bounded. A second length
 // finish is surfaced through the existing truncation notice instead of opening
@@ -82,12 +84,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	// A meaningful explicit list is the endpoint's declared effort vocabulary;
 	// auto remains implicit and is therefore ignored here.
 	supportedEfforts, hasExplicitEfforts := reasoningEffortVocabulary(kimiK3, supportedEfforts)
-	legacyChatURL, _ := cfg.Extra["chat_url"].(string)
-	chatURL, _ := cfg.Extra["request_url"].(string)
-	chatURL = strings.TrimSpace(chatURL)
-	if chatURL == "" {
-		chatURL = normalizeChatURL(cfg.BaseURL, legacyChatURL)
-	}
+	chatURL := resolveChatURL(cfg.BaseURL, cfg.Extra)
 	prefixChatURL := deepSeekPrefixChatURL(chatURL)
 	headers, _ := cfg.Extra["headers"].(map[string]string)
 	extraBody, _ := cfg.Extra["extra_body"].(map[string]any)
@@ -99,6 +96,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	// or extension-supplied capability flag may put pixels on a wire that will
 	// reject them, whatever config resolution decided upstream.
 	vision = vision && visionReachesModel(officialDeepSeek, cfg.Model)
+	videoProtocol, _ := cfg.Extra["video_protocol"].(string)
 	visionDetail, _ := cfg.Extra["vision_detail"].(string)
 	visionDetail = strings.ToLower(strings.TrimSpace(visionDetail))
 	if !detailAccepted(visionDetail, officialDeepSeek) {
@@ -109,6 +107,10 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	deepseekV4Flash := strings.EqualFold(strings.TrimSpace(cfg.Model), "deepseek-v4-flash")
 	minimax := protocol == "" && IsMiniMax(cfg.BaseURL)
 	zhipu := protocol == "glm" || (protocol == "" && IsZhipu(cfg.BaseURL))
+	zhipuDepth := ""
+	if zhipu {
+		zhipuDepth = provider.ZhipuDepthModel(cfg.Model)
+	}
 	longcat := protocol == "" && IsLongCat(cfg.BaseURL)
 	ollamaCloud := protocol == "" && IsOllamaCloud(cfg.BaseURL)
 	thinkingType := configuredThinkingType(cfg)
@@ -125,7 +127,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 			effort = "high"
 		case "disabled":
 			if hasExplicitEfforts && !supportsEffort(supportedEfforts, effort) {
-				return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v", name, effort, supportedEfforts)
+				return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v: %w", name, effort, supportedEfforts, provider.ErrEffortRefused)
 			}
 			// DeepSeek can turn thinking off too; route through thinking.type and
 			// drop the depth hint so the wire carries thinking.type=disabled only.
@@ -137,7 +139,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 				// complete effort vocabulary. Honor that list for compatible DeepSeek
 				// request shapes instead of applying the built-in official scale.
 				if !supportsEffort(supportedEfforts, effort) {
-					return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v", name, effort, supportedEfforts)
+					return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v: %w", name, effort, supportedEfforts, provider.ErrEffortRefused)
 				}
 				break
 			}
@@ -165,15 +167,11 @@ func New(cfg provider.Config) (provider.Provider, error) {
 			return nil, fmt.Errorf("openai: provider %q uses MiniMax thinking; effort must be adaptive or disabled", name)
 		}
 	case zhipu:
-		// Zhipu GLM gates chain-of-thought through `thinking.type`
-		// (enabled|disabled) and silently ignores reasoning_effort, so /effort
-		// mirrors that binary knob. The config effort layer normalises depth
-		// levels onto one of these; "" means auto == the GLM default (thinking on).
-		switch effort {
-		case "", "enabled", "disabled":
-		default:
-			return nil, fmt.Errorf("openai: provider %q uses Zhipu thinking; effort must be enabled or disabled", name)
+		resolved, err := resolveZhipuEffort(name, zhipuDepth, effort)
+		if err != nil {
+			return nil, err
 		}
+		effort = resolved
 	case longcat:
 		// LongCat exposes a binary thinking knob on its OpenAI-compatible endpoint:
 		// thinking.type=enabled|disabled. It documents reasoning text via
@@ -202,7 +200,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 			// Explicit endpoint metadata overrides the generic OpenAI enum and its
 			// legacy max-to-high compatibility clamp.
 			if !supportsEffort(supportedEfforts, effort) {
-				return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v", name, effort, supportedEfforts)
+				return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v: %w", name, effort, supportedEfforts, provider.ErrEffortRefused)
 			}
 			break
 		}
@@ -214,13 +212,14 @@ func New(cfg provider.Config) (provider.Provider, error) {
 			effort = "high"
 		case "low", "medium", "high":
 		default:
-			return nil, fmt.Errorf("openai: provider %q: effort must be low, medium, or high", name)
+			return nil, fmt.Errorf("openai: provider %q: effort must be low, medium, or high: %w", name, provider.ErrEffortRefused)
 		}
 	}
 	requestEfforts := requestEffortVocabulary(effortEndpoint{protocol: protocol,
 		thinkingType: thinkingType, effort: effort, deepseek: deepseek, flash: deepseekV4Flash,
 		minimax: minimax, zhipu: zhipu, longcat: longcat, ollamaCloud: ollamaCloud,
-		explicit: hasExplicitEfforts, supported: supportedEfforts})
+		zhipuDepth: zhipuDepth,
+		explicit:   hasExplicitEfforts, supported: supportedEfforts})
 	// max_output_tokens=0 means automatic (not unlimited). DeepSeek reasoning
 	// uses 32K / high-max 64K; thinking-disabled stays ordinary 16K. 128K is
 	// never automatic — users must set it explicitly after length truncations.
@@ -248,28 +247,31 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		deepseek:           deepseek,
 		minimax:            minimax,
 		zhipu:              zhipu,
+		zhipuDepth:         zhipuDepth,
 		longcat:            longcat,
 		kimiK3:             kimiK3,
 		draft202012Schemas: IsMiMo(cfg.BaseURL),
 		thinkingType:       thinkingType,
 		vision:             vision,
+		video:              newVideoWire(videoProtocol, cfg.BaseURL),
 		visionDetail:       visionDetail,
 		maxOutputTokens:    maxOutputTokens,
 		autoMaxOutput:      autoMaxOutput,
 		effort:             effort,
 		requestEfforts:     requestEfforts,
 		http:               httpClient,
-		idleTimeout:        defaultStreamIdleTimeout,
+		idleTimeout:        provider.IdleTimeoutFromExtra(cfg.Extra),
+		openCodeSession:    provider.NewOpenCodeSessionID(),
 	}, nil
 }
 
 func newHTTPClient(cfg provider.Config) (*http.Client, error) {
 	spec, _ := cfg.Extra["proxy_spec"].(netclient.ProxySpec)
-	return netclient.NewHTTPClient(spec, netclient.TransportOptions{
+	return endpointclient.New(spec, netclient.TransportOptions{
 		DialTimeout:           30 * time.Second,
 		KeepAlive:             30 * time.Second,
 		TLSHandshakeTimeout:   15 * time.Second,
-		ResponseHeaderTimeout: 120 * time.Second, // models can think for a while before the first token
+		ResponseHeaderTimeout: provider.IdleTimeoutFromExtra(cfg.Extra),
 	})
 }
 
@@ -287,18 +289,21 @@ type client struct {
 	http               *http.Client
 	deepseek           bool
 	minimax            bool          // true for api.minimaxi.com — emits MiniMax-M3's thinking knob instead of reasoning_effort
-	zhipu              bool          // true for Zhipu GLM (bigmodel.cn / z.ai) — gates thinking via thinking.type, ignores reasoning_effort
+	zhipu              bool          // true for Zhipu GLM (bigmodel.cn / z.ai)
+	zhipuDepth         string        // documented direct-API reasoning_effort model, if any
 	longcat            bool          // true for LongCat — gates thinking via thinking.type, ignores reasoning_effort
 	kimiK3             bool          // true for the explicit K3 protocol or kimi-k3 on Moonshot's direct API hosts
 	draft202012Schemas bool          // the endpoint's dialect, not its vendor: rewrite pre-2020-12 tuple keywords
 	thinkingType       string        // explicit `thinking` config override (enabled|disabled); "" = no override
+	video              *videoWire    // how a video file reaches this model; nil when the endpoint declares none
 	vision             bool          // model accepts image input — embed attached images as image_url parts
 	visionDetail       string        // image_url detail hint (low|high); "" = auto/omit
 	maxOutputTokens    int           // resolved total output budget; <=0 omits the optional field
 	autoMaxOutput      bool          // true when max_output_tokens=0 (automatic ladder)
 	effort             string        // reasoning_effort for OpenAI; thinking.type for MiniMax; "" = auto/provider default
 	requestEfforts     []string      // depth levels a per-request EffortOverride may take; empty = overrides ignored
-	idleTimeout        time.Duration // SSE stall watchdog window; defaultStreamIdleTimeout unless a test overrides
+	idleTimeout        time.Duration // SSE stall watchdog window; per-provider idle_timeout_seconds, else defaultStreamIdleTimeout
+	openCodeSession    string        // x-opencode-session this client presents to OpenCode Go
 	learned            endpointFacts
 }
 
@@ -314,17 +319,6 @@ func (c *client) RequiresReasoningRoundTrip() bool {
 
 func (c *client) WarnOnMissingToolCallReasoning() bool {
 	return c.RequiresToolCallReasoning() && expectsDeepSeekToolCallReasoning(c.model, c.thinkingType)
-}
-
-func (c *client) glmThinkingEnabled() bool {
-	if c == nil || !c.zhipu {
-		return false
-	}
-	t := c.effort
-	if c.thinkingType != "" {
-		t = c.thinkingType
-	}
-	return t != "disabled"
 }
 
 func expectsDeepSeekToolCallReasoning(model, thinkingType string) bool {
@@ -353,14 +347,14 @@ func (c *client) MissingToolCallReasoningWarningIdentity() string {
 	}, "\x00")
 }
 
-func (c *client) sendOpts(hint provider.RequestHint) provider.SendOptions {
+func (c *client) sendOpts() provider.SendOptions {
 	return provider.SendOptions{
-		Provider:       c.name,
-		KeyEnv:         c.keyEnv,
-		KeySource:      c.keySource,
-		KeyPresent:     c.apiKey() != "",
-		RetryAuth:      c.learned.authed.Load(),
-		BadRequestHint: hint,
+		Provider:      c.name,
+		KeyEnv:        c.keyEnv,
+		KeySource:     c.keySource,
+		KeyPresent:    c.apiKey() != "",
+		RetryAuth:     c.learned.authed.Load(),
+		HeaderTimeout: c.idleTimeout,
 	}
 }
 
@@ -371,13 +365,6 @@ func normalizeReasoningProtocol(raw string) string {
 	default:
 		return ""
 	}
-}
-
-func normalizeChatURL(baseURL, chatURL string) string {
-	if legacy := strings.TrimRight(strings.TrimSpace(chatURL), "/"); legacy != "" {
-		return legacy
-	}
-	return strings.TrimRight(strings.TrimSpace(baseURL), "/") + "/chat/completions"
 }
 
 func cleanCustomHeaders(in map[string]string) map[string]string {
@@ -492,13 +479,10 @@ func (c *client) openStream(ctx context.Context, targetURL string, wireReq chatR
 		if err != nil {
 			return nil, err
 		}
-		httpReq.Header.Set("Content-Type", "application/json")
-		applyAPIKeyHeader(httpReq.Header, c.baseURL, c.apiKey())
-		httpReq.Header.Set("Accept", "text/event-stream")
-		applyCustomHeaders(httpReq.Header, c.headers)
+		c.setChatHeaders(httpReq)
 		return httpReq, nil
 	}
-	resp, err := provider.SendWithRetry(requestCtx, c.http, c.sendOpts(wireReq.reasoningHint), newReq)
+	resp, err := provider.SendWithRetry(requestCtx, c.http, c.sendOpts(), newReq)
 	if err != nil {
 		return nil, provider.AnnotateToolSchemaError(err, tools)
 	}
@@ -673,18 +657,9 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 	// carried by a synthetic user message injected after the turn's full run of
 	// tool results, before the next non-tool message (splitting a tool-result
 	// run would break the API's tool-call pairing validation).
-	var pendingToolImages []string
-	var reasoningHint provider.RequestHint
-	flushToolImages := func() {
-		if len(pendingToolImages) == 0 {
-			return
-		}
-		msgs = append(msgs, chatMessage{
-			Role:    "user",
-			Content: imageContentParts("Images returned by the preceding tool call(s):", pendingToolImages, c.visionDetail),
-		})
-		pendingToolImages = nil
-	}
+	var pending toolMedia
+	openCodeGo := provider.IsOpenCodeGoEndpoint(c.chatURL)
+	flushToolImages := func() { msgs = pending.flush(msgs, c.visionDetail) }
 	for _, m := range src {
 		if m.Role != provider.RoleTool {
 			flushToolImages()
@@ -693,17 +668,13 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 			Role:       string(m.Role),
 			ToolCallID: m.ToolCallID,
 		}
-		if m.Role == provider.RoleTool {
-			// Always send the tool message's name, even when empty: strict
-			// backends (MiMo) 400 a tool result without the key (#4711).
+		if m.Role == provider.RoleTool && !openCodeGo {
+			// Strict backends (MiMo) 400 a tool result without the key, even
+			// empty (#4711); OpenCode Go 400s one that carries it.
 			name := m.Name
 			cm.Name = &name
 		}
-		value, dropped := c.toolCallReasoning(m)
-		cm.ReasoningContent = value
-		if dropped {
-			reasoningHint = provider.HintDroppedToolCallReasoning
-		}
+		cm.ReasoningContent = c.toolCallReasoning(m)
 		for _, tc := range m.ToolCalls {
 			wire := chatToolCall{ID: tc.ID, Type: "function"}
 			wire.Function.Name = tc.Name
@@ -726,8 +697,8 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 			cm.Content = m.Content
 		}
 		msgs = append(msgs, cm)
-		if c.vision && m.Role == provider.RoleTool {
-			pendingToolImages = append(pendingToolImages, m.Images...)
+		if m.Role == provider.RoleTool {
+			pending.add(m, c.vision)
 		}
 	}
 	flushToolImages()
@@ -772,7 +743,6 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 		MaxTokens:       maxOutputTokens,
 		ReasoningEffort: kimiK3ReasoningEffort(c.kimiK3, c.requestEffort(req)),
 		ExtraBody:       c.extraBody,
-		reasoningHint:   reasoningHint,
 	}
 	switch {
 	case c.kimiK3:
@@ -809,18 +779,7 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 		out.Thinking = &thinkingMode{Type: t}
 		out.ReasoningEffort = ""
 	case c.zhipu:
-		// Zhipu GLM's binary thinking knob: "enabled" (default, thinking on) or
-		// "disabled". reasoning_effort is silently ignored by the endpoint, so we
-		// omit it and drive chain-of-thought purely through thinking.type.
-		t := c.effort
-		if t == "" {
-			t = "enabled" // auto == the GLM default (thinking on)
-		}
-		if c.thinkingType != "" {
-			t = c.thinkingType // explicit `thinking` config overrides the effort knob
-		}
-		out.Thinking = &thinkingMode{Type: t}
-		out.ReasoningEffort = ""
+		c.applyZhipuEffort(&out, req)
 	case c.longcat:
 		// LongCat's binary thinking knob: "enabled" (default, thinking on) or
 		// "disabled". The API documents reasoning_content in OpenAI responses but
@@ -840,7 +799,7 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 		// is left untouched for backends that also honour it.
 		out.Thinking = &thinkingMode{Type: c.thinkingType}
 	}
-	return out
+	return out.forSummary(req.Summary)
 }
 
 func (c *client) buildPrefixRequest(req provider.Request, content, reasoning string) chatRequest {
@@ -935,7 +894,7 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 			return emitted, provider.StreamDecodeError(c.name, data, err)
 		}
 		if sr.Error != nil {
-			return emitted, &provider.StreamPayloadError{Provider: c.name, Message: sr.Error.Message, Code: sr.Error.Code, Type: sr.Error.Type, Param: sr.Error.Param}
+			return emitted, &provider.StreamPayloadError{Provider: c.name, Message: sr.Error.Message, Code: sr.Error.Code.String(), Type: sr.Error.Type, Param: sr.Error.Param}
 		}
 		if len(sr.Choices) > 0 && sr.Choices[0].FinishReason != nil && *sr.Choices[0].FinishReason != "" {
 			lastFinishReason = *sr.Choices[0].FinishReason
@@ -1139,21 +1098,6 @@ func normaliseUsage(u *wireUsage) *provider.Usage {
 
 // OpenAI-compatible wire protocol
 
-type chatRequest struct {
-	Model               string               `json:"model"`
-	Messages            []chatMessage        `json:"messages"`
-	Tools               []chatTool           `json:"tools,omitempty"`
-	Stream              bool                 `json:"stream"`
-	StreamOptions       *streamOptions       `json:"stream_options,omitempty"`
-	Temperature         *float64             `json:"temperature,omitempty"`
-	MaxTokens           int                  `json:"max_tokens,omitempty"`
-	MaxCompletionTokens int                  `json:"max_completion_tokens,omitempty"`
-	ReasoningEffort     string               `json:"reasoning_effort,omitempty"`
-	Thinking            *thinkingMode        `json:"thinking,omitempty"`
-	ExtraBody           map[string]any       `json:"-"`
-	reasoningHint       provider.RequestHint // host-side, never serialized: what this body left out
-}
-
 func omitExtraBodyFields(in map[string]any, names ...string) map[string]any {
 	if len(in) == 0 {
 		return nil
@@ -1220,10 +1164,8 @@ type chatMessage struct {
 	ToolCalls        []chatToolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string         `json:"tool_call_id,omitempty"`
 	// Name is the role=tool message's function name. A pointer so ordinary
-	// messages omit the key (byte-stable prefix), while tool messages always
-	// serialize it — even empty: strict OpenAI-compatible backends (MiMo, per
-	// its error table) reject a tool message whose `name` key is absent
-	// ("name is not set"), and OpenAI's spec requires the field on role=tool.
+	// messages omit the key (byte-stable prefix), while tool messages keep it
+	// even empty for strict backends (MiMo); OpenCode Go rejects the key.
 	Name *string `json:"name,omitempty"`
 }
 
@@ -1231,6 +1173,7 @@ type chatContentPart struct {
 	Type     string        `json:"type"`
 	Text     string        `json:"text,omitempty"`
 	ImageURL *chatImageURL `json:"image_url,omitempty"`
+	VideoURL *chatVideoURL `json:"video_url,omitempty"`
 }
 
 type chatImageURL struct {

@@ -1,34 +1,79 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { t } from "../i18n";
 import type { AgentPort, PluginExport, PluginItem, PluginPackage } from "../port/port";
 import { Switch } from "./Switch";
+import { CopyButton } from "./CopyButton";
 import { reason } from "../i18n/kernel";
 
 interface Props {
   port: AgentPort;
   packages: PluginPackage[];
   onChanged: () => void;
+  onReloadError?: (message: string) => void;
+  onReloaded?: () => void;
   // Only one package can be mid-update: the confirmation is a full pane, and
   // two of them open at once would be two plans competing for one answer.
   updating: string;
   onUpdate: (name: string) => void;
 }
 
-export function Packages({ port, packages, onChanged, updating, onUpdate }: Props) {
+export function Packages({ port, packages, onChanged, onReloadError, onReloaded, updating, onUpdate }: Props) {
+  const [q, setQ] = useState("");
+  const search = useRef<HTMLInputElement>(null);
+  const [connection, setConnection] = useState({ port, generation: 0 });
+  const currentConnection = useRef(connection);
+  currentConnection.current = connection;
+  if (connection.port !== port) setConnection({ port, generation: connection.generation + 1 });
+  const query = q.trim().toLowerCase();
+  const rows = packages.map((p) => ({ p, shown: matches(p, query) }));
+  const shown = rows.filter((row) => row.shown).length;
   return (
     <>
-      {packages.map((p) => (
+      {packages.length > 0 && (
+        <div className="msearch">
+          <input ref={search} type="search" value={q} spellCheck={false}
+            aria-label={t("搜索已安装包")} placeholder={t("搜索包名、技能、命令或服务")}
+            data-action="extensions.search" onChange={(e) => setQ(e.target.value)} />
+          {q && <button className="act ghost" data-action="extensions.clear-search" onClick={() => { setQ(""); search.current?.focus({ preventScroll: true }); }}>{t("清除搜索")}</button>}
+          <span className="cnt" aria-live="polite" aria-atomic="true">{t("插件包：{shown} / {total}", { shown, total: packages.length })}</span>
+        </div>
+      )}
+      {packages.length > 0 && query && shown === 0 && <div className="empty">{t("没有匹配的已安装包。")}</div>}
+      {rows.map(({ p, shown }) => (
         <Package
-          key={p.name}
+          key={`${connection.generation}:${p.name}`}
           p={p}
+          hidden={!shown}
           port={port}
-          onDone={onChanged}
-          updating={updating === p.name}
+          onDone={() => {
+            if (currentConnection.current === connection) onChanged();
+          }}
+          onReloadError={(message) => {
+            if (currentConnection.current === connection) onReloadError?.(message);
+          }}
+          onReloaded={() => {
+            if (currentConnection.current === connection) onReloaded?.();
+          }}
+          updating={updating}
           onUpdate={() => onUpdate(p.name)}
         />
       ))}
     </>
   );
+}
+
+function matches(p: PluginPackage, query: string): boolean {
+  if (!query) return true;
+  const fields = [
+    p.name,
+    ...[p.skills, p.commands, p.agents, p.prompts, p.themes].flatMap((items) =>
+      items?.flatMap((item) => [item.name, item.invocation, item.description]) ?? []),
+    ...(p.mcpServers?.flatMap((server) => [server.name, server.displayName, server.description, server.command, server.url, server.transport]) ?? []),
+    ...(p.hooks?.flatMap((hook) => [hook.event, hook.description, hook.command, hook.contextFile]) ?? []),
+    p.runtime && [p.runtime.command, ...(p.runtime.args ?? [])].join(" "),
+    ...(p.runtime?.tools ?? []),
+  ];
+  return fields.some((field) => field?.toLowerCase().includes(query));
 }
 
 // The summary line answers "what did this bring", and the two halves of that
@@ -53,14 +98,18 @@ function summary(p: PluginPackage): string {
 }
 
 function Package({
-  p, port, onDone, updating, onUpdate,
+  p, hidden, port, onDone, onReloadError, onReloaded, updating, onUpdate,
 }: {
-  p: PluginPackage; port: AgentPort; onDone: () => void; updating: boolean; onUpdate: () => void;
+  p: PluginPackage; port: AgentPort; onDone: () => void; updating: string; onUpdate: () => void;
+  hidden: boolean;
+  onReloadError: (message: string) => void;
+  onReloaded: () => void;
 }) {
   const [busy, setBusy] = useState("");
   const [failed, setFailed] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [exported, setExported] = useState<PluginExport | null>(null);
+  const locked = !!busy || updating === p.name;
 
   const run = async (what: string, fn: () => Promise<unknown>) => {
     setBusy(what);
@@ -81,7 +130,7 @@ function Package({
       {/* Only a package that recorded where it came from can be fetched again;
           one installed from a folder that has since moved cannot. */}
       {p.source && (
-          <button className="act ghost" data-action="extensions.update" disabled={!!busy || updating} onClick={onUpdate}>
+        <button className="act ghost" data-action="extensions.update" disabled={locked || !!updating} onClick={onUpdate}>
           {t("更新")}
         </button>
       )}
@@ -89,26 +138,31 @@ function Package({
           says what the archive is for rather than naming a format. */}
       <button
         className="act ghost"
-          data-action="extensions.export"
-        disabled={!!busy}
+        data-action="extensions.export"
+        disabled={locked}
         onClick={() =>
           void run("export", async () => {
+            setExported(null);
             setExported(await port.exportPlugin(p.name));
           })
         }
       >
         {t(busy === "export" ? "打包中…" : "导出")}
       </button>
-      <button className="act ghost" aria-label={t("移除 {name}", { name: p.name })} disabled={!!busy} onClick={() => setConfirming(true)}>
+      <button className="act ghost" aria-label={t("移除 {name}", { name: p.name })} disabled={locked} onClick={() => setConfirming(true)}>
         {t("移除")}
       </button>
       <Switch
-          data-action="extensions.enabled"
-          data-target={p.name}
+        data-action="extensions.enabled"
+        data-target={p.name}
         on={p.enabled}
-        busy={busy === "toggle"}
+        busy={locked}
         label={`${t(p.enabled ? "关闭" : "启用")} ${p.name}`}
-        onClick={() => void run("toggle", () => port.setPluginEnabled(p.name, !p.enabled))}
+        onClick={() => void run("toggle", async () => {
+          const out = await port.setPluginEnabled(p.name, !p.enabled);
+          if (out.reloadError) onReloadError(out.reloadError);
+          else onReloaded();
+        })}
       />
     </span>
   );
@@ -118,18 +172,22 @@ function Package({
       <span className="q">
         {t("删除 {name}？其提供的技能、命令与服务将一并移除。若只是暂时停用，关闭开关即可。", { name: p.name })}
       </span>
-      <button className="act" onClick={() => setConfirming(false)}>
+      <button className="act" disabled={locked} onClick={() => setConfirming(false)}>
         {t("取消")}
       </button>
       <button
         className="act danger"
-            data-action="extensions.remove"
-            data-target={p.name}
-        disabled={busy === "remove"}
+        data-action="extensions.remove"
+        data-target={p.name}
+        disabled={locked}
         onClick={() =>
           void run("remove", async () => {
             const out = await port.removePlugin(p.name);
             setConfirming(false);
+            if (out.applied) {
+              if (out.reloadError) onReloadError(out.reloadError);
+              else onReloaded();
+            }
             if (!out.ok) setFailed(out.error || out.next || t("没能删掉"));
           })
         }
@@ -149,10 +207,10 @@ function Package({
     </>
   );
 
-  const why = p.error || failed;
   const notes = (
     <>
-      {why && <div className="why">{why}</div>}
+      {p.error && <div className="why">{p.error}</div>}
+      {failed && <div className="why" role="alert">{failed}</div>}
       {p.status === "disabled_incompatible" && (
         <div className="why">{p.statusReason || t("这个包和当前版本不兼容，已经被停用。")}</div>
       )}
@@ -162,18 +220,24 @@ function Package({
         </div>
       ))}
       {exported && (
-        <div className="why">
+        <div className="why" role="status">
           {exported.savedTo ? t("已保存至 {path}。", { path: exported.savedTo }) : t("导出完成。")}
+          {" "}
           {exported.required.length
             ? t("里面的密钥值已经去掉，装它的人要自己提供：{names}", { names: exported.required.join("、") })
             : t("该包不需要填写任何密钥。")}
+        </div>
+      )}
+      {exported?.savedTo && (
+        <div className="acts">
+          <CopyButton text={exported.savedTo} label={t("复制路径")} />
         </div>
       )}
     </>
   );
 
   return (
-    <details className="srv" data-st={p.enabled ? "ready" : "disabled"} open={confirming || undefined}>
+    <details className="srv" hidden={hidden} data-extension-name={p.name} data-st={p.enabled ? "ready" : "disabled"} aria-busy={locked} open={confirming || !!failed || !!exported || undefined}>
       <summary>{head}</summary>
       {confirm}
       {notes}
@@ -194,8 +258,8 @@ function Package({
             <span className="sc">{name}</span>
           </div>
         ))}
-        {p.hooks?.map((h) => (
-          <div className="row" data-run key={h.event + h.command}>
+        {p.hooks?.map((h, index) => (
+          <div className="row" data-run key={index}>
             <span className="d">▸</span>
             <span>{h.event}</span>
             <span className="sc">{h.description || h.command || h.contextFile}</span>
@@ -208,13 +272,13 @@ function Package({
             <span className="sc">{s.description || s.command || s.url || s.transport}</span>
           </div>
         ))}
-        <Contributions items={p.skills} />
-        <Contributions items={p.commands} />
-        <Contributions items={p.agents} />
-        <Contributions items={p.prompts} />
-        <Contributions items={p.themes} />
-        {p.skipped?.map((s) => (
-          <div className="row" key={s.capability + s.reason}>
+        <Contributions label={t("技能贡献")} items={p.skills} />
+        <Contributions label={t("命令贡献")} items={p.commands} />
+        <Contributions label={t("子代理贡献")} items={p.agents} />
+        <Contributions label={t("提示词贡献")} items={p.prompts} />
+        <Contributions label={t("主题贡献")} items={p.themes} />
+        {p.skipped?.map((s, index) => (
+          <div className="row" key={index}>
             <span className="d">·</span>
             <span>{s.capability}</span>
             <span className="sc">{t("用不了：{why}", { why: s.reason })}</span>
@@ -225,17 +289,19 @@ function Package({
   );
 }
 
-function Contributions({ items }: { items?: PluginItem[] }) {
+function Contributions({ label, items }: { label: string; items?: PluginItem[] }) {
   if (!items?.length) return null;
   return (
-    <>
-      {items.map((it) => (
-        <div className="row" key={it.invocation || it.name}>
+    <div className="contributions" role="group" aria-label={label}>
+      <h4 className="kind">{label}</h4>
+      {items.map((it, index) => (
+        <div className="row" key={index}>
           <span className="d">·</span>
           <span>{it.invocation || it.name}</span>
           <span className="sc">{it.description}</span>
+          {it.invocation && <CopyButton key={it.invocation} text={it.invocation} iconOnly label={t("复制调用命令 {command}", { command: it.invocation })} />}
         </div>
       ))}
-    </>
+    </div>
   );
 }

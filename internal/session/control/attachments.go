@@ -2,6 +2,7 @@ package control
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,9 +15,52 @@ import (
 	"reasonix/internal/model/visionimage"
 )
 
-const maxImageAttachmentBytes = 10 * 1024 * 1024
+// MaxImageAttachmentBytes caps a picture attachment; the desktop checks the same number before reading one.
+const MaxImageAttachmentBytes = 10 * 1024 * 1024
 const maxFileAttachmentBytes = 25 * 1024 * 1024
 const maxAttachmentCreateAttempts = 1000
+
+var (
+	ErrAttachmentEmpty    = errors.New("attachment is empty")
+	ErrAttachmentTooLarge = errors.New("attachment is too large")
+	ErrAttachmentNotImage = errors.New("attachment is not a supported image")
+	ErrAttachmentWrite    = errors.New("attachment could not be saved")
+)
+
+// AttachmentError is a refused attachment with the class that refused it.
+// Kind is one of the Err sentinels; the other fields are the facts a reader
+// needs in order to act on that class.
+type AttachmentError struct {
+	Kind error
+	Msg  string
+	// LimitMB is the cap that was exceeded, for ErrAttachmentTooLarge.
+	LimitMB int
+	// Type is what the bytes (or the declared media type) were taken for, for
+	// ErrAttachmentNotImage.
+	Type  string
+	Cause error
+}
+
+func (e *AttachmentError) Error() string { return e.Msg }
+
+func (e *AttachmentError) Unwrap() []error {
+	if e.Cause != nil {
+		return []error{e.Kind, e.Cause}
+	}
+	return []error{e.Kind}
+}
+
+func attachmentSizeError(n, limit int) error {
+	if n == 0 {
+		return &AttachmentError{Kind: ErrAttachmentEmpty, Msg: "attachment is empty"}
+	}
+	mb := limit >> 20
+	return &AttachmentError{Kind: ErrAttachmentTooLarge, Msg: fmt.Sprintf("attachment is larger than %d MB", mb), LimitMB: mb}
+}
+
+func attachmentWriteError(err error) error {
+	return &AttachmentError{Kind: ErrAttachmentWrite, Msg: err.Error(), Cause: err}
+}
 
 var attachmentPathSeq atomic.Uint64
 var attachmentNow = time.Now
@@ -24,7 +68,7 @@ var safeAttachmentExt = regexp.MustCompile(`^\.[a-z0-9]{1,12}$`)
 
 func SaveAttachmentBytesInRoot(root, origName string, raw []byte) (string, error) {
 	if len(raw) == 0 || len(raw) > maxFileAttachmentBytes {
-		return "", fmt.Errorf("attachment must be between 1 byte and 25 MB")
+		return "", attachmentSizeError(len(raw), maxFileAttachmentBytes)
 	}
 	ext := strings.ToLower(filepath.Ext(origName))
 	if !safeAttachmentExt.MatchString(ext) {
@@ -38,55 +82,45 @@ func SaveImageBytes(declaredMime string, raw []byte) (string, error) {
 }
 
 func SaveImageBytesInRoot(root, declaredMime string, raw []byte) (string, error) {
-	if len(raw) == 0 || len(raw) > maxImageAttachmentBytes {
-		return "", fmt.Errorf("pasted image must be between 1 byte and 10 MB")
+	if len(raw) == 0 || len(raw) > MaxImageAttachmentBytes {
+		return "", attachmentSizeError(len(raw), MaxImageAttachmentBytes)
 	}
 	mime := visionimage.DetectMime(raw)
 	if mime == "" {
-		return "", fmt.Errorf("pasted data is not a supported image")
+		return "", &AttachmentError{Kind: ErrAttachmentNotImage, Msg: "pasted data is not a supported image", Type: visionimage.Sniff(raw)}
 	}
 	if declaredMime != "" && visionimage.Ext(declaredMime) == "" {
-		return "", fmt.Errorf("unsupported image type: %s", declaredMime)
+		return "", &AttachmentError{Kind: ErrAttachmentNotImage, Msg: fmt.Sprintf("unsupported image type: %s", declaredMime), Type: strings.ToLower(strings.TrimSpace(declaredMime))}
 	}
 	ext := visionimage.Ext(mime)
 	return saveAttachmentBytesInRoot(root, ext, raw)
 }
 
 func saveAttachmentBytesInRoot(root, ext string, raw []byte) (string, error) {
-	if strings.TrimSpace(root) == "" {
-		root = "."
-	}
-	absRoot, err := filepath.Abs(root)
+	rel, err := storeAttachmentBytes(root, ext, raw)
 	if err != nil {
-		return "", err
+		return "", attachmentWriteError(err)
 	}
-	if err := ensureAttachmentRootIn(absRoot); err != nil {
-		return "", err
-	}
-	rel, f, err := createAttachmentFileIn(absRoot, ext)
-	if err != nil {
-		return "", err
-	}
-	if n, err := f.Write(raw); err != nil {
-		_ = f.Close()
-		_ = os.Remove(filepath.Join(absRoot, rel))
-		return "", err
-	} else if n != len(raw) {
-		_ = f.Close()
-		_ = os.Remove(filepath.Join(absRoot, rel))
-		return "", io.ErrShortWrite
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(filepath.Join(absRoot, rel))
-		return "", err
-	}
-	return filepath.ToSlash(rel), nil
+	return rel, nil
 }
 
-// visionImageDataURL reads an attachment and, unlike ImageDataURL (which feeds
-// the desktop preview at full resolution), downscales/recompresses it before
-// base64 so an oversized photo doesn't balloon the request bytes and image
-// tokens. An attachment that cannot be fitted is refused, never forwarded.
+func storeAttachmentBytes(root, ext string, raw []byte) (string, error) {
+	owned, err := createOwnedAttachmentFile(root, ext)
+	if err != nil {
+		return "", err
+	}
+	defer owned.cleanup()
+	if n, err := owned.Write(raw); err != nil {
+		return "", err
+	} else if n != len(raw) {
+		return "", io.ErrShortWrite
+	}
+	if err := owned.finish(); err != nil {
+		return "", err
+	}
+	return filepath.ToSlash(owned.rel), nil
+}
+
 func visionImageDataURL(base, path string) (string, error) {
 	raw, mime, err := readAttachmentImage(base, path)
 	if err != nil {
@@ -111,7 +145,7 @@ func readAttachmentImage(base, path string) (raw []byte, mime string, err error)
 	if info.Mode()&os.ModeSymlink != 0 {
 		return nil, "", fmt.Errorf("attachment path must not be a symlink")
 	}
-	if info.IsDir() || info.Size() <= 0 || info.Size() > maxImageAttachmentBytes {
+	if info.IsDir() || info.Size() <= 0 || info.Size() > MaxImageAttachmentBytes {
 		return nil, "", fmt.Errorf("attachment image must be between 1 byte and 10 MB")
 	}
 	f, err := os.Open(clean)
@@ -126,11 +160,11 @@ func readAttachmentImage(base, path string) (raw []byte, mime string, err error)
 	if !os.SameFile(info, opened) {
 		return nil, "", fmt.Errorf("attachment changed while opening")
 	}
-	raw, err = io.ReadAll(io.LimitReader(f, maxImageAttachmentBytes+1))
+	raw, err = io.ReadAll(io.LimitReader(f, MaxImageAttachmentBytes+1))
 	if err != nil {
 		return nil, "", err
 	}
-	if len(raw) == 0 || len(raw) > maxImageAttachmentBytes {
+	if len(raw) == 0 || len(raw) > MaxImageAttachmentBytes {
 		return nil, "", fmt.Errorf("attachment image must be between 1 byte and 10 MB")
 	}
 	if after, err := f.Stat(); err != nil {
@@ -201,29 +235,11 @@ func ensureAttachmentRoot() error {
 }
 
 func ensureAttachmentRootIn(base string) error {
-	root := filepath.Join(base, ".reasonix", "attachments")
-	if info, err := os.Lstat(root); err == nil {
-		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("attachment directory must not be a symlink")
-		}
-		if !info.IsDir() {
-			return fmt.Errorf("attachment path exists but is not a directory")
-		}
-		return nil
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		return err
-	}
-	info, err := os.Lstat(root)
+	directory, err := openAttachmentRootIn(base)
 	if err != nil {
 		return err
 	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return fmt.Errorf("attachment directory is invalid")
-	}
-	return nil
+	return directory.Close()
 }
 
 func createAttachmentFile(ext string) (string, *os.File, error) {
@@ -231,18 +247,12 @@ func createAttachmentFile(ext string) (string, *os.File, error) {
 }
 
 func createAttachmentFileIn(base, ext string) (string, *os.File, error) {
-	for range maxAttachmentCreateAttempts {
-		rel := attachmentPath(ext)
-		f, err := os.OpenFile(filepath.Join(base, rel), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-		if os.IsExist(err) {
-			continue
-		}
-		if err != nil {
-			return "", nil, err
-		}
-		return rel, f, nil
+	owned, err := createOwnedAttachmentFile(base, ext)
+	if err != nil {
+		return "", nil, err
 	}
-	return "", nil, fmt.Errorf("create unique attachment path")
+	_ = owned.directory.Close()
+	return owned.rel, owned.File, nil
 }
 
 func attachmentPath(ext string) string {

@@ -26,6 +26,10 @@ class StudioHost {
     return this.json("GET", "/tray/state");
   }
 
+  trayRunning() {
+    return this.json("GET", "/tray/running");
+  }
+
   // A refusal and an unreachable kernel both answer null here: every caller of
   // this is a surface that has to keep working when the kernel is going down.
   async json(method, path, body) {
@@ -51,7 +55,7 @@ class StudioHost {
         headers["content-length"] = payload.length;
       }
       const req = http.request(
-        { hostname: url.hostname, port: url.port, path: url.pathname, method, headers, timeout: TIMEOUT_MS },
+        { hostname: url.hostname, port: url.port, path: url.pathname + url.search, method, headers, timeout: TIMEOUT_MS },
         (res) => {
           let text = "";
           res.setEncoding("utf8");

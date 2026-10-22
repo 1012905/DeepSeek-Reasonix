@@ -20,7 +20,38 @@ export interface McpEntry {
   httpStatus?: number;
   // This project decided the switch for itself instead of inheriting it.
   localOverride?: boolean;
+  // What config asks for now, and whether this session's schema carries the
+  // server's tools. The schema is fixed when a session starts, so the two
+  // differ until the next one.
+  alwaysLoad?: boolean;
+  inSchema?: boolean;
+  launch?: string;
+  // Why a pending server waits for the user, as the kernel's code.
+  pendingReason?: string;
+  // What a signed-in server asked to be allowed, in its own words. Only the
+  // user grants it, by clicking; nothing here reads the scope names.
+  scopeUpgrade?: string[];
+  // Tools this connection withheld from the model because their definition is
+  // not the one the user approved. heldDigest names exactly that set, and
+  // approving it hands the digest back so what is approved is what was shown.
+  // heldMore counts withheld tools past the list's cap.
+  held?: McpHeld[];
+  heldDigest?: string;
+  heldMore?: number;
+  // The user takes this server's definition changes without being asked.
+  followsChanges?: boolean;
 }
+
+// One withheld tool and how it differs from what was approved: added, changed,
+// or unverifiable when the approval record could not be read.
+export interface McpHeld {
+  name: string;
+  class: string;
+}
+
+// always puts a server's tools in every request; deferred reaches them through
+// search; empty hands the choice back to the server's own declaration.
+export type McpLoad = "always" | "deferred" | "";
 
 // One tool as its own server describes it. error carries a schema this host
 // rejected: listed but not callable, which is not the same as absent.
@@ -78,6 +109,11 @@ export interface McpDraftServer {
   url?: string;
   env?: Record<string, string>;
   headers?: Record<string, string>;
+  displayUrl?: string;
+  displayEnv?: Record<string, string>;
+  displayHeaders?: Record<string, string>;
+  displayCommand?: string;
+  displayArgs?: string[];
 }
 
 // What the confirmation card must show: shell is the command that will run,

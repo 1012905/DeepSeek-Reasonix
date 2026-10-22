@@ -1,30 +1,70 @@
 import type { AskReason } from "../../port/session";
 import { Sym } from "../Sym";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { t } from "../../i18n";
+import { reason } from "../../i18n/kernel";
 import type { Item } from "../../state/session";
+import { answerSource } from "../source";
+import { useViewer } from "../../state/viewer";
+import { useIme } from "../ime";
+import { LazyMarkdown } from "../LazyMarkdown";
+import { clock, useAskCountdown } from "./useAskCountdown";
+import { AskFreeText } from "./AskFreeText";
+import type { AgentPort } from "../../port/port";
+
+const ADVANCE_MS = 220;
 
 interface Props {
   item: Extract<Item, { t: "ask" }>;
   onAnswer: (itemId: string, id: string, answers: { questionId: string; selected: string[] }[]) => Promise<void>;
+  onEngage?: (id: string) => Promise<void>;
+  refine?: AgentPort["refinePrompt"];
 }
 
-export function AskCard({ item, onAnswer }: Props) {
+export function AskCard({ item, onAnswer, onEngage, refine }: Props) {
   const qs = item.ask.questions;
+  const answeredBy = answerSource(item.by, useViewer(), item.said);
   const [tab, setTab] = useState(0);
   const [picks, setPicks] = useState<string[][]>(() => qs.map(() => []));
   // The wire carries selections as free strings and the kernel joins them into
   // the tool result untouched, so "其他" is a label like any other.
   const [other, setOther] = useState<string[]>(() => qs.map(() => ""));
   const [otherOn, setOtherOn] = useState<boolean[]>(() => qs.map(() => false));
+  // A pick's note is its own text: an Other answer left behind by a pick is
+  // not a note, and returning to Other finds it where it was.
+  const [note, setNote] = useState<string[]>(() => qs.map(() => ""));
   const [submitting, setSubmitting] = useState(false);
+  // Every request is a new object, so asking for the same pane twice still moves focus.
+  const [focusTo, setFocusTo] = useState<{ q: number } | null>(null);
+  const boxes = useRef<(HTMLInputElement | null)[]>([]);
+  const panes = useRef<(HTMLDivElement | null)[]>([]);
+  const ime = useIme();
   // Answered is read-only but still readable: the tabs keep working so you can
   // see what was chosen for each question, and the options stay on screen with
   // the unchosen ones dimmed by the sealed styling.
   const sealed = item.answered !== undefined;
+  const engagement = useRef<"idle" | "pending" | "engaged">("idle");
+  const [engagementError, setEngagementError] = useState("");
+  const [kept, setKept] = useState(false);
+  const skipIn = useAskCountdown(item.skipAt, !sealed && !kept);
+  const engage = () => {
+    if (sealed || !onEngage || engagement.current !== "idle") return;
+    engagement.current = "pending";
+    void onEngage(item.ask.id).then(() => {
+      engagement.current = "engaged";
+      setKept(true);
+      setEngagementError("");
+    }).catch((err: unknown) => {
+      engagement.current = "idle";
+      setEngagementError(reason(err));
+    });
+  };
   const chosen = item.answered ?? picks;
 
-  const free = (i: number) => (otherOn[i] ? other[i].trim() : "");
+  // A single-choice pick keeps the box open as a note that rides with it, so an
+  // option asking for more ("paste the output") has somewhere to take it.
+  const noting = (i: number) => !qs[i].multi && !otherOn[i] && picks[i].length > 0;
+  const free = (i: number) => (otherOn[i] ? other[i].trim() : noting(i) ? note[i].trim() : "");
   const selected = (i: number) => (free(i) ? [...picks[i], free(i)] : picks[i]);
   const answered = (i: number) => (sealed ? (chosen[i]?.length ?? 0) > 0 : selected(i).length > 0);
   const left = qs.reduce((n, _, i) => n + (answered(i) ? 0 : 1), 0);
@@ -34,16 +74,33 @@ export function AskCard({ item, onAnswer }: Props) {
     const offered = new Set(qs[i].options.map((o) => o.label));
     return (chosen[i] ?? []).filter((v) => !offered.has(v)).join("、");
   };
-  const freeShown = (i: number) => (sealed ? sealedFree(i) : other[i]);
+  const freeShown = (i: number) => (sealed ? sealedFree(i) : noting(i) ? note[i] : other[i]);
   const customOption = (i: number) => qs[i].options.find((option) => isOtherOption(option.label));
+  const sealedPick = (i: number) =>
+    qs[i].options.some((o) => !isOtherOption(o.label) && (chosen[i] ?? []).includes(o.label));
+  const noteShown = (i: number) => (sealed ? !qs[i].multi && sealedPick(i) && !!sealedFree(i) : noting(i));
   const customChosen = (i: number) => {
     const offered = customOption(i);
     return sealed
-      ? !!sealedFree(i) || (!!offered && (chosen[i] ?? []).includes(offered.label))
+      ? (!!sealedFree(i) && !noteShown(i)) || (!!offered && (chosen[i] ?? []).includes(offered.label))
       : otherOn[i];
   };
 
   const at = <T,>(list: T[], i: number, v: T) => list.map((x, k) => (k === i ? v : x));
+
+  // The next question still waiting for an answer after `from`, wrapping, or -1.
+  // `done` counts one more question as answered than state yet shows.
+  const nextOpen = (from: number, done = -1) => {
+    for (let k = 1; k < qs.length; k++) {
+      const j = (from + k) % qs.length;
+      if (j !== done && !answered(j)) return j;
+    }
+    return -1;
+  };
+
+  // Stepping forward is positional: only the last question looks for one still
+  // waiting, so a question already answered is still visited on the way.
+  const stepTo = (from: number, done = -1) => (from < qs.length - 1 ? from + 1 : nextOpen(from, done));
 
   const toggle = (qi: number, label: string) => {
     if (sealed) return;
@@ -52,15 +109,40 @@ export function AskCard({ item, onAnswer }: Props) {
       const has = prev[qi].includes(label);
       return at(prev, qi, has ? prev[qi].filter((l) => l !== label) : [...prev[qi], label]);
     });
-    if (!qs[qi].multi) setOtherOn((prev) => at(prev, qi, false));
+    if (!qs[qi].multi) {
+      setOtherOn((prev) => at(prev, qi, false));
+      // One pick answers a single-choice question, so the card moves on by
+      // itself; the pause lets the mark land before the pane changes.
+      const next = stepTo(qi, qi);
+      if (next >= 0) window.setTimeout(() => setTab((cur) => (cur === qi ? next : cur)), ADVANCE_MS);
+    }
   };
 
   const toggleOther = (qi: number) => {
     if (sealed) return;
     const on = !otherOn[qi];
     setOtherOn((prev) => at(prev, qi, on));
+    if (on) setFocusTo({ q: qi });
     if (on && !qs[qi].multi) setPicks((prev) => at(prev, qi, []));
   };
+
+  const type = (qi: number, text: string) => {
+    if (noting(qi)) return setNote((prev) => at(prev, qi, text));
+    setOther((prev) => at(prev, qi, text));
+    if (text && !otherOn[qi]) {
+      setOtherOn((prev) => at(prev, qi, true));
+      if (!qs[qi].multi) setPicks((prev) => at(prev, qi, []));
+    }
+  };
+
+  // A pane is display:none until it is the current one, so focus moves after
+  // the render that shows it: into its open free-text or note box, else its first option.
+  useEffect(() => {
+    if (!focusTo) return;
+    const box = boxes.current[focusTo.q];
+    if ((otherOn[focusTo.q] || noting(focusTo.q)) && box) box.focus();
+    else panes.current[focusTo.q]?.querySelector<HTMLElement>("button.opt")?.focus();
+  }, [focusTo]);
 
   const send = async (answers: string[][]) => {
     if (submitting) return;
@@ -72,11 +154,24 @@ export function AskCard({ item, onAnswer }: Props) {
     }
   };
 
+  // Enter in the free-text box does what the primary button would, so a typed
+  // answer never needs the mouse to go on.
+  const onEnter = () => {
+    if (submitting) return;
+    if (stepTo(tab, tab) >= 0) {
+      if (!answered(tab)) return;
+      const next = stepTo(tab);
+      setTab(next);
+      setFocusTo({ q: next });
+    } else if (left === 0) {
+      void send(qs.map((_, i) => selected(i)));
+    }
+  };
+
   return (
     <div className="call" data-k="ask" data-prompt={sealed ? "settled" : "pending"}>
       <div className="g">
         <Sym glyph="?" />
-        <span className="line" />
       </div>
       <div className="c">
         <div className="hl">
@@ -84,7 +179,10 @@ export function AskCard({ item, onAnswer }: Props) {
           <span className="tag">{t("{n} 个问题", { n: qs.length })}</span>
         </div>
         <div className="out">
-          <div className="ask" data-sealed={sealed ? "" : undefined} aria-busy={submitting}>
+          <div className="ask" data-sealed={sealed ? "" : undefined} aria-busy={submitting}
+            onPointerDownCapture={engage} onKeyDownCapture={engage} onInputCapture={engage}
+            onWheelCapture={engage} onTouchMoveCapture={engage}>
+            {!sealed && engagementError && <div className="err" role="alert">{engagementError}</div>}
             {qs.length > 1 && (
               <div className="ask-tabs" role="tablist">
                 {qs.map((q, i) => (
@@ -103,8 +201,15 @@ export function AskCard({ item, onAnswer }: Props) {
               </div>
             )}
             {qs.map((q, i) => (
-              <div className="ask-pane" key={q.id} data-on={i === tab ? "" : undefined}>
-                <div className="ask-q">{q.prompt}</div>
+              <div
+                className="ask-pane"
+                key={q.id}
+                data-on={i === tab ? "" : undefined}
+                ref={(el) => {
+                  panes.current[i] = el;
+                }}
+              >
+                <div className="ask-q"><LazyMarkdown text={q.prompt} /></div>
                 <div className="ask-hint">{t(q.multi ? "可多选" : "请选择一项")}</div>
                 <div className="opts" aria-label={q.prompt}>
                   {q.options.filter((o) => !isOtherOption(o.label)).map((o) => (
@@ -141,20 +246,32 @@ export function AskCard({ item, onAnswer }: Props) {
                     </span>
                   </button>
                 </div>
-                <div className="other-wrap" data-on={customChosen(i) ? "" : undefined}>
-                  <input
+                <div className="other-wrap" data-on={customChosen(i) || noteShown(i) ? "" : undefined}>
+                  <AskFreeText
+                    inputRef={(el) => {
+                      boxes.current[i] = el;
+                    }}
+                    label={noteShown(i) ? t("补充说明（可选）") : (customOption(i)?.label ?? t("其他 —— 自行填写"))}
                     value={freeShown(i)}
                     readOnly={sealed}
-                    placeholder={t("在此填写你希望采用的方案")}
-                    onChange={(e) => setOther((prev) => at(prev, i, e.target.value))}
+                    placeholder={noteShown(i) ? t("补充说明（可选），会随所选项一起发送") : t("或直接输入你的回答")}
+                    onChange={(text) => type(i, text)}
+                    onEnter={onEnter}
+                    isIme={ime.isIme}
+                    imeHandlers={ime.handlers}
+                    refine={refine}
                   />
                 </div>
               </div>
             ))}
             {sealed && (
-              <div className="ask-done">
-                {item.answeredElsewhere ? (
-                  <b>{t("已在其他窗口处理，请以最新运行状态为准。")}</b>
+              <div className="ask-done" data-recorded={item.recorded !== undefined ? "" : undefined}>
+                {item.recorded !== undefined ? (
+                  item.recorded
+                ) : item.timedOut ? (
+                  <b>{t("等待超时，这个问题已被跳过")}</b>
+                ) : item.answeredElsewhere ? (
+                  <b>{answeredBy || t("已在其他窗口处理，请以最新运行状态为准。")}</b>
                 ) : (
                   <>
                     {qs.map((q, i) => (
@@ -170,15 +287,34 @@ export function AskCard({ item, onAnswer }: Props) {
             )}
             {!sealed && (
               <div className="ask-foot">
+                {skipIn !== null && (
+                  <span className="ask-skip" role="timer" aria-live="off">
+                    {t("{time} 后自动跳过这个问题，点任意处保留", { time: skipIn < 60 ? t("{n} 秒", { n: skipIn }) : clock(skipIn) })}
+                  </span>
+                )}
                 {/* An answer batch with nothing selected is the kernel's explicit
                     "don't decide for me" path: it ends the turn rather than
                     feeding a prose dismissal back to the model. */}
                 <button className="dismiss" data-action="ask.answer" data-value="none" disabled={submitting} onClick={() => void send(qs.map(() => []))}>
                   {t("先不选择，直接回复")}
                 </button>
-                <button className="btn" data-primary data-action="ask.answer" data-value="chosen" disabled={left > 0 || submitting} onClick={() => void send(qs.map((_, i) => selected(i)))}>
-                  {submitting ? t("正在提交…") : t("确认")}
-                </button>
+                {qs.length > 1 && tab > 0 && (
+                  <button className="dismiss" data-action="ask.step" data-value="prev" disabled={submitting} onClick={() => setTab(tab - 1)}>
+                    {t("上一题")}
+                  </button>
+                )}
+                {stepTo(tab, tab) >= 0 ? (
+                  // Confirm belongs to the last question; earlier ones step on,
+                  // waiting for this one to be answered first.
+                  <button className="btn" data-primary data-action="ask.step" data-value="next"
+                    disabled={!answered(tab) || submitting} onClick={() => setTab(stepTo(tab))}>
+                    {t("下一题（{i}/{n}）", { i: tab + 1, n: qs.length })}
+                  </button>
+                ) : (
+                  <button className="btn" data-primary data-action="ask.answer" data-value="chosen" disabled={left > 0 || submitting} onClick={() => void send(qs.map((_, i) => selected(i)))}>
+                    {submitting ? t("正在提交…") : t("确认")}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -198,9 +334,9 @@ function isOtherOption(label: string): boolean {
 function reasonLabel(reason: AskReason): string {
   switch (reason) {
     case "user_decision":
-      return "需要你决定";
+      return t("需要你决定");
     case "missing_value":
-      return "需要你补充信息";
+      return t("需要你补充信息");
     default: {
       const unhandled: never = reason;
       return unhandled;

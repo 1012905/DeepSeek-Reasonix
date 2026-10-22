@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -168,5 +169,47 @@ func TestWaitForApprovalStopsWhenCancelled(t *testing.T) {
 	_, _, err := c.WaitForApproval(ctx, &DeviceGrant{DeviceCode: "dc-1", Interval: 1, ExpiresIn: 900})
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("cancelled wait = %v, want context.Canceled", err)
+	}
+}
+
+func TestClientWithoutAUserAgentFallsBackToTheClientIdentity(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("User-Agent")
+		writeJSON(t, w, http.StatusOK, map[string]any{})
+	}))
+	defer srv.Close()
+	_ = New(srv.URL, "", srv.Client()).do(context.Background(), http.MethodGet, "/x", "", nil, nil)
+	if got == "" || strings.HasPrefix(got, "Go-http-client") {
+		t.Fatalf("User-Agent = %q", got)
+	}
+}
+
+func TestFeedbackAssertionIsMintedPerCallWithTheSessionToken(t *testing.T) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/me/feedback-assertion" || r.Method != http.MethodPost || r.Header.Get("Authorization") != "Bearer tok" {
+			t.Errorf("unexpected request %s %s %q", r.Method, r.URL.Path, r.Header.Get("Authorization"))
+		}
+		writeJSON(t, w, 200, map[string]string{"assertion": "v1.p.s", "expiresAt": "2026-10-15T00:05:00Z"})
+	})
+	got, err := c.FeedbackAssertion(context.Background(), "tok")
+	if err != nil || got != "v1.p.s" {
+		t.Fatalf("assertion %q %v", got, err)
+	}
+	if _, err := c.FeedbackAssertion(context.Background(), ""); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("signed out: %v", err)
+	}
+}
+
+func TestFeedbackAssertionSeparatesAnExpiredSessionFromAnUnavailableLink(t *testing.T) {
+	expired := newTestClient(t, func(w http.ResponseWriter, r *http.Request) { apiError(t, w, 401, "unauthorized", "no") })
+	if _, err := expired.FeedbackAssertion(context.Background(), "tok"); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("expired: %v", err)
+	}
+	off := newTestClient(t, func(w http.ResponseWriter, r *http.Request) { apiError(t, w, 503, "feedback_unavailable", "off") })
+	_, err := off.FeedbackAssertion(context.Background(), "tok")
+	var apiErr *Error
+	if err == nil || errors.Is(err, ErrUnauthorized) || !errors.As(err, &apiErr) || apiErr.Code != "feedback_unavailable" {
+		t.Fatalf("unavailable must stay itself: %v", err)
 	}
 }

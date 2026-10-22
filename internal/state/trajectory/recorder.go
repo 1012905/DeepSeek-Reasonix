@@ -34,6 +34,7 @@ type Record struct {
 	TurnCompletion   bool                 `json:"turn_completion,omitempty"`
 	ContractShadow   *ContractShadowAudit `json:"contract_shadow,omitempty"`
 	CompletionReport *CompletionReport    `json:"completion_report,omitempty"`
+	EvidenceBundle   *EvidenceBundle      `json:"evidence_bundle,omitempty"`
 	OutcomeProgress  *OutcomeProgress     `json:"outcome_progress,omitempty"`
 	MemoryRecall     *MemoryRecall        `json:"memory_recall,omitempty"`
 	ProjectCheck     *ProjectCheckProbe   `json:"project_check_probe,omitempty"`
@@ -60,15 +61,31 @@ type RunHeader struct {
 	Tools         json.RawMessage `json:"tools,omitempty"`
 	ToolsHash     string          `json:"tools_hash"`
 	PrefixHash    string          `json:"prefix_hash"`
+	// Capabilities names every capability version the run had available, and
+	// CapabilitiesHash the set, so two runs compare by one field and differ
+	// by the entries that changed.
+	Capabilities     []CapabilityVersion `json:"capabilities,omitempty"`
+	CapabilitiesHash string              `json:"capabilities_hash,omitempty"`
+}
+
+// CapabilityVersion is one capability by kind, name and content digest.
+type CapabilityVersion struct {
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
+	Digest string `json:"digest"`
 }
 
 // MemoryRecall mirrors event.MemoryRecallAudit with stable snake_case keys.
 type MemoryRecall struct {
-	Hits       []MemoryRecallHit `json:"hits,omitempty"`
-	UsedChars  int               `json:"used_chars,omitempty"`
-	Omitted    int               `json:"omitted,omitempty"`
-	Suppressed string            `json:"suppressed,omitempty"`
-	ShadowHits []MemoryRecallHit `json:"shadow_hits,omitempty"`
+	Hits            []MemoryRecallHit `json:"hits,omitempty"`
+	CharBudget      int               `json:"char_budget"`
+	UsedChars       int               `json:"used_chars,omitempty"`
+	Omitted         int               `json:"omitted,omitempty"`
+	OmittedByLimit  int               `json:"omitted_by_limit"`
+	OmittedByBudget int               `json:"omitted_by_budget"`
+	Suppressed      string            `json:"suppressed,omitempty"`
+	SuppressionCode string            `json:"suppression_code,omitempty"`
+	ShadowHits      []MemoryRecallHit `json:"shadow_hits,omitempty"`
 }
 
 // MemoryRecallHit is one recalled fact's content-free fingerprint.
@@ -173,6 +190,30 @@ type CompletionReport struct {
 	GapKinds                  []string `json:"gap_kinds,omitempty"`
 	ClaimsVerified            int      `json:"claims_verified,omitempty"`
 	ClaimsUnbacked            int      `json:"claims_unbacked,omitempty"`
+	OriginRecorded            int      `json:"origin_recorded,omitempty"`
+	OriginMatched             int      `json:"origin_matched,omitempty"`
+}
+
+// EvidenceBundle mirrors event.EvidenceBundleAudit with stable keys.
+type EvidenceBundle struct {
+	Sealed      bool   `json:"sealed"`
+	Record      string `json:"record,omitempty"`
+	Generation  uint64 `json:"generation,omitempty"`
+	Integrity   string `json:"integrity,omitempty"`
+	Receipts    int    `json:"receipts,omitempty"`
+	FailureCode string `json:"failure_code,omitempty"`
+
+	SnapshotComplete   bool `json:"snapshot_complete,omitempty"`
+	UnobservedCompared bool `json:"unobserved_compared,omitempty"`
+	UnobservedChanges  int  `json:"unobserved_changes,omitempty"`
+
+	Outcome           string   `json:"outcome,omitempty"`
+	DivergenceClass   string   `json:"divergence_class,omitempty"`
+	DivergenceReasons []string `json:"divergence_reasons,omitempty"`
+
+	ContractRevision int    `json:"contract_revision,omitempty"`
+	ContractDecision string `json:"contract_decision,omitempty"`
+	ContractFailure  string `json:"contract_failure,omitempty"`
 }
 
 // ReadinessAudit mirrors hostaudit.ReadinessAudit with stable snake_case keys.
@@ -315,6 +356,10 @@ func (r *Recorder) flushPendingLocked() {
 
 func (r *Recorder) Emit(e event.Event) {
 	w := eventwire.ToWire(e)
+	if w.NonPersistable {
+		r.inner.Emit(e)
+		return
+	}
 	if plainDelta(&w) {
 		r.appendDelta(w)
 	} else {
@@ -404,6 +449,30 @@ func (r *Recorder) RecordContractShadow(a event.ContractShadowAudit) {
 	event.RecordContractShadow(r.inner, a)
 }
 
+func (r *Recorder) RecordEvidenceBundle(a event.EvidenceBundleAudit) {
+	r.append(Record{EvidenceBundle: &EvidenceBundle{
+		Sealed:      a.Sealed,
+		Record:      a.Record,
+		Generation:  a.Generation,
+		Integrity:   a.Integrity,
+		Receipts:    a.Receipts,
+		FailureCode: a.FailureCode,
+
+		SnapshotComplete:   a.SnapshotComplete,
+		UnobservedCompared: a.UnobservedCompared,
+		UnobservedChanges:  a.UnobservedChanges,
+
+		Outcome:           a.Outcome,
+		DivergenceClass:   a.DivergenceClass,
+		DivergenceReasons: a.DivergenceReasons,
+
+		ContractRevision: a.ContractRevision,
+		ContractDecision: a.ContractDecision,
+		ContractFailure:  a.ContractFailure,
+	}})
+	event.RecordEvidenceBundle(r.inner, a)
+}
+
 func (r *Recorder) RecordCompletionReport(a event.CompletionReportAudit) {
 	r.append(Record{CompletionReport: &CompletionReport{
 		Verdict:                   a.Verdict,
@@ -420,6 +489,8 @@ func (r *Recorder) RecordCompletionReport(a event.CompletionReportAudit) {
 		GapKinds:                  a.GapKinds,
 		ClaimsVerified:            a.ClaimsVerified,
 		ClaimsUnbacked:            a.ClaimsUnbacked,
+		OriginRecorded:            a.OriginRecorded,
+		OriginMatched:             a.OriginMatched,
 	}})
 	event.RecordCompletionReport(r.inner, a)
 }
@@ -444,7 +515,12 @@ func (r *Recorder) RecordOutcomeProgress(sample hostaudit.OutcomeSample) {
 }
 
 func (r *Recorder) RecordMemoryRecall(a event.MemoryRecallAudit) {
-	rec := &MemoryRecall{UsedChars: a.UsedChars, Omitted: a.Omitted, Suppressed: a.Suppressed}
+	rec := &MemoryRecall{
+		CharBudget: a.CharBudget, UsedChars: a.UsedChars, Omitted: a.Omitted,
+		OmittedByLimit: a.OmittedByLimit, OmittedByBudget: a.OmittedByBudget,
+		Suppressed:      a.Suppressed,
+		SuppressionCode: a.SuppressionCode,
+	}
 	for _, hit := range a.Hits {
 		rec.Hits = append(rec.Hits, MemoryRecallHit{
 			ID: hit.ID, Revision: hit.Revision, Scope: hit.Scope,

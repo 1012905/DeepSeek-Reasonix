@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"reasonix/internal/runtime/usecap"
 	"reasonix/internal/state/sessionstore"
 	"strings"
 	"testing"
@@ -48,6 +49,9 @@ func TestMissingRequiredArgumentSkipsApproval(t *testing.T) {
 	}
 	if ran {
 		t.Fatal("tool executed despite missing a required argument")
+	}
+	if out.refusalCode != refusalArgumentsInvalid {
+		t.Fatalf("refusal code = %q, want %q so a frontend can tell a refused call from one that ran", out.refusalCode, refusalArgumentsInvalid)
 	}
 }
 
@@ -177,7 +181,7 @@ func TestMistypedArgumentIsRefusedThroughTheCapabilityProxy(t *testing.T) {
 	ran := false
 	targets := tool.NewRegistry()
 	targets.Add(evidenceTool{ran: &ran})
-	proxy := NewUseCapabilityTool(context.Background(), nil, nil, targets,
+	proxy := usecap.NewUseCapabilityTool(context.Background(), nil, nil, targets,
 		capability.NewLedger(), &capability.Audit{},
 		func() capability.Catalog { return capability.Catalog{} })
 	reg := tool.NewRegistry()

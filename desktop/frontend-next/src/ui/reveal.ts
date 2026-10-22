@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useShown } from "./shown";
 
 // The kernel pushes 2-3 characters per frame, but in bursts: measured against a
 // live turn, the median gap between frames is 0ms and the 90th is 32ms. Drawing
@@ -10,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 const DRAIN = 5;
 
 export function useRevealed(text: string, streaming?: boolean): string {
+  const watched = useShown();
   const [shown, setShown] = useState(text.length);
   const at = useRef(text.length);
   const want = useRef(text.length);
@@ -18,21 +20,22 @@ export function useRevealed(text: string, streaming?: boolean): string {
   useEffect(() => {
     // A settled message, a reload or a new turn has no backlog to pace: whatever
     // is there is already final.
-    if (!streaming || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (!streaming || !watched || matchMedia("(prefers-reduced-motion: reduce)").matches) {
       at.current = want.current;
       setShown(want.current);
       return;
+    }
+    // Replaced rather than appended (session switch, history restore): the
+    // cursor has to come back with the text, or every later growth below the
+    // old length is short-circuited below and the reveal never animates again.
+    if (at.current > want.current) {
+      at.current = want.current;
+      setShown(want.current);
     }
     if (at.current >= want.current) return;
     let raf = 0;
     const step = () => {
       const target = want.current;
-      // Replaced rather than appended (session switch, history restore).
-      if (target < at.current) {
-        at.current = target;
-        setShown(target);
-        return;
-      }
       if (at.current >= target) return;
       at.current = Math.min(target, at.current + Math.max(1, Math.ceil((target - at.current) / DRAIN)));
       setShown(at.current);
@@ -40,7 +43,7 @@ export function useRevealed(text: string, streaming?: boolean): string {
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [streaming, text.length]);
+  }, [streaming, watched, text.length]);
 
-  return streaming ? text.slice(0, shown) : text;
+  return streaming && watched ? text.slice(0, shown) : text;
 }

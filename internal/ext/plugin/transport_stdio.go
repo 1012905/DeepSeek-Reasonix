@@ -2,11 +2,11 @@ package plugin
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
+	fileenc "reasonix/internal/base/fileutil/encoding"
 	"reasonix/internal/base/proc"
 	"reasonix/internal/base/secrets"
-	"reasonix/internal/contract/tool"
 	"reasonix/internal/safety/sandbox"
 )
 
@@ -35,13 +35,14 @@ const (
 // forever) and calls overlap freely: no lock spans a round trip, so one slow
 // tool cannot hold the pipe against the whole server.
 type stdioTransport struct {
-	name   string
-	roots  []mcpRoot
-	cmd    *exec.Cmd
-	job    *proc.TrackedJob // reaps detached grandchildren on close; releases itself exactly once
-	stdin  io.WriteCloser
-	stdout *bufio.Reader
-	stderr *tailBuffer
+	name         string
+	roots        []mcpRoot
+	cmd          *exec.Cmd
+	job          *proc.TrackedJob // reaps detached grandchildren on close; releases itself exactly once
+	stdin        io.WriteCloser
+	stdout       *bufio.Reader
+	stderr       *tailBuffer
+	privateState string
 
 	writeMu sync.Mutex // client calls and server-request replies share stdin
 
@@ -53,6 +54,8 @@ type stdioTransport struct {
 	waitOnce    sync.Once
 	releaseSlot func() // returns a bounded instance slot (e.g. CodeGraph) on close; nil when unbounded
 	progress    progressRouter
+	elicits     elicitRouter
+	notices     notificationRouter
 }
 
 func newStdioTransport(ctx context.Context, s Spec) (*stdioTransport, error) {
@@ -88,13 +91,23 @@ func newStdioTransport(ctx context.Context, s Spec) (*stdioTransport, error) {
 	if err != nil {
 		return nil, err
 	}
+	stateTransferred := false
+	defer func() {
+		if !stateTransferred && s.ProcessStateDir != "" {
+			_ = os.RemoveAll(compositionTransportState(s))
+		}
+	}()
 	launchArgs := append([]string{exe}, effectiveLaunchArgs(s)...)
 	var argv []string
+	confined := false
 	if s.ResolvedProcessMode() == MCPProcessConfined {
 		processSandbox.MinimalWrites = true
-		argv, _ = sandbox.CommandArgs(processSandbox, launchArgs)
+		argv, confined = sandbox.CommandArgs(processSandbox, launchArgs)
 	} else {
 		argv = launchArgs
+	}
+	if !confined {
+		unconfinedLaunch.Store(true)
 	}
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	proc.HideWindow(cmd)
@@ -106,7 +119,7 @@ func newStdioTransport(ctx context.Context, s Spec) (*stdioTransport, error) {
 	stderr := &tailBuffer{limit: 16 * 1024}
 	cmd.Stderr = stderr
 	if s.Stderr != nil {
-		cmd.Stderr = io.MultiWriter(stderr, s.Stderr)
+		cmd.Stderr = io.MultiWriter(stderr, omittedStderrWriter{sink: s.Stderr})
 	}
 
 	stdin, err := cmd.StdinPipe()
@@ -125,17 +138,19 @@ func newStdioTransport(ctx context.Context, s Spec) (*stdioTransport, error) {
 		proc.LowPriorityStarted(cmd)
 	}
 	t := &stdioTransport{
-		name:        s.Name,
-		roots:       mcpRoots(s.WorkspaceRoot),
-		cmd:         cmd,
-		job:         job,
-		stdin:       stdin,
-		stdout:      bufio.NewReader(stdout),
-		stderr:      stderr,
-		pending:     map[int]chan rpcResponse{},
-		releaseSlot: releaseSlot,
+		name:         s.Name,
+		privateState: compositionTransportState(s),
+		roots:        mcpRoots(s.WorkspaceRoot),
+		cmd:          cmd,
+		job:          job,
+		stdin:        stdin,
+		stdout:       bufio.NewReader(stdout),
+		stderr:       stderr,
+		pending:      map[int]chan rpcResponse{},
+		releaseSlot:  releaseSlot,
 	}
 	releaseSlot = nil // ownership transferred to t; close() releases it
+	stateTransferred = true
 	go t.readLoop()
 	return t, nil
 }
@@ -146,6 +161,18 @@ func prepareMCPPrivateState(s Spec, processSandbox sandbox.Spec, env []string) (
 
 func prepareMCPPrivateStateForOS(s Spec, processSandbox sandbox.Spec, env []string, goos string) (sandbox.Spec, []string, error) {
 	root := strings.TrimSpace(s.StateDir)
+	if s.ProcessStateDir != "" {
+		if _, err := CompositionProcessRoot(s); err != nil {
+			return processSandbox, env, err
+		}
+		root = compositionTransportState(s)
+		if err := os.MkdirAll(root, 0o700); err != nil {
+			return processSandbox, env, err
+		}
+		if info, err := os.Lstat(root); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return processSandbox, env, fmt.Errorf("invalid MCP transport state directory")
+		}
+	}
 	if root == "" {
 		return processSandbox, env, nil
 	}
@@ -182,6 +209,7 @@ func prepareMCPPrivateStateForOS(s Spec, processSandbox sandbox.Spec, env []stri
 		env = setEnvValue(env, key, value)
 	}
 	processSandbox.WriteRoots = append(processSandbox.WriteRoots, root, privateRoot)
+	processSandbox.Pins = processSandbox.Pins.With([]string{root, privateRoot})
 	processSandbox.AppContainerWriteRoots = append(processSandbox.AppContainerWriteRoots, root, privateRoot)
 	return processSandbox, env, nil
 }
@@ -274,12 +302,10 @@ func resolveStdioExecutable(ctx context.Context, s Spec, env []string) (string, 
 				return exe, fallbackEnv, nil
 			}
 			env = fallbackEnv
-			currentPath = fallbackPath
 		}
 	}
 
-	return "", env, fmt.Errorf("stdio plugin %q: command %q not found on PATH; GUI launches and non-interactive sessions may not inherit your shell PATH. Use an absolute command path or set PATH in the MCP server env. PATH=%q",
-		s.Name, s.Command, currentPath)
+	return "", env, &commandMissingError{command: s.Command}
 }
 
 // stdioWorkingDir keeps WorkspaceRoot's roots/list role separate from process
@@ -316,56 +342,11 @@ func hasPathSeparator(s string) bool {
 func lookPathInEnv(command string, env []string) (string, bool) {
 	path, _ := envValue(env, "PATH")
 	pathext, _ := envValue(env, "PATHEXT")
-	for _, dir := range filepath.SplitList(path) {
-		if dir == "" || !filepath.IsAbs(dir) {
-			continue
-		}
-		for _, name := range executableNames(command, pathext) {
-			candidate := filepath.Join(dir, name)
-			if isExecutableFile(candidate) {
-				return candidate, true
-			}
-		}
-	}
-	return "", false
-}
-
-func executableNames(command, pathext string) []string {
-	if runtime.GOOS != "windows" || filepath.Ext(command) != "" {
-		return []string{command}
-	}
-	if strings.TrimSpace(pathext) == "" {
-		pathext = ".COM;.EXE;.BAT;.CMD"
-	}
-	names := []string{command}
-	seen := map[string]bool{strings.ToLower(command): true}
-	for ext := range strings.SplitSeq(pathext, ";") {
-		ext = strings.TrimSpace(ext)
-		if ext == "" {
-			continue
-		}
-		if !strings.HasPrefix(ext, ".") {
-			ext = "." + ext
-		}
-		name := command + ext
-		key := strings.ToLower(name)
-		if !seen[key] {
-			seen[key] = true
-			names = append(names, name)
-		}
-	}
-	return names
+	return proc.LookPathIn(command, path, pathext, runtime.GOOS == "windows")
 }
 
 func isExecutableFile(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil || info.IsDir() {
-		return false
-	}
-	if runtime.GOOS == "windows" {
-		return true
-	}
-	return info.Mode().Perm()&0o111 != 0
+	return proc.IsExecutableFile(path, runtime.GOOS == "windows")
 }
 
 func windowsStdioFallbackPATH(env []string) string {
@@ -483,16 +464,18 @@ func parseShellPATH(out []byte, marker string) string {
 	return ""
 }
 
+// mergeEnv applies overrides in key order, so two spellings of one Windows
+// variable resolve the same way every time.
 func mergeEnv(base []string, overrides map[string]string) []string {
 	out := append([]string(nil), base...)
-	for k, v := range overrides {
-		out = setEnvValue(out, k, v)
+	for _, k := range slices.Sorted(maps.Keys(overrides)) {
+		out = setEnvValue(out, k, overrides[k])
 	}
 	return out
 }
 
 func setEnvValue(env []string, key, value string) []string {
-	out := make([]string, 0, len(env)+1)
+	out := make([]string, 0, len(env))
 	replaced := false
 	for _, kv := range env {
 		k, _, ok := strings.Cut(kv, "=")
@@ -543,92 +526,6 @@ func mergePathLists(primary, secondary string) string {
 	return strings.Join(out, string(os.PathListSeparator))
 }
 
-// stdioReplyQueueBound caps buffered server-request replies. The queue only
-// backs up while the reply writer is stuck behind a jammed stdin pipe, so a
-// small bound is plenty; overflow drops the reply instead of blocking readLoop.
-const stdioReplyQueueBound = 16
-
-// readLoop owns stdout for the transport's lifetime: it reads one JSON-RPC
-// message per line, routes progress notifications, answers server requests, and
-// hands each response to the call waiting on its id. On any read error it fails
-// every pending call and exits.
-func (t *stdioTransport) readLoop() {
-	// Server-request replies go through replyLoop, never directly to stdin:
-	// readLoop is the only goroutine draining stdout, and blocking it on
-	// writeMu behind a client call whose own stdin write is jammed would
-	// deadlock both pipes once the server also blocks writing stdout.
-	replies := make(chan any, stdioReplyQueueBound)
-	defer close(replies)
-	go t.replyLoop(replies)
-	for {
-		line, readErr := t.stdout.ReadBytes('\n')
-		line = bytes.TrimSpace(line)
-		if len(line) > 0 {
-			t.handleInboundLine(line, replies)
-		}
-		if readErr != nil {
-			t.failAll(readErr)
-			return
-		}
-	}
-}
-
-// replyLoop serialises server-request replies onto the shared stdin pipe. A
-// write failure is not terminal for the transport — the read side may still be
-// healthy, and pipe errors surface through the next client call's own write —
-// but it stops further replies and keeps draining so readLoop never blocks.
-func (t *stdioTransport) replyLoop(replies <-chan any) {
-	var dead bool
-	for msg := range replies {
-		if dead {
-			continue
-		}
-		if t.write(msg) != nil {
-			dead = true
-		}
-	}
-}
-
-func (t *stdioTransport) handleInboundLine(line []byte, replies chan<- any) {
-	probe, ok := decodeInboundMessage(line)
-	if !ok {
-		return // unparseable line cannot be routed; keep the transport alive
-	}
-	if probe.Method != "" {
-		if isNotificationID(probe.ID) {
-			if probe.Method == "notifications/progress" {
-				t.progress.dispatchProgress(probe.Params)
-			}
-			return
-		}
-		response := serverRequestReply(probe.ID, probe.Method, t.roots)
-		select {
-		case replies <- response:
-		default:
-			// The reply writer is stalled behind a full stdin pipe. An
-			// unanswered request degrades to the server's own timeout; a
-			// blocked readLoop could deadlock both pipes.
-		}
-		return
-	}
-
-	var resp rpcResponse
-	if err := json.Unmarshal(line, &resp); err != nil {
-		return
-	}
-	t.mu.Lock()
-	ch := t.pending[resp.ID]
-	delete(t.pending, resp.ID)
-	t.mu.Unlock()
-	if ch != nil {
-		ch <- resp // buffered(1): never blocks, even if the caller already left
-	}
-}
-
-func (t *stdioTransport) registerProgress(token string, sink tool.ProgressFunc) func() {
-	return t.progress.registerProgress(token, sink)
-}
-
 // failAll records the terminal read error and unblocks every pending call by
 // closing its channel; a caller distinguishes this from a real response by the
 // closed-channel receive.
@@ -650,7 +547,7 @@ func (t *stdioTransport) call(ctx context.Context, method string, params any) (j
 		t.mu.Unlock()
 		// Nothing was written for this request, so a replacement connection may
 		// carry it. The mid-flight case below stays unmarked.
-		return nil, markGone(t.withStderr(fmt.Errorf("plugin %q: read: %w", t.name, t.readErr)))
+		return nil, markGone(t.withStderr(&stdioReadFailure{cause: t.readErr}))
 	}
 	t.nextID++
 	id := t.nextID
@@ -675,7 +572,7 @@ func (t *stdioTransport) call(ctx context.Context, method string, params any) (j
 	case resp, ok := <-ch:
 		if !ok {
 			// A quiet death leaves only the startup banner, which alone misreads.
-			return nil, t.withStderr(fmt.Errorf("plugin %q: server exited while handling %s; the next call starts a fresh one: %w", t.name, method, t.readErr))
+			return nil, t.withStderr(&stdioReadFailure{method: method, cause: t.readErr})
 		}
 		if resp.Error != nil {
 			return nil, fmt.Errorf("plugin %q: %w", t.name, resp.Error)
@@ -710,21 +607,18 @@ func (t *stdioTransport) withStderr(err error) error {
 	// close), and an unbounded wait here would strand the call that is trying
 	// to report why the server went away.
 	waitWithBudget(t.wait, closeWaitBudget)
-	// This error is returned directly to callers outside startup as well as
-	// copied into diagnostics. Redact at the transport boundary so an early
-	// child exit cannot bypass the startup-specific redaction layer.
-	msg := secrets.RedactCredentials(t.stderr.String())
-	if msg == "" {
+	count := len(t.stderr.String())
+	if count == 0 {
 		return err
 	}
-	return fmt.Errorf("%w; last stderr: %s", err, msg) // the tail, not the startup log
+	return &subprocessOutputError{cause: err, bytes: count}
 }
 
-func (t *stdioTransport) startupStderr() string {
+func (t *stdioTransport) startupStderr() int {
 	if t == nil || t.stderr == nil {
-		return ""
+		return 0
 	}
-	return secrets.RedactCredentials(t.stderr.String())
+	return len(t.stderr.String())
 }
 
 // wait reaps the child exactly once; cmd.Wait blocks until the stderr-copy
@@ -761,6 +655,11 @@ func waitFinishedWithinBudget(wait func(), budget time.Duration) bool {
 // inherited pipes open). Both paths are budgeted so one wedged server can never
 // stall a boot or turn teardown.
 func (t *stdioTransport) close() {
+	defer func() {
+		if t.privateState != "" {
+			_ = os.RemoveAll(t.privateState)
+		}
+	}()
 	if t.releaseSlot != nil {
 		t.releaseSlot() // idempotent; frees the bounded CodeGraph instance slot
 	}
@@ -785,6 +684,7 @@ type tailBuffer struct {
 	mu    sync.Mutex
 	limit int
 	buf   []byte
+	cut   bool // bytes before buf were dropped to hold the limit
 }
 
 func (b *tailBuffer) Write(p []byte) (int, error) {
@@ -793,12 +693,15 @@ func (b *tailBuffer) Write(p []byte) (int, error) {
 	b.buf = append(b.buf, p...)
 	if b.limit > 0 && len(b.buf) > b.limit {
 		b.buf = append([]byte(nil), b.buf[len(b.buf)-b.limit:]...)
+		b.cut = true
 	}
 	return len(p), nil
 }
 
+// String reads the tail in the server's own encoding: cmd.exe on a Chinese
+// Windows reports a missing command in the console code page, not UTF-8.
 func (b *tailBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return strings.TrimSpace(string(b.buf))
+	return strings.TrimSpace(string(fileenc.DecodeOutput(b.buf, fileenc.Cut{Head: b.cut})))
 }

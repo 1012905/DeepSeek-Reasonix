@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,7 +47,7 @@ func TestStoreV2IndexIsDerivedFromFacts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	index := store.Index()
+	index := mustStore(t, store).Index()
 	if !strings.Contains(index, "[Source of truth](project/source-of-truth.md)") || strings.Contains(index, "Ghost") {
 		t.Fatalf("derived index used stale MEMORY.md:\n%s", index)
 	}
@@ -67,7 +68,7 @@ func TestStoreV2ExpectedRevisionRejectsLostUpdate(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "revision conflict") {
 		t.Fatalf("stale save error = %v, want revision conflict", err)
 	}
-	got, ok := store.Read(first.Memory.ID)
+	got, ok := mustStore(t, store).Read(first.Memory.ID)
 	if !ok || got.Body != "v2" || got.Revision != 2 {
 		t.Fatalf("stale update changed active memory: %+v, ok=%v", got, ok)
 	}
@@ -89,7 +90,7 @@ func TestStoreV2RestoreRevisionCreatesAuditedRevision(t *testing.T) {
 	if restored.Memory.ID != first.Memory.ID || restored.Memory.Revision != 3 || restored.Memory.Body != "v1" {
 		t.Fatalf("restored memory = %+v", restored.Memory)
 	}
-	if revisions := store.Revisions(first.Memory.ID); len(revisions) < 2 || revisions[0].Revision != 2 || revisions[1].Revision != 1 {
+	if revisions := mustStore(t, store).Revisions(first.Memory.ID); len(revisions) < 2 || revisions[0].Revision != 2 || revisions[1].Revision != 1 {
 		t.Fatalf("revision history = %+v, want revisions 2 and 1 newest first", revisions)
 	}
 }
@@ -101,13 +102,50 @@ func TestStoreV2LegacyMemoryGetsDeterministicIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := Store{Dir: dir}
-	first := store.List()
-	second := store.List()
+	first := mustStore(t, store).List()
+	second := mustStore(t, store).List()
 	if len(first) != 1 || len(second) != 1 || first[0].ID == "" || first[0].ID != second[0].ID || first[0].Revision != 1 {
 		t.Fatalf("legacy identities = first %+v second %+v", first, second)
 	}
 	if !strings.HasPrefix(first[0].ID, "legacy-") {
 		t.Fatalf("legacy id = %q, want recognizable deterministic id", first[0].ID)
+	}
+}
+
+// A directory where the index file belongs is a deterministic fault: the pass
+// moves it aside without reading it and republishes the index, so the migration
+// that follows can rewrite the legacy fact and index it. Returning here would
+// freeze the store for good.
+func TestStoreV2MigrationMovesADirectoryIndexAside(t *testing.T) {
+	dir := testenv.TempDir(t)
+	path := filepath.Join(dir, "legacy-fact.md")
+	legacy := "---\nname: legacy-fact\ndescription: old file\nmetadata:\n  type: project\n  scope: project\n---\n\nlegacy body\n"
+	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A directory where the index file belongs: present, unreadable, portable.
+	if err := os.Mkdir(filepath.Join(dir, indexFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	store := Store{Dir: dir}
+	report, err := store.MigrateV2()
+	if err != nil {
+		t.Fatalf("a directory named MEMORY.md is a deterministic fault and must not freeze the migration: %v", err)
+	}
+	if report.Migrated != 1 {
+		t.Fatalf("migration report = %+v, want the legacy fact migrated", report)
+	}
+	frontmatter, _ := splitFrontmatter(mustReadString(t, path))
+	if !strings.HasPrefix(frontmatter["id"], "legacy-") {
+		t.Fatalf("the legacy fact was not migrated after the directory index was moved aside: %+v", frontmatter)
+	}
+	index, readable := auditReadIndex(t, dir)
+	if !readable || !strings.Contains(index, "(legacy-fact.md)") {
+		t.Fatalf("the rebuilt index does not name the migrated fact: readable = %v, MEMORY.md = %q", readable, index)
+	}
+	if asides := indexAsides(t, dir); len(asides) != 1 {
+		t.Fatalf("want exactly one stamped aside copy of the directory, got %v", asides)
 	}
 }
 
@@ -155,11 +193,17 @@ func TestStoreV2LegacyIdentityIncludesScope(t *testing.T) {
 		}
 	}
 
-	project, _, ok := store.findActiveInDir(store.Dir, "shared-name")
+	project, _, ok, err := store.findActiveInDir(store.Dir, "shared-name")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("project legacy memory not found")
 	}
-	global, _, ok := store.findActiveInDir(store.GlobalDir, "shared-name")
+	global, _, ok, err := store.findActiveInDir(store.GlobalDir, "shared-name")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("global legacy memory not found")
 	}
@@ -220,13 +264,13 @@ func TestStoreV2ScopeQualifiedReferencesRoundTrip(t *testing.T) {
 	if project.Memory.Name != "shared" || project.Memory.Scope != FactScopeProject {
 		t.Fatalf("project memory = %+v", project.Memory)
 	}
-	if got, ok := store.Read("global/shared.md"); !ok || got.ID != global.Memory.ID || got.Body != "global body" {
+	if got, ok := mustStore(t, store).Read("global/shared.md"); !ok || got.ID != global.Memory.ID || got.Body != "global body" {
 		t.Fatalf("global qualified read = %+v, ok=%v", got, ok)
 	}
-	if got, ok := store.Read("project/shared.md"); !ok || got.ID != project.Memory.ID || got.Body != "project body" {
+	if got, ok := mustStore(t, store).Read("project/shared.md"); !ok || got.ID != project.Memory.ID || got.Body != "project body" {
 		t.Fatalf("project qualified read = %+v, ok=%v", got, ok)
 	}
-	if got, ok := store.Read("shared.md"); !ok || got.ID != project.Memory.ID {
+	if got, ok := mustStore(t, store).Read("shared.md"); !ok || got.ID != project.Memory.ID {
 		t.Fatalf("legacy unqualified read = %+v, ok=%v; want project-preferred", got, ok)
 	}
 
@@ -242,20 +286,20 @@ func TestStoreV2ScopeQualifiedReferencesRoundTrip(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(store.GlobalDir, "shared.md")); err != nil {
 		t.Fatalf("qualified update renamed or moved global fact: %v", err)
 	}
-	if got, ok := store.Read("project/shared.md"); !ok || got.ID != project.Memory.ID {
+	if got, ok := mustStore(t, store).Read("project/shared.md"); !ok || got.ID != project.Memory.ID {
 		t.Fatalf("qualified update disturbed project fact: %+v, ok=%v", got, ok)
 	}
-	if revisions := store.Revisions("global/shared.md"); len(revisions) != 1 || revisions[0].Revision != 1 {
+	if revisions := mustStore(t, store).Revisions("global/shared.md"); len(revisions) != 1 || revisions[0].Revision != 1 {
 		t.Fatalf("qualified revisions = %+v", revisions)
 	}
 
 	if _, err := store.Archive("project/shared.md"); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := store.Read("project/shared.md"); ok {
+	if _, ok := mustStore(t, store).Read("project/shared.md"); ok {
 		t.Fatal("qualified archive left project fact active")
 	}
-	if got, ok := store.Read("global/shared.md"); !ok || got.ID != global.Memory.ID || got.Revision != 2 {
+	if got, ok := mustStore(t, store).Read("global/shared.md"); !ok || got.ID != global.Memory.ID || got.Revision != 2 {
 		t.Fatalf("qualified archive disturbed global fact: %+v, ok=%v", got, ok)
 	}
 }
@@ -269,8 +313,8 @@ func TestStoreV2RejectsConflictingQualifiedReferenceScope(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "conflicts") {
 		t.Fatalf("conflicting qualified reference error = %v", err)
 	}
-	if len(store.ListAll()) != 0 {
-		t.Fatalf("conflicting reference wrote a fact: %+v", store.ListAll())
+	if len(mustStore(t, store).ListAll()) != 0 {
+		t.Fatalf("conflicting reference wrote a fact: %+v", mustStore(t, store).ListAll())
 	}
 }
 
@@ -295,9 +339,52 @@ func TestStoreV2RestoreArchivedPreservesIdentityAndCreatesRevision(t *testing.T)
 	if _, err := os.Stat(archivePath); !os.IsNotExist(err) {
 		t.Fatalf("restored archive should leave the archive list: %v", err)
 	}
-	revisions := store.Revisions(first.Memory.ID)
+	revisions := mustStore(t, store).Revisions(first.Memory.ID)
 	if len(revisions) != 1 || revisions[0].Revision != 1 || revisions[0].Body != "v1" {
 		t.Fatalf("revision history = %+v, want archived revision 1", revisions)
+	}
+}
+
+func TestStoreV2RestoreArchivedPreservesUnreadableIndex(t *testing.T) {
+	store := Store{Dir: testenv.TempDir(t)}
+	first, err := store.SaveWithOptions(Memory{Name: "fact", Description: "archived", Body: "v1"}, SaveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	archivePath, err := store.Archive(first.Memory.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexPath := filepath.Join(store.Dir, indexFile)
+	before := mustReadString(t, indexPath)
+	if err := os.Chmod(indexPath, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(indexPath, 0o644) })
+	if _, err := os.ReadFile(indexPath); err == nil {
+		t.Skip("this user can read files without read permission")
+	}
+
+	if _, err := store.RestoreArchived(archivePath); err == nil {
+		t.Fatal("RestoreArchived should report the index read error")
+	}
+	if _, err := os.Stat(filepath.Join(store.Dir, "fact.md")); !os.IsNotExist(err) {
+		t.Fatalf("failed restore left an active file behind: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(store.Dir, ".revisions", first.Memory.ID)); !os.IsNotExist(err) {
+		t.Fatalf("failed restore wrote a revision snapshot: %v", err)
+	}
+	if _, err := os.Stat(archivePath); err != nil {
+		t.Fatalf("failed restore removed the archive: %v", err)
+	}
+	if err := os.Chmod(indexPath, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := mustReadString(t, indexPath); got != before {
+		t.Fatalf("failed restore rewrote the index:\n%s", got)
+	}
+	if _, err := store.RestoreArchived(archivePath); err != nil {
+		t.Fatalf("restore after fixing the index should succeed, got: %v", err)
 	}
 }
 
@@ -318,12 +405,83 @@ func TestStoreV2RestoreArchivedRejectsActiveCollisions(t *testing.T) {
 	if _, err := store.RestoreArchived(archivePath); err == nil || !strings.Contains(err.Error(), "already active") {
 		t.Fatalf("restore collision error = %v, want already active", err)
 	}
-	active, ok := store.Read("fact")
+	active, ok := mustStore(t, store).Read("fact")
 	if !ok || active.Body != "active" {
 		t.Fatalf("restore collision overwrote active fact: %+v, ok=%v", active, ok)
 	}
 	if _, err := os.Stat(archivePath); err != nil {
 		t.Fatalf("failed restore should preserve archive: %v", err)
+	}
+}
+
+// TestStoreV2RestoreArchivedRejectsSubjectConflict pins the invariant the fact
+// model states unconditionally: one scope holds at most one active value per
+// subject key. Archiving a holder, saving a new holder, then recovering the
+// archived one must not leave two active values on the same subject.
+func TestStoreV2RestoreArchivedRejectsSubjectConflict(t *testing.T) {
+	store := Store{Dir: testenv.TempDir(t)}
+	const subject = "project.package_manager"
+
+	first, err := store.SaveWithOptions(Memory{
+		Name: "package-manager", Title: "Package manager",
+		Description: "This project uses npm", SubjectKey: subject,
+		Body: "This project uses npm.",
+	}, SaveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	archivePath, err := store.Archive(first.Memory.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SaveWithOptions(Memory{
+		Name: "dependency-tooling", Title: "Dependency tooling",
+		Description: "We migrated to pnpm", SubjectKey: subject,
+		Body: "We migrated to pnpm.",
+	}, SaveOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := store.RestoreArchived(archivePath); err == nil {
+		t.Fatal("recovering an archived holder put a second active value on a held subject")
+	} else if !strings.Contains(err.Error(), subject) {
+		t.Fatalf("conflict error must name the held subject, got: %v", err)
+	}
+	active, ok := mustStore(t, store).Read("dependency-tooling")
+	if !ok || active.Description != "We migrated to pnpm" {
+		t.Fatalf("failed restore disturbed the current holder: %+v, ok=%v", active, ok)
+	}
+}
+
+// Recovery is capped by the pinned budget like any save.
+func TestStoreV2RestoreArchivedRejectsPinnedBudgetOverflow(t *testing.T) {
+	body := strings.Repeat("x", 200)
+	store := Store{Dir: testenv.TempDir(t), PinnedBudgetChars: 250}
+
+	pinned, err := store.SaveWithOptions(Memory{
+		Name: "pinned-rule", Title: "Pinned rule",
+		Description: "always do this", Activation: ActivationPinned, Body: body,
+	}, SaveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	archivePath, err := store.Archive(pinned.Memory.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SaveWithOptions(Memory{
+		Name: "other-rule", Title: "Other rule",
+		Description: "also always", Activation: ActivationPinned, Body: body,
+	}, SaveOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = store.RestoreArchived(archivePath)
+	if !errors.Is(err, ErrPinnedBudget) {
+		t.Fatalf("want the pinned-budget identity, got %v", err)
+	}
+	if active, ok := mustStore(t, store).Read("other-rule"); !ok || active.Body != body {
+		t.Fatalf("failed restore disturbed the current pinned fact: %+v, ok=%v", active, ok)
 	}
 }
 
@@ -358,7 +516,7 @@ func TestStoreV2RestoreArchivedIsConcurrencySafe(t *testing.T) {
 	if successes != 1 {
 		t.Fatalf("successful restores = %d, want exactly one", successes)
 	}
-	active, ok := store.Read(first.Memory.ID)
+	active, ok := mustStore(t, store).Read(first.Memory.ID)
 	if !ok || active.Revision != 2 {
 		t.Fatalf("active memory = %+v, ok=%v", active, ok)
 	}

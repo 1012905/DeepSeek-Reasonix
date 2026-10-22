@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reasonix/internal/base/testenv"
+	"reasonix/internal/runtime/agent/testutil"
 	"reflect"
 	"strings"
 	"sync"
@@ -27,21 +29,29 @@ import (
 )
 
 type effectRecordingProvider struct {
-	mu   sync.Mutex
-	reqs []provider.Request
+	mu        sync.Mutex
+	reqs      []provider.Request
+	rawInputs []string
 }
 
 func (p *effectRecordingProvider) Name() string { return "boot-effect-test" }
 
-func (p *effectRecordingProvider) Stream(_ context.Context, req provider.Request) (<-chan provider.Chunk, error) {
+func (p *effectRecordingProvider) Stream(ctx context.Context, req provider.Request) (<-chan provider.Chunk, error) {
 	p.mu.Lock()
 	p.reqs = append(p.reqs, req)
+	p.rawInputs = append(p.rawInputs, agent.RawUserInput(ctx, ""))
 	p.mu.Unlock()
 	ch := make(chan provider.Chunk, 2)
-	ch <- provider.Chunk{Type: provider.ChunkText, Text: "ok"}
+	ch <- provider.Chunk{Type: provider.ChunkText, Text: testutil.SummaryReply(req, "ok")}
 	ch <- provider.Chunk{Type: provider.ChunkDone}
 	close(ch)
 	return ch, nil
+}
+
+func (p *effectRecordingProvider) rawUserInputs() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]string(nil), p.rawInputs...)
 }
 
 func (p *effectRecordingProvider) requests() []provider.Request {
@@ -83,6 +93,7 @@ name = "test-model"
 kind = "`+kind+`"
 model = "x"
 `)
+	approveWorkspace(t, dir)
 
 	ctrl, err := Build(context.Background(), Options{Sink: event.Discard, TokenMode: tokenMode, Ablation: arm})
 	if err != nil {
@@ -201,9 +212,9 @@ func (p *budgetRunawayProvider) roundCount() int {
 // real Build assembly. Nothing else would stop it: ordinary chat has no round
 // ceiling, and this provider never repeats itself.
 func TestEffectTaskBudgetLandsARunawayThroughRealBuild(t *testing.T) {
-	isolateConfigHome(t)
-	dir := robustTempDir(t)
-	t.Chdir(dir)
+	t.Parallel()
+	home := statedBootHome(t)
+	dir := testenv.TempDir(t)
 
 	rec := &budgetRunawayProvider{}
 	provider.Register("boot-budget-gate", func(provider.Config) (provider.Provider, error) {
@@ -221,8 +232,9 @@ name = "test-model"
 kind = "boot-budget-gate"
 model = "x"
 `)
+	approveWorkspaceAt(t, home, dir)
 
-	ctrl, err := Build(context.Background(), Options{Sink: event.Discard})
+	ctrl, err := Build(context.Background(), Options{Home: home, WorkspaceRoot: dir, Sink: event.Discard})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -249,9 +261,9 @@ model = "x"
 // slow loop and money reads as free on an unpriced model. It reached the
 // runtime through nothing until this wiring existed.
 func TestEffectTaskTokenBudgetLandsARunawayThroughRealBuild(t *testing.T) {
-	isolateConfigHome(t)
-	dir := robustTempDir(t)
-	t.Chdir(dir)
+	t.Parallel()
+	home := statedBootHome(t)
+	dir := testenv.TempDir(t)
 
 	rec := &budgetRunawayProvider{}
 	provider.Register("boot-token-budget-gate", func(provider.Config) (provider.Provider, error) {
@@ -269,8 +281,9 @@ name = "test-model"
 kind = "boot-token-budget-gate"
 model = "x"
 `)
+	approveWorkspaceAt(t, home, dir)
 
-	ctrl, err := Build(context.Background(), Options{Sink: event.Discard})
+	ctrl, err := Build(context.Background(), Options{Home: home, WorkspaceRoot: dir, Sink: event.Discard})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -389,6 +402,10 @@ func TestEffectSpilledOutputSurvivesTheReadBack(t *testing.T) {
 	provider.Register("boot-spill-follow", func(provider.Config) (provider.Provider, error) {
 		return rec, nil
 	})
+	// The subject is the pointer, not the jail: a host without an OS sandbox
+	// refuses bash fail-closed, and the parked output this test follows never
+	// exists. CI runners vary on whether bwrap is installed.
+	writeUserConfig(t, "[sandbox]\nbash = \"off\"\n")
 	writeFile(t, dir, "reasonix.toml", `
 default_model = "test-model"
 
@@ -398,17 +415,12 @@ system_prompt = "BASE"
 [codegraph]
 enabled = false
 
-# The subject is the pointer, not the jail: a host without an OS sandbox
-# refuses bash fail-closed, and the parked output this test follows never
-# exists. CI runners vary on whether bwrap is installed.
-[sandbox]
-bash = "off"
-
 [[providers]]
 name = "test-model"
 kind = "boot-spill-follow"
 model = "x"
 `)
+	approveWorkspace(t, dir)
 
 	ctrl, err := Build(context.Background(), Options{Sink: event.Discard})
 	if err != nil {
@@ -521,6 +533,10 @@ func userMessages(req provider.Request) string {
 // session on the machine shares costs every byte that follows it. The fact
 // still has to reach the model, so the turn states it either way.
 func TestEffectVersionControlRidesTheTurnNotThePrefix(t *testing.T) {
+	// Probe answers are cached per PATH for the whole process; an empty directory
+	// no other test adds keys one fresh answer both arms share, so an older one
+	// cannot expire between them and leave only the second arm re-probing.
+	t.Setenv("PATH", os.Getenv("PATH")+string(os.PathListSeparator)+robustTempDir(t))
 	plain := effectRunPrepared(t, "boot-effect-vcs-plain", "", ablation.Set{}, nil)
 	repo := effectRunPrepared(t, "boot-effect-vcs-repo", "", ablation.Set{}, func(dir string) {
 		if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
@@ -561,15 +577,19 @@ func systemOf(req provider.Request) string {
 // project instructions and the skills index, so one remember re-sent all of
 // them; the facts are reached through the memory tool instead.
 func TestEffectRememberDoesNotMoveTheCachedPrefix(t *testing.T) {
-	isolateConfigHome(t)
+	home := isolateConfigHome(t)
+	t.Setenv("REASONIX_HOME", filepath.Join(home, ".reasonix"))
+	t.Setenv("REASONIX_STATE_HOME", "")
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 	writeFile(t, dir, "reasonix.toml", effectProbeConfig)
+	approveWorkspace(t, dir)
 	writeFile(t, dir, "REASONIX.md", "Project rule: keep the prefix stable.")
 
 	indexPath := filepath.Join(memory.StoreFor(config.MemoryUserDir(), dir).Dir, "MEMORY.md")
 
-	first, err := Build(context.Background(), Options{Sink: event.Discard})
+	opts := Options{Sink: event.Discard, Home: os.Getenv("REASONIX_HOME"), WorkspaceRoot: dir, resolvedShell: pinnedEffectShell()}
+	first, err := Build(context.Background(), opts)
 	if err != nil {
 		t.Fatalf("first Build: %v", err)
 	}
@@ -592,7 +612,7 @@ func TestEffectRememberDoesNotMoveTheCachedPrefix(t *testing.T) {
 		t.Fatalf("the save never reached the index this test is about:\n%s", index)
 	}
 
-	second, err := Build(context.Background(), Options{Sink: event.Discard})
+	second, err := Build(context.Background(), opts)
 	if err != nil {
 		t.Fatalf("second Build: %v", err)
 	}
@@ -640,11 +660,9 @@ func TestEffectDesktopOpensInTheConfiguredApprovalMode(t *testing.T) {
 			t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 			t.Setenv("REASONIX_HOME", filepath.Join(home, ".reasonix"))
 			t.Chdir(dir)
+			writeFile(t, filepath.Join(home, ".reasonix"), "config.toml", "[desktop]\ndefault_tool_approval_mode = \"yolo\"\n")
 			writeFile(t, dir, "reasonix.toml", `
 default_model = "test-model"
-
-[desktop]
-default_tool_approval_mode = "yolo"
 
 [[providers]]
 name = "test-model"
@@ -653,6 +671,7 @@ base_url = "https://example.invalid"
 model = "x"
 api_key_env = "REASONIX_TEST_KEY_UNSET"
 `)
+			approveWorkspace(t, dir)
 			ctrl, err := Build(context.Background(), Options{StatsSource: tc.source})
 			if err != nil {
 				t.Fatal(err)

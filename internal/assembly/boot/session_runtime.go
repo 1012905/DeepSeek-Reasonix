@@ -29,14 +29,28 @@ func startSessionRuntime(opts Options, cfg *config.Config, root string, sink eve
 		jobs.WithStalledWarningAfter(time.Duration(cfg.BackgroundJobStalledWarningSeconds()) * time.Second),
 		jobs.WithSessionOwnershipProbe(sessionstore.SessionLeaseHeldByCurrentRuntime),
 	}
-	lease, err := workspacelease.New(root, config.WorkspaceLeaseDir(), func(w workspacelease.Wait) {
-		sink.Emit(workspaceLeaseNotice(w))
-	})
-	if err != nil {
-		return sessionRuntime{}, fmt.Errorf("initialize workspace write lease: %w", err)
+	lease := opts.WorkspaceLease
+	if lease == nil {
+		var err error
+		leaseOptions := []workspacelease.Option{workspacelease.WithMaxWait(cfg.WriteLeaseMaxWait())}
+		if shellConfinedToFolder(opts, cfg) {
+			leaseOptions = append(leaseOptions, workspacelease.WithFolderClaim())
+		}
+		if cfg.WriteLeaseOptimistic() {
+			leaseOptions = append(leaseOptions, workspacelease.WithoutWholeWorkspaceHold())
+		}
+		lease, err = workspacelease.New(root, config.WorkspaceLeaseDir(), func(w workspacelease.Wait) {
+			sink.Emit(workspaceLeaseNotice(w))
+		}, leaseOptions...)
+		if err != nil {
+			return sessionRuntime{}, fmt.Errorf("initialize workspace write lease: %w", err)
+		}
+		lease.OnRelease(func(st workspacelease.Stats) { sink.Emit(workspaceLeaseAccount(st)) })
 	}
-	lease.OnRelease(func(st workspacelease.Stats) { sink.Emit(workspaceLeaseAccount(st)) })
-	manager := jobs.NewManager(sink, jobOptions...)
+	manager := opts.Jobs
+	if manager == nil {
+		manager = jobs.NewManager(sink, jobOptions...)
+	}
 
 	dir := opts.SessionDir
 	if dir == "" {
@@ -77,25 +91,33 @@ func workspaceLeaseNotice(w workspacelease.Wait) event.Event {
 	case workspacelease.WaitAcquired:
 		return event.Event{
 			Kind: event.Notice, Level: event.LevelInfo,
-			Code:   event.NoticeCodeWorkspaceLeaseResumed,
-			Text:   "The workspace is free again; this session has continued.",
-			Detail: fmt.Sprintf("waited %s for the workspace write lease", waited),
+			Code:           event.NoticeCodeWorkspaceLeaseResumed,
+			Text:           "This session's requested write claim was granted; it has continued.",
+			Detail:         fmt.Sprintf("waited %s for the workspace write lease", waited),
+			WorkspaceLease: workspaceLeaseScope(w),
 		}
 	case workspacelease.WaitAbandoned:
 		return event.Event{
 			Kind: event.Notice, Level: event.LevelInfo,
-			Code:   event.NoticeCodeWorkspaceLeaseAbandoned,
-			Text:   "The wait for the workspace ended before this session's turn to write came.",
-			Detail: fmt.Sprintf("waited %s; the turn was cancelled or timed out first", waited),
+			Code:           event.NoticeCodeWorkspaceLeaseAbandoned,
+			Text:           "The wait for the workspace ended before this session's turn to write came.",
+			Detail:         fmt.Sprintf("waited %s; the turn was cancelled or timed out first", waited),
+			WorkspaceLease: workspaceLeaseScope(w),
 		}
 	default:
 		return event.Event{
 			Kind: event.Notice, Level: event.LevelWarn,
 			Code: event.NoticeCodeWorkspaceLease,
-			Text: "Another session is writing to this workspace; this session will continue automatically when it is safe.",
+			Text: "Another session holds an overlapping write claim; this session will continue automatically when its claim is available.",
 			// The holder's own name, as data: which conversation to go and
 			// look at is the one thing the text above cannot say.
-			Detail: w.Holder,
+			Detail:         fmt.Sprintf("session %q (%q) holds %q; requested %q", w.Holder, w.HolderSessionID, w.Paths, w.RequestedPaths),
+			WorkspaceLease: workspaceLeaseScope(w),
 		}
 	}
+}
+
+func workspaceLeaseScope(w workspacelease.Wait) *event.WorkspaceLease {
+	return &event.WorkspaceLease{Holder: w.Holder, HolderSessionID: w.HolderSessionID,
+		Paths: w.Paths, RequestedPaths: w.RequestedPaths, Repository: w.Repository}
 }

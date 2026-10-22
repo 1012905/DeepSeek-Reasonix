@@ -72,7 +72,10 @@ func effectivePlannerModel(cfg *config.Config, opts Options) string {
 }
 
 func rememberPermissionRule(roots config.Roots, workspaceRoot, rule string) control.RememberResult {
-	path := rememberPermissionConfigPath(roots, workspaceRoot)
+	if strings.TrimSpace(workspaceRoot) != "" {
+		return rememberProjectPermissionRule(roots, workspaceRoot, rule)
+	}
+	path := roots.UserConfigPath()
 	result := control.RememberResult{Rule: strings.TrimSpace(rule), Path: path}
 	unlock, err := config.LockConfigFileEdits(path)
 	if err != nil {
@@ -107,16 +110,25 @@ func rememberPermissionRule(roots config.Roots, workspaceRoot, rule string) cont
 	return result
 }
 
-func rememberPermissionConfigPath(roots config.Roots, workspaceRoot string) string {
-	workspaceRoot = strings.TrimSpace(workspaceRoot)
-	if workspaceRoot != "" {
-		return filepath.Join(workspaceRoot, "reasonix.toml")
+// rememberProjectPermissionRule files a workspace's "always" under the user's
+// home: the checkout's reasonix.toml cannot grant allow rules, since a clone
+// could have written them.
+func rememberProjectPermissionRule(roots config.Roots, workspaceRoot, rule string) control.RememberResult {
+	store := config.NewProjectGrantStore(roots.Home())
+	result := control.RememberResult{Rule: strings.TrimSpace(rule), Path: store.Path()}
+	result.Err = store.Update(workspaceRoot, func(g config.ProjectGrant) (config.ProjectGrant, error) {
+		if coveredBy := coveredPermissionRule(g.Allow, result.Rule); coveredBy != "" {
+			result.CoveredBy = coveredBy
+			return g, nil
+		}
+		g.Allow = append(pruneCoveredPermissionRules(g.Allow, result.Rule), result.Rule)
+		return g, nil
+	})
+	if result.Err != nil {
+		slog.Warn("persist project permission rule", "rule", rule, "err", result.Err)
 	}
-	path := roots.SourcePathForRoot(".")
-	if path == "" {
-		path = "reasonix.toml" // match Config.Save() fallback
-	}
-	return path
+	result.Saved = result.Err == nil && result.CoveredBy == ""
+	return result
 }
 
 func coveredPermissionRule(rules []string, rule string) string {
@@ -165,7 +177,9 @@ func subagentModelRef(cfg *config.Config, sk skill.Skill) string {
 	return strings.TrimSpace(cfg.Agent.SubagentModel)
 }
 
-func subagentEffortRef(cfg *config.Config, sk skill.Skill) string {
+// subagentEffortRef is the effort a skill's sub-agent asks for: its explicit
+// settings first, then agent.subagent_effort resolved for the model that runs it.
+func subagentEffortRef(cfg *config.Config, sk skill.Skill, inheritedFor func(modelRef string) string) string {
 	if cfg != nil {
 		for _, key := range SubagentModelKeys(sk.Name) {
 			if e := strings.TrimSpace(cfg.Agent.SubagentEfforts[key]); e != "" {
@@ -176,10 +190,13 @@ func subagentEffortRef(cfg *config.Config, sk skill.Skill) string {
 	if e := strings.TrimSpace(sk.Effort); e != "" {
 		return e
 	}
-	if cfg == nil {
-		return ""
+	if inheritedFor == nil {
+		if cfg == nil {
+			return ""
+		}
+		return firstNonEmpty(cfg.Agent.RoleEfforts["subagent"], cfg.Agent.SubagentEffort)
 	}
-	return strings.TrimSpace(cfg.Agent.SubagentEffort)
+	return inheritedFor(subagentModelRef(cfg, sk))
 }
 
 // SubagentModelKeys returns the cfg.Agent.SubagentModels/SubagentEfforts map
@@ -302,20 +319,7 @@ func RuntimeForbidReadRoots(cfg *config.Config, root string) []string {
 		return nil
 	}
 	secrets.RegisterCredentialEnvKeys(cfg.CredentialEnvNames())
-	base := cfg.ForbidReadRootsForRoot(root)
-	base = appendUniquePaths(base, secrets.ForbiddenReadPaths(cfg.Secrets.ProtectSensitiveFiles)...)
-	credentialPath := strings.TrimSpace(cfg.Roots().UserCredentialsPath())
-	if credentialPath == "" {
-		return append([]string(nil), base...)
-	}
-	info, err := os.Stat(credentialPath)
-	if err != nil || info.IsDir() {
-		return append([]string(nil), base...)
-	}
-	if real, err := filepath.EvalSymlinks(credentialPath); err == nil {
-		credentialPath = real
-	}
-	return appendUniquePaths(base, credentialPath)
+	return cfg.ForbiddenRootsForRoot(root)
 }
 
 func pathComparisonKey(path string) string {
@@ -360,6 +364,10 @@ func newSubagentStore(sessionDir string, parentLive func(sessionPath string) boo
 		return nil, nil
 	}
 	store := delegation.NewSubagentStore(filepath.Join(sessionDir, "subagents")).WithParentSessionProbe(parentLive)
+	store.WithSteerLimits(func() delegation.SteerLimits {
+		bytes, perMinute := config.LoadForEditWithoutCredentials(config.UserConfigPath()).SubagentSteerLimits()
+		return delegation.SteerLimits{MaxBytes: bytes, PerMinute: perMinute}
+	})
 	if _, err := store.CleanupStaleRunning(); err != nil {
 		return nil, fmt.Errorf("cleanup stale subagents: %w", err)
 	}
@@ -373,30 +381,16 @@ func subagentEffectiveIdentity(cfg *config.Config, resolver provider.Resolver, b
 	}
 	ref := strings.TrimSpace(modelRef)
 	explicit := ref != ""
-	if !explicit {
+	if explicit {
+		ref = childModelRef(cfg, base, ref)
+	} else {
 		ref = strings.TrimSpace(baseModelRef)
 	}
-	if explicit && cfg != nil && ref != "" {
-		if resolved, ok := cfg.ResolveModel(ref); ok {
-			entry = *resolved
-		} else if resolved := syntheticEntryFromResolver(resolver, ref); strings.TrimSpace(resolved.Name) != "" {
-			entry = *resolved
+	if explicit || base == nil {
+		if resolved, _, err := subagentModelEntry(cfg, resolver, base, ref); err == nil {
+			entry = resolved
 		} else {
 			entry.Model = ref
-		}
-	} else if explicit {
-		if resolved := syntheticEntryFromResolver(resolver, ref); strings.TrimSpace(resolved.Name) != "" {
-			entry = *resolved
-		} else {
-			entry.Model = ref
-		}
-	} else if base == nil && ref != "" {
-		if resolved := syntheticEntryFromResolver(resolver, ref); strings.TrimSpace(resolved.Name) != "" {
-			entry = *resolved
-		} else if cfg != nil {
-			if resolved, ok := cfg.ResolveModel(ref); ok {
-				entry = *resolved
-			}
 		}
 	}
 	if rawEffort := strings.TrimSpace(effort); rawEffort != "" {
@@ -430,12 +424,12 @@ func subagentEffectiveIdentity(cfg *config.Config, resolver provider.Resolver, b
 // and makes bash warn when a command references them. managedConfig names the
 // Reasonix-owned config files writable outside writeRoots after a fresh
 // per-write human approval.
-func addBuiltins(reg *tool.Registry, enabled, writeRoots []string, bashSpec sandbox.Spec, bashTimeout time.Duration, searchSpec builtin.SearchSpec, stderr io.Writer, workDir string, proxySpec netclient.ProxySpec, forbidReadRoots []string, readPathResolver *builtin.PathResolver, sessionGuard builtin.SessionDataGuard, managedConfig builtin.ManagedConfigPaths, overlay builtin.FileOverlay, terminal builtin.TerminalRunner, sessionTemp *sessiontemp.Manager, fileWriteReceipt func(path string, hadPrior bool, prior []byte)) {
+func addBuiltins(reg *tool.Registry, enabled, writeRoots []string, bashSpec sandbox.Spec, bashTimeout time.Duration, searchSpec builtin.SearchSpec, stderr io.Writer, workDir string, proxySpec netclient.ProxySpec, forbidReadRoots, readRoots []string, readPathResolver *builtin.PathResolver, sessionGuard builtin.SessionDataGuard, managedConfig builtin.ManagedConfigPaths, overlay builtin.FileOverlay, terminal builtin.TerminalRunner, sessionTemp *sessiontemp.Manager, fileWriteReceipt func(path string, hadPrior bool, prior []byte)) {
 	// If a workspace directory is set, use workspace-bound tools that resolve
 	// paths relative to that directory. Otherwise fall back to the process-cwd
 	// compile-time builtins.
 	if workDir != "" {
-		ws := builtin.Workspace{Dir: workDir, WriteRoots: writeRoots, ForbidReadRoots: forbidReadRoots, Bash: bashSpec, BashTimeout: bashTimeout, Search: searchSpec, ProxySpec: proxySpec, ReadPaths: readPathResolver, SessionGuard: sessionGuard, ManagedConfig: managedConfig, FileOverlay: overlay, Terminal: terminal, SessionTemp: sessionTemp, FileWriteReceipt: fileWriteReceipt}
+		ws := builtin.Workspace{Dir: workDir, WriteRoots: writeRoots, ForbidReadRoots: forbidReadRoots, ReadRoots: readRoots, Bash: bashSpec, BashTimeout: bashTimeout, Search: searchSpec, ProxySpec: proxySpec, ReadPaths: readPathResolver, SessionGuard: sessionGuard, ManagedConfig: managedConfig, FileOverlay: overlay, Terminal: terminal, SessionTemp: sessionTemp, FileWriteReceipt: fileWriteReceipt}
 		for _, t := range ws.Tools(enabled...) {
 			reg.Add(t)
 		}
@@ -475,6 +469,7 @@ func addBuiltins(reg *tool.Registry, enabled, writeRoots []string, bashSpec sand
 		writers[i] = builtin.BindFileWriteReceipt(writer, fileWriteReceipt)
 	}
 	confined := append(writers,
+		builtin.ConfineWebImage(writeRoots, sessionGuard, proxySpec, fileWriteReceipt),
 		bashTool,
 		searchTool,
 		builtin.ConfineWebFetch(proxySpec))
@@ -484,14 +479,6 @@ func addBuiltins(reg *tool.Registry, enabled, writeRoots []string, bashSpec sand
 			reg.Add(t)
 		}
 	}
-}
-
-// autoShellPrefer reports whether [tools.shell] left the interpreter to
-// auto-detection, so the "fell back to PowerShell" hint is suppressed once the
-// user has explicitly chosen a shell.
-func autoShellPrefer(prefer string) bool {
-	p := strings.ToLower(strings.TrimSpace(prefer))
-	return p == "" || p == "auto"
 }
 
 // LSPSpecs returns the language → server map: the built-in defaults overlaid with

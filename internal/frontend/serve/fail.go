@@ -6,7 +6,9 @@ import (
 	"errors"
 	"net/http"
 
+	"reasonix/internal/contract/config"
 	"reasonix/internal/session/control"
+	"reasonix/internal/state/memory"
 )
 
 // Reason is a machine-readable refusal: the kernel decides what happened, a
@@ -84,12 +86,21 @@ func keepRefusalStatus(status int, err error) error {
 // wherever it surfaces, and anything else keeps the old shape, so adoption is
 // incremental rather than a flag day.
 func writeErr(w http.ResponseWriter, fallback int, err error) {
+	if refuseMemoryDirectory(w, err) {
+		return
+	}
 	var c *coded
 	if errors.As(err, &c) {
 		refuse(w, c.status, c.reason.Code, c.reason.Message, c.reason.Params)
 		return
 	}
 	if refuseUnparsedConfig(w, err) {
+		return
+	}
+	var mismatch *config.AnswersMismatchError
+	if errors.As(err, &mismatch) {
+		refuse(w, http.StatusConflict, answersMismatchCode(mismatch), err.Error(),
+			map[string]any{"model": mismatch.Ref, "has": string(mismatch.Has), "want": string(mismatch.Want)})
 		return
 	}
 	http.Error(w, err.Error(), fallback)
@@ -115,10 +126,22 @@ func refuseUnparsedConfig(w http.ResponseWriter, err error) bool {
 // keeps one code across every panel; anything else is that panel's own
 // rejection, carrying the kernel's words as the detail a reader acts on.
 func saveFailed(w http.ResponseWriter, status int, code string, err error) {
+	if refuseMemoryDirectory(w, err) {
+		return
+	}
 	if refuseUnparsedConfig(w, err) {
 		return
 	}
 	refuse(w, status, code, err.Error(), map[string]any{"detail": err.Error()})
+}
+
+func refuseMemoryDirectory(w http.ResponseWriter, err error) bool {
+	var directory *memory.DirectoryReadError
+	if !errors.As(err, &directory) {
+		return false
+	}
+	refuse(w, http.StatusInternalServerError, "memory.directory_unreadable", err.Error(), nil)
+	return true
 }
 
 // codedRefusal is the identity a coded error carries, for the caller that has to
@@ -134,6 +157,22 @@ func codedRefusal(err error) string {
 
 // rebuildFailed is the one answer to "the settings were written and the runtime
 // could not be rebuilt on them", which is not the same failure as the write.
+// A runtime still holding work refuses the rebuild by identity; that is a save
+// waiting on the work, not a malfunction.
 func rebuildFailed(w http.ResponseWriter, err error) {
+	if isSwitchBusy(err) {
+		busy(w, "runtime.saved_while_running", "the settings were saved; the running conversation keeps its current ones until it is rebuilt", nil)
+		return
+	}
 	refuse(w, http.StatusConflict, "runtime.rebuild_failed", err.Error(), map[string]any{"detail": err.Error()})
+}
+
+// answersMismatchCode names which way the model was misplaced, because the two
+// are different things to fix: a decision source put on a conversation job, or
+// a conversation model put where the decision tool asks.
+func answersMismatchCode(e *config.AnswersMismatchError) string {
+	if e.Has == config.AnswersDecision {
+		return codeModelDecisionOnly
+	}
+	return codeModelNotDecision
 }

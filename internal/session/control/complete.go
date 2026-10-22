@@ -19,6 +19,7 @@ const (
 	CompleteSlash    = "slash"     // the command word, while the line is a bare "/word"
 	CompleteSlashArg = "slash-arg" // a structured argument of a slash command
 	CompleteRef      = "ref"       // an @-reference: a path or an MCP resource
+	CompleteSession  = "session"   // a #-word: a past conversation of this workspace
 )
 
 const (
@@ -41,6 +42,10 @@ type Completion struct {
 	// here rather than leaving a fuzzy hit unexplained.
 	Query string      `json:"query,omitempty"`
 	Items []SlashItem `json:"items"`
+	// Typed is the command the line already spells in full. It stays out of
+	// Items, where accepting it would change nothing, yet a terminal whose
+	// Enter runs a finished command needs to know that command exists.
+	Typed *SlashItem `json:"typed,omitempty"`
 }
 
 // CompletionData is everything Complete cannot read for itself. Names is the
@@ -56,6 +61,19 @@ type CompletionData struct {
 	// never offered a path the turn would then refuse.
 	Scoped    bool
 	Resources []plugin.Resource
+	// Sessions are the past conversations a #-word may name; read only when the
+	// cursor is in one.
+	Sessions []SessionOption
+}
+
+// CompletionNeedsArgData says whether completing line reads anything beyond the
+// command catalogue: an @-reference under the cursor, or the arguments after a
+// command name. It follows the branches of Complete.
+func CompletionNeedsArgData(line string, cursor int) bool {
+	if _, _, _, ok := ActiveRefToken(line, cursor); ok {
+		return true
+	}
+	return strings.HasPrefix(line, "/") && strings.ContainsAny(line, " \t\n")
 }
 
 // Complete is the single source of the composer's completion grammar: which
@@ -70,14 +88,21 @@ func Complete(line string, cursor int, d CompletionData) Completion {
 			return Completion{Kind: CompleteRef, From: from, To: to, Query: UnescapeRefPath(frag), Items: items}
 		}
 	}
+	if from, to, query, ok := ActiveSessionToken(line, cursor); ok {
+		if items := SessionRefItems(d.Sessions, query); len(items) > 0 {
+			return Completion{Kind: CompleteSession, From: from, To: to, Query: query, Items: items}
+		}
+	}
 	if !strings.HasPrefix(line, "/") {
 		return noCompletion()
 	}
 	// Still naming the command itself. Filtering uses the whole line so a
 	// mid-token cursor never rewrites what was already typed.
 	if !strings.ContainsAny(line, " \t\n") {
-		if items := dropTyped(FuzzySlashNames(d.Names, line), line); len(items) > 0 {
-			return Completion{Kind: CompleteSlash, To: len(line), Query: line, Items: items}
+		matches := FuzzySlashNames(d.Names, line)
+		typed := typedItem(matches, line)
+		if items := dropTyped(matches, line); len(items) > 0 || typed != nil {
+			return Completion{Kind: CompleteSlash, To: len(line), Query: line, Items: items, Typed: typed}
 		}
 		return noCompletion()
 	}
@@ -99,6 +124,16 @@ func dropTyped(items []SlashItem, typed string) []SlashItem {
 		}
 	}
 	return out
+}
+
+// typedItem is the row dropTyped would remove: the token spelled in full.
+func typedItem(items []SlashItem, typed string) *SlashItem {
+	for _, it := range items {
+		if it.Insert == typed {
+			return &it
+		}
+	}
+	return nil
 }
 
 // An empty item list rather than a nil one: this crosses a JSON boundary, and

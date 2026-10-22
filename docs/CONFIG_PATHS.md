@@ -84,12 +84,17 @@ Example:
 config_version = 1
 default_model = "deepseek/deepseek-flash"
 language = "zh"
+auto_submit = false          # commit a multi-question ask once its last question is answered; user/global only
 credentials_store = "auto"   # legacy compatibility; provider keys are in .env
 
 [ui]
 theme = "auto"
 cursor_shape = "bar"         # CLI/TUI text cursor: underline|block|bar
 show_turn_usage = false       # hide per-request token/cost receipts in the TUI; default true
+
+[cli]
+diff_fences = true                                     # render a fenced diff/patch block through the colourised diff renderer; default false; user/global only
+diff_formatter = "delta --color-only --paging=never"   # external formatter for a fenced diff block, a writer diff card, and a whole-diff shell result; user/global only
 
 [desktop]
 provider_access = ["deepseek"]
@@ -119,6 +124,10 @@ visible without covering double-width CJK characters; use `block` or
 `[ui].show_turn_usage = false` hides the token and cost receipt appended to the
 TUI transcript after each model request. Accounting and live status updates
 remain active. The default is `true`.
+
+The diff-rendering options (`[cli].diff_fences`, `[cli].diff_formatter`,
+`[agent].embedded_diff_detection`) are documented in the
+[CLI reference](./CLI.md#diff-rendering).
 
 ### Custom provider `api_key_env` names
 
@@ -165,6 +174,22 @@ If a gateway requires vendor-specific top-level request body fields, set
 `extra_body`, for example `extra_body = { enable_thinking = true }`. These values
 are merged into the OpenAI-compatible chat JSON request body without allowing
 core fields such as `model`, `messages`, `tools`, or `stream` to be overridden.
+
+### Web search model
+
+Settings > Model preferences > Web search saves `agent.web_search_model`.
+
+Empty or `"auto"` changes nothing: the conversation provider's own built-in
+search keeps serving, on that provider's account only.
+An explicit `"provider/model"` replaces it with a separate search request on that
+account, which carries no conversation context and is billed on its own.
+
+An unavailable assignment emits a `web_search_model_<reason>` notice
+(`bad_ref`, `not_added`, `removed`, `unsupported`, `no_credentials`) and leaves
+search off. It never selects another account.
+
+Project `reasonix.toml` can override the global preference;
+the settings row shows that override while editing the global value.
 
 ## Global `.env`
 
@@ -219,13 +244,24 @@ Runtime configuration is resolved in this order:
 
 ```text
 command-line flags
-> project ./reasonix.toml
+> project ./reasonix.toml (otherwise .reasonix/reasonix.toml)
 > global <Reasonix home>/config.toml
 > compatible legacy global config
 > built-in defaults
 ```
 
-Writes always target the new global path:
+- The root-level project file wins when both paths exist; the files are not merged.
+- Only a missing root file permits fallback. Malformed, inaccessible, or
+  broken-symlink root files do not select the nested file.
+- Local setup, CLI settings, MCP/skill installation, and repair edit the selected
+  file in place. New project configs still use `./reasonix.toml`.
+- Both paths have the same project-scope restrictions: neither can set user-only
+  options or resolve through a symlink outside the project.
+
+To keep local configuration self-contained, put `*` in `.reasonix/.gitignore`
+and store the configuration in `.reasonix/reasonix.toml`.
+
+User-global writes target the new global path:
 
 ```text
 macOS/Linux: ~/.reasonix/config.toml
@@ -310,3 +346,27 @@ Version limits:
 - Plain `/migrate` rescans the legacy locations listed above. Use
   `/migrate --from <path>` only for a known v0.x session source; it is not a
   backup restore tool or a downgrade importer.
+
+## Logs and crash files
+
+Studio keeps its logs next to its window profile, not in the Reasonix home:
+
+| Platform | Logs directory |
+| --- | --- |
+| macOS | `~/Library/Application Support/Reasonix Studio/io.reasonix.studio.<instance>/logs` |
+| Windows | `%APPDATA%\Reasonix Studio\io.reasonix.studio.<instance>\logs` |
+| Linux | `~/.config/Reasonix Studio/io.reasonix.studio.<instance>/logs` |
+
+| File | What it holds |
+| --- | --- |
+| `shell.log` | The window process: launch, kernel start and handshake, and how the kernel exited (`host: died code=… signal=…`) with the tail of its crash file. |
+| `host.log` | The kernel's own output. Successful polling requests are not logged at INFO, so errors stay in it longer. |
+| `crash/host-<time>-<version>-<pid>.log` | What the Go runtime printed when the kernel was killed by a fatal error or panic, for example `fatal error: out of memory`. Newest 5 are kept, each cut to its last 256 KiB. A clean exit leaves none. |
+
+Each file rotates at 1 MiB (3 files kept) except the crash files above. After an
+unexpected kernel exit the next launch says so once.
+
+When reporting a problem, attach `shell.log`, `host.log` and any newer file in
+`crash/`. `shell.log` and `host.log` are redacted of the launch credential; the
+crash files are the runtime's raw output and may contain stack frames, paths and
+panic text. Read them before sharing.

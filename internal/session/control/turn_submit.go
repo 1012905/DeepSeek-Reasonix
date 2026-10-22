@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"reasonix/internal/base/i18n"
+	"reasonix/internal/contract/event"
+	"reasonix/internal/contract/provider"
 	"reasonix/internal/ext/skill"
 )
 
@@ -36,7 +38,14 @@ func (c *Controller) SubmitHTTP(input string) {
 // behaves exactly like SubmitHTTP. A format attached to a slash command,
 // or other non-turn input is discarded; @reference turns preserve it because
 // the format is bound to every submitted turn rather than a global slot.
-func (c *Controller) SubmitHTTPFormat(input, format string) {
+func (c *Controller) SubmitHTTPFormat(input, format string) Admission {
+	return c.SubmitHTTPFrom(input, format, nil)
+}
+
+// SubmitHTTPFrom is SubmitHTTPFormat for input relayed from a paired device:
+// the turn's message is landed and announced as that device's. A nil via is
+// the window's own input.
+func (c *Controller) SubmitHTTPFrom(input, format string, via *provider.Via) Admission {
 	// format 绑定到本次提交的 turn（随请求参数传递），不再写入 Controller
 	// 全局一次性槽——评审 #7234 第 2 点：全局槽存在跨请求串用的逻辑竞态
 	// （后提交的 JSON 请求先写槽，更早的普通请求先启动消费掉）。
@@ -47,7 +56,26 @@ func (c *Controller) SubmitHTTPFormat(input, format string) {
 	// @ 引用 turn（FileRefLine/SlashPathLineRef 等）同样绑定 format——
 	// runRefTurnWithFormat 族 wrapper 注入 ctx（review fix7234and7168：
 	// format 是每个被接纳 turn 的属性，统一架构）。
-	c.submitHTTPWithFormat(input, "", f)
+	return c.submitHTTPWithFormat(input, "", turnTags{format: f, via: via})
+}
+
+// SubmitOptions are what a submission asks beyond its text.
+type SubmitOptions struct {
+	Format string
+	Via    *provider.Via
+	// RefuseUnknownSlash keeps a slash command no registry answers off the
+	// model: the line gets an unknown-command notice and starts no turn.
+	RefuseUnknownSlash bool
+}
+
+// SubmitHTTPOptions is SubmitHTTPFrom with every per-submission option spelled
+// out, for a frontend that asks for more than a format and a device.
+func (c *Controller) SubmitHTTPOptions(input string, opts SubmitOptions) Admission {
+	f := strings.TrimSpace(opts.Format)
+	if f != "" && isNonTurnHTTPInput(input) {
+		f = ""
+	}
+	return c.submitHTTPWithFormat(input, "", turnTags{format: f, via: opts.Via, refuseUnknownSlash: opts.RefuseUnknownSlash})
 }
 
 // SubmitDisplay runs input as a turn while remembering the user-facing display
@@ -115,20 +143,29 @@ func (c *Controller) prepareInvocationTurn(input string, requests []InvocationRe
 		}
 	}
 
+	task := ""
+	if strings.TrimSpace(input) == "" && len(subagents) > 0 {
+		if slices.ContainsFunc(subagents, func(sk skill.Skill) bool { return !sk.RunsWithoutTask() }) {
+			return preparedInvocationTurn{}, fmt.Errorf("subagent invocation requires a task")
+		}
+		task = skill.DefaultReviewTask
+	}
+	inlineSkillNames := make([]string, 0, len(inline))
+	for _, sk := range inline {
+		inlineSkillNames = append(inlineSkillNames, sk.Name)
+	}
+	// A lone inline skill takes the typed text as its arguments, as "/name task" does.
+	if len(inline) == 1 && len(subagents) == 0 {
+		return preparedInvocationTurn{composed: c.skills.renderInvocation(inline[0], strings.TrimSpace(input)), inlineSkillNames: inlineSkillNames}, nil
+	}
 	parts := make([]string, 0, len(inline)+1)
 	for _, sk := range inline {
-		parts = append(parts, c.skills.render(sk, ""))
+		parts = append(parts, c.skills.renderInvocation(sk, ""))
 	}
 	if strings.TrimSpace(input) != "" {
 		parts = append(parts, input)
 	}
-	composed := strings.Join(parts, "\n\n")
-	if strings.TrimSpace(input) == "" {
-		if len(subagents) > 0 {
-			return preparedInvocationTurn{}, fmt.Errorf("subagent invocation requires a task")
-		}
-	}
-	return preparedInvocationTurn{composed: composed, subagents: subagents}, nil
+	return preparedInvocationTurn{composed: strings.Join(parts, "\n\n"), subagents: subagents, inlineSkillNames: inlineSkillNames, task: task}, nil
 }
 
 func (c *Controller) runPreparedInvocationTurn(
@@ -137,6 +174,10 @@ func (c *Controller) runPreparedInvocationTurn(
 	input, raw, display string,
 	frozenImages []string,
 ) error {
+	ctx = withInvokedSkills(ctx, prepared.inlineSkillNames)
+	if strings.TrimSpace(raw) == "" {
+		raw = display
+	}
 	if len(prepared.subagents) == 0 {
 		return c.runTurnLoop(ctx, orchestratedTurn{
 			input: prepared.composed, raw: raw, display: display, images: c.frozenTurnImages(frozenImages),
@@ -150,7 +191,7 @@ func (c *Controller) runPreparedInvocationTurn(
 		ctx,
 		prepared.subagents,
 		prepared.composed,
-		input,
+		firstNonEmptyStr(prepared.task, input),
 		display,
 		runner,
 		c.PlanMode(),
@@ -188,39 +229,39 @@ func (c *Controller) submit(input, display, editedOriginal string) {
 		c.RunShell(trimmed[1:])
 		return
 	}
-	c.submitCommandOrTurn(trimmed, input, display, false, editedOriginal, "")
+	c.submitCommandOrTurn(trimmed, input, display, false, editedOriginal, turnTags{})
 }
 
 func (c *Controller) submitHTTP(input, display string) {
-	c.submitHTTPWithFormat(input, display, "")
+	c.submitHTTPWithFormat(input, display, turnTags{})
 }
 
-func (c *Controller) submitHTTPWithFormat(input, display, format string) {
+func (c *Controller) submitHTTPWithFormat(input, display string, tags turnTags) admissionResult {
 	trimmed := strings.TrimSpace(input)
 	if note, ok := MemoryQuickAddNote(trimmed); ok {
 		c.rememberProjectNote(note)
-		return
+		return turnNoTurn
 	}
 	if note, ok := RememberCommandNote(trimmed); ok {
 		c.rememberProjectNote(note)
-		return
+		return turnNoTurn
 	}
 	if c.applyGoalCommand(trimmed, display) {
-		return
+		return turnNoTurn
 	}
 	if strings.HasPrefix(trimmed, "!") {
 		c.notice("shell commands are unavailable from this frontend")
-		return
+		return turnNoTurn
 	}
-	c.submitCommandOrTurn(trimmed, input, display, true, "", format)
+	return c.submitCommandOrTurn(trimmed, input, display, true, "", tags)
 }
 
 // refTurnBase is the shape every ref turn from one submitted line shares. An
 // edited resubmit resolves against the whole workspace and rides the
 // edited-goal loop, so it overrides scopedRefsOnly rather than combining with
 // it.
-func (c *Controller) refTurnBase(display, editedOriginal, format string, scopedRefsOnly bool) refTurn {
-	base := refTurn{display: display, original: editedOriginal, format: format}
+func (c *Controller) refTurnBase(display, editedOriginal string, tags turnTags, scopedRefsOnly bool) refTurn {
+	base := refTurn{display: display, original: editedOriginal, tags: tags}
 	if scopedRefsOnly && strings.TrimSpace(editedOriginal) == "" {
 		base.resolve = c.ResolveScopedRefs
 	}
@@ -229,43 +270,43 @@ func (c *Controller) refTurnBase(display, editedOriginal, format string, scopedR
 
 // turnLoopRunner is the loop that same line runs in: an edited resubmit rides
 // the edited-goal loop, everything else the plain one with its format bound.
-func (c *Controller) turnLoopRunner(editedOriginal, format string) func(context.Context, string, string, string) error {
+func (c *Controller) turnLoopRunner(editedOriginal string, tags turnTags) func(context.Context, string, string, string) error {
 	if strings.TrimSpace(editedOriginal) != "" {
 		return func(ctx context.Context, input, raw, display string) error {
-			return c.runTurnLoop(ctx, orchestratedTurn{
+			return c.runTurnLoop(withTurnVia(ctx, tags.via), orchestratedTurn{
 				input: input, raw: raw, display: display, editedOriginal: editedOriginal,
 			})
 		}
 	}
 	return func(ctx context.Context, input, raw, display string) error {
-		return c.runTurnLoop(c.withTurnFormat(ctx, format), orchestratedTurn{input: input, raw: raw, display: display})
+		return c.runTurnLoop(c.withTurnTags(ctx, tags), orchestratedTurn{input: input, raw: raw, display: display})
 	}
 }
 
-func (c *Controller) submitCommandOrTurnReady(trimmed, input, display string, scopedRefsOnly bool, editedOriginal, format string) {
-	base := c.refTurnBase(display, editedOriginal, format, scopedRefsOnly)
-	runRefTurn := func(input, display string) {
+func (c *Controller) submitCommandOrTurnReady(trimmed, input, display string, scopedRefsOnly bool, editedOriginal string, tags turnTags) admissionResult {
+	base := c.refTurnBase(display, editedOriginal, tags, scopedRefsOnly)
+	runRefTurn := func(input, display string) admissionResult {
 		r := base
 		r.input, r.display = input, display
-		c.runRefTurn(r)
+		return c.runRefTurn(r)
 	}
-	runRefTurnWithRefs := func(input, refLine, display string) {
+	runRefTurnWithRefs := func(input, refLine, display string) admissionResult {
 		r := base
 		r.input, r.refLine, r.display = input, refLine, display
-		c.runRefTurn(r)
+		return c.runRefTurn(r)
 	}
-	runTurnLoop := c.turnLoopRunner(editedOriginal, format)
+	runTurnLoop := c.turnLoopRunner(editedOriginal, tags)
 	switch {
 	case trimmed == "/compact" || strings.HasPrefix(trimmed, "/compact "):
 		go c.compactAndReport(strings.TrimSpace(strings.TrimPrefix(trimmed, "/compact")))
-	case trimmed == "/context":
-		c.noticeDetail(c.ContextReport())
-	case trimmed == "/new":
-		c.runSessionVerb(c.NewSession, "new session", "new session failed: ")
-	case trimmed == "/clear":
-		c.runSessionVerb(c.ClearSession, "context cleared", "clear context failed: ")
+	case slashWord(trimmed) == "/context":
+		c.reportContext()
+	case slashWord(trimmed) == "/new":
+		c.runSessionVerb(c.NewSession, i18n.M.SlashNewDone, i18n.M.SlashNewFailed+": ")
+	case slashWord(trimmed) == "/clear":
+		c.runSessionVerb(c.ClearSession, i18n.M.SlashClearDone, i18n.M.SlashClearFailed+": ")
 	case strings.HasPrefix(trimmed, "/mcp__"):
-		c.runGuarded(func(ctx context.Context) error {
+		return c.runGuarded(func(ctx context.Context) error {
 			sent, found, err := c.MCPPrompt(ctx, trimmed)
 			if err != nil {
 				return err
@@ -278,19 +319,16 @@ func (c *Controller) submitCommandOrTurnReady(trimmed, input, display string, sc
 		})
 	case SlashCodeCommentLine(trimmed):
 		// Slash-prefixed code comments are prompt text, not slash commands.
-		runRefTurn(input, display)
+		return runRefTurn(input, display)
 	case strings.HasPrefix(trimmed, "/"):
 		if ref, ok := FileRefLine(trimmed); ok {
-			runRefTurn(ref, display)
-			return
+			return runRefTurn(ref, display)
 		}
 		if ref, ok := SlashPathLineRef(trimmed, c.workspaceRoot); ok {
-			runRefTurnWithRefs(input, ref, display)
-			return
+			return runRefTurnWithRefs(input, ref, display)
 		}
 		if SlashPathLikeLine(trimmed) {
-			runRefTurn(input, display)
-			return
+			return runRefTurn(input, display)
 		}
 		// Management verbs (/model /memory /skills /hooks /mcp) emit a Notice, so
 		// Submit-based frontends (desktop, HTTP) get them with no extra wiring.
@@ -299,39 +337,39 @@ func (c *Controller) submitCommandOrTurnReady(trimmed, input, display string, sc
 		switch fields[0] {
 		case "/tree":
 			c.notice(c.BranchTreeText())
-			return
+			return turnNoTurn
 		case "/branch":
 			name := strings.TrimSpace(strings.TrimPrefix(trimmed, fields[0]))
 			if _, err := c.Branch(name); err != nil {
 				c.notice(err.Error())
 			}
-			return
+			return turnNoTurn
 		case "/switch":
 			ref := strings.TrimSpace(strings.TrimPrefix(trimmed, fields[0]))
 			if _, err := c.SwitchBranch(ref); err != nil {
 				c.notice(err.Error())
 			}
-			return
+			return turnNoTurn
 		case "/rewind":
 			args := strings.TrimSpace(strings.TrimPrefix(trimmed, fields[0]))
 			turn, scope, err := parseRewind(args, c.Checkpoints())
 			if err != nil {
 				c.notice("usage: /rewind [turn] [code|conversation|both]")
-				return
+				return turnNoTurn
 			}
 			if err := c.Rewind(turn, scope); err != nil {
 				c.notice(err.Error())
 			}
-			return
+			return turnNoTurn
 		case "/plan-exec":
 			c.applyPlanExec(trimmed, display)
-			return
+			return turnNoTurn
 		case "/prometheus":
 			c.applyPrometheus(trimmed, display)
-			return
+			return turnNoTurn
 		}
 		if c.managementNotice(trimmed) {
-			return
+			return turnNoTurn
 		}
 		if IsBuiltinDocsSlash(fields[0], c.Commands(), c.SlashSkills()) {
 			query := strings.TrimSpace(strings.TrimPrefix(trimmed, fields[0]))
@@ -342,49 +380,72 @@ func (c *Controller) submitCommandOrTurnReady(trimmed, input, display string, sc
 				} else {
 					c.notice(text)
 				}
-				return
+				return turnNoTurn
 			}
-			c.runGuarded(func(ctx context.Context) error {
+			return c.runGuarded(func(ctx context.Context) error {
 				sent, err := docsCommandPrompt(ctx, query)
 				if err != nil {
 					return fmt.Errorf("docs: %w", err)
 				}
 				return runTurnLoop(ctx, sent, sent, display)
 			})
-			return
 		}
 		// A custom command wins over a skill of the same name; both resolve to a
 		// turn. Built-ins and their explicit Reasonix namespace are handled above.
 		if sent, ok := c.CustomCommand(trimmed); ok {
-			c.runGuarded(func(ctx context.Context) error {
+			return c.runGuarded(func(ctx context.Context) error {
 				return runTurnLoop(ctx, sent, sent, display)
 			})
-			return
 		}
 		if sk, task, ok := c.resolveSkillInvocation(trimmed); ok {
 			if sk.RunAs == skill.RunSubagent {
-				if strings.TrimSpace(task) == "" {
-					c.notice("usage: /" + sk.Name + " <task>")
-					return
-				}
-				c.runSubagentSkillSlash(sk, task, trimmed, display)
-				return
+				return c.slashSubagent(sk, task, trimmed, display)
 			}
-			sent := c.skills.render(sk, task)
-			c.runGuarded(func(ctx context.Context) error {
-				return runTurnLoop(ctx, sent, sent, display)
+			sent := c.skills.renderInvocation(sk, task)
+			return c.runGuarded(func(ctx context.Context) error {
+				return runTurnLoop(withInvokedSkills(ctx, []string{sk.Name}), sent, input, display)
 			})
-			return
 		}
-		// Unknown slash input is prose more often than a typo ("/etc/hosts
-		// looks wrong", pasted paths, half-remembered commands) — send it as a
-		// regular message instead of dead-ending the submission, with a notice
-		// so real typos are still visible (#5756).
-		c.notice("unknown command: " + trimmed + " — sent as a regular message")
-		runRefTurn(input, display)
+		return c.answerUnresolvedSlash(fields[0], tags.refuseUnknownSlash, func() admissionResult { return runRefTurn(input, display) })
 	default:
-		runRefTurn(input, display)
+		return runRefTurn(input, display)
 	}
+	return turnNoTurn
+}
+
+// slashSubagent runs a typed /skill that runs as a subagent. With no task a
+// review skill takes its own default scope; any other asks for one.
+func (c *Controller) slashSubagent(sk skill.Skill, task, raw, display string) admissionResult {
+	if strings.TrimSpace(task) == "" {
+		if !sk.RunsWithoutTask() {
+			c.notice("usage: /" + sk.Name + " <task>")
+			return turnNoTurn
+		}
+		task = skill.DefaultReviewTask
+	}
+	return c.runSubagentSkillSlash(sk, task, raw, display)
+}
+
+// slashWord is the command a line names: its first space-delimited word, which
+// is all a built-in's identity rests on whatever arguments follow.
+func slashWord(line string) string {
+	word, _, _ := strings.Cut(line, " ")
+	return word
+}
+
+// answerUnresolvedSlash settles a slash line nothing resolved. Unknown slash
+// input is prose more often than a typo ("/etc/hosts looks wrong", pasted paths,
+// half-remembered commands), so it is sent as a regular message with a notice
+// that keeps real typos visible (#5756) — unless the submitter asked to refuse.
+func (c *Controller) answerUnresolvedSlash(cmd string, refuse bool, send func() admissionResult) admissionResult {
+	if refuse {
+		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeUnknownCommand,
+			Text: i18n.M.SlashUnknown + ": " + cmd})
+		return turnNoTurn
+	}
+	c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeUnknownCommand,
+		Text: i18n.M.SlashUnknown + ": " + cmd + " — " + i18n.M.SlashUnknownSentAsMessage})
+	return send()
 }
 
 func (c *Controller) applyGoalCommand(input, display string) bool {
@@ -411,7 +472,9 @@ func (c *Controller) applyGoalCommand(input, display string) bool {
 	case GoalCommandResume:
 		if !c.ResumeGoal() {
 			c.notice(i18n.M.GoalNotPaused)
+			break
 		}
+		c.startGoalResumeTurn(display)
 	default:
 		goal := c.Goal()
 		if strings.TrimSpace(goal) == "" {

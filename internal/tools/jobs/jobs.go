@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"reasonix/internal/base/nilutil"
+	"reasonix/internal/base/scratch"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/safety/evidence"
 )
@@ -43,28 +44,8 @@ var (
 	}{ids: map[string]struct{}{}}
 )
 
-// Status is a job's lifecycle state.
-type Status string
-
-const (
-	Running     Status = "running"
-	Done        Status = "done"
-	Failed      Status = "failed"
-	Killed      Status = "killed"
-	Interrupted Status = "interrupted"
-)
-
 // DefaultTeardownGrace bounds Close and destroy waits for non-cooperative jobs.
 const DefaultTeardownGrace = 15 * time.Second
-
-// View is a read-only snapshot of a job for the status bar.
-type View struct {
-	ID        string `json:"id"`
-	Kind      string `json:"kind"`
-	Label     string `json:"label"`
-	Status    string `json:"status"`
-	StartedAt int64  `json:"startedAt"` // unix milliseconds
-}
 
 // Result is one job's terminal (or current) state returned by Wait.
 type Result struct {
@@ -124,6 +105,7 @@ type Job struct {
 	Kind      string // "bash" | "task"
 	Label     string
 	SessionID string
+	Present   Presentation // set once, at start
 
 	mu          sync.Mutex
 	tail        []byte
@@ -168,7 +150,7 @@ type Manager struct {
 	destroying         map[string]bool
 	artifactDirs       map[string]string
 	loaded             map[string]bool
-	tempRoot           string
+	scratch            *scratch.Dir
 	reservations       map[string]int
 
 	stalledWarning time.Duration
@@ -241,7 +223,7 @@ func NewManager(sink event.Sink, opts ...Option) *Manager {
 		sink = event.Discard
 	}
 	root, cancel := context.WithCancel(context.Background())
-	tempRoot, _ := os.MkdirTemp("", "reasonix-jobs-*")
+	scratchDir, _ := scratch.Create("reasonix-jobs-")
 	m := &Manager{
 		sink:          sink,
 		root:          root,
@@ -251,7 +233,7 @@ func NewManager(sink event.Sink, opts ...Option) *Manager {
 		artifactDirs:  map[string]string{},
 		reservations:  map[string]int{},
 		loaded:        map[string]bool{},
-		tempRoot:      tempRoot,
+		scratch:       scratchDir,
 		teardownGrace: DefaultTeardownGrace,
 		ownerID:       newManagerOwnerID(),
 	}
@@ -391,7 +373,7 @@ func (m *Manager) startInvalid(parentSession, kind, label string, validationErr 
 
 // StartForSession launches a job owned by parentSession. Session-scoped readers
 // only see jobs whose owner matches the active session.
-func (m *Manager) StartForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
+func (m *Manager) StartForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error), opts ...StartOption) *Job {
 	parentSession = strings.TrimSpace(parentSession)
 	kind = strings.TrimSpace(kind)
 	if err := validatePathSegment(parentSession, "parentSession"); err != nil {
@@ -417,6 +399,7 @@ func (m *Manager) StartForSession(parentSession, kind, label string, run func(ct
 		done:      make(chan struct{}),
 		artifact:  jobArtifact{path: logPath, metaPath: metaPath, file: file, complete: artifactErr == "", err: artifactErr},
 	}
+	applyOptions(j, opts)
 	ctx = WithSession(ctx, parentSession)
 	ctx = context.WithValue(ctx, jobCtxKey{}, j)
 	key := jobKey(parentSession, id)
@@ -435,80 +418,7 @@ func (m *Manager) StartForSession(parentSession, kind, label string, run func(ct
 		m.taskRecorder.RecordStart(id, kind, label)
 	}
 
-	m.wg.Add(1)
-	if m.stalledWarning > 0 {
-		m.wg.Add(1)
-		go m.monitorStalled(parentSession, j)
-	}
-	go func() {
-		defer m.wg.Done()
-		result, err := runRecovered(ctx, jobWriter{j}, run)
-		j.mu.Lock()
-		j.runReturned = true
-		j.mu.Unlock()
-
-		var st Status
-		switch {
-		case ctx.Err() != nil:
-			st = Killed
-		case err != nil:
-			st = Failed
-			if result == "" {
-				result = err.Error()
-			}
-		default:
-			st = Done
-		}
-		finishedAt := nowMs()
-		if result != "" {
-			j.mu.Lock()
-			if j.artifact.open() {
-				j.artifact.writeString(result)
-			} else {
-				j.result = result
-			}
-			j.tail = appendTail(j.tail, []byte(result), defaultTailBytes)
-			j.mu.Unlock()
-		}
-		targetDir := m.artifactTargetDirForJob(j)
-		j.mu.Lock()
-		j.artifact.close()
-		if j.artifact.err != "" {
-			j.artifact.complete = false
-		}
-		j.times.finished = finishedAt
-		if targetDir != "" {
-			if moveErr := j.moveArtifactToDirLocked(targetDir); moveErr != nil {
-				j.noteArtifactErr("migration: " + moveErr.Error())
-			}
-		}
-		metaErr := m.writeJobMetaLocked(j, st)
-		if metaErr != nil {
-			j.noteArtifactErr("metadata: " + metaErr.Error())
-		}
-		resultRef := j.artifactRefLocked()
-		j.mu.Unlock()
-		// Queue the drain note (and emit the closing Notice) BEFORE publishing the
-		// terminal status. Wait(nil)/resolve only block on Running jobs, so if the
-		// status flipped to terminal before the note was queued, a Wait could observe
-		// completion, skip j.done, and DrainCompletedNote would race ahead of the
-		// bookkeeping (the TestDrainMultiple -race flake). Recording first makes an
-		// observed terminal status imply the note is already queued.
-		ev := m.recordCompletion(parentSession, id, kind, label, resultRef, st, err)
-
-		j.mu.Lock()
-		if j.status != Killed { // a concurrent Kill already published Killed — keep it
-			j.status = st
-		}
-		if j.artifact.path != "" && j.artifact.complete {
-			j.result = ""
-			j.tail = nil
-		}
-		j.mu.Unlock()
-		close(j.done)
-		// Only now would a woken turn's first question get "terminal".
-		m.publishCompletion(ev)
-	}()
+	m.launchJob(ctx, j, run)
 	return j
 }
 
@@ -560,13 +470,13 @@ func (m *Manager) artifactDirLocked(parentSession string) string {
 			return dir
 		}
 	}
-	if strings.TrimSpace(m.tempRoot) == "" {
+	if strings.TrimSpace(m.scratch.Path()) == "" {
 		return ""
 	}
 	if parentSession == "" {
-		return filepath.Join(m.tempRoot, "default")
+		return filepath.Join(m.scratch.Path(), "default")
 	}
-	return filepath.Join(m.tempRoot, parentSession)
+	return filepath.Join(m.scratch.Path(), parentSession)
 }
 
 func (m *Manager) writeJobMetaLocked(j *Job, st Status) error {
@@ -577,6 +487,8 @@ func (m *Manager) writeJobMetaLocked(j *Job, st Status) error {
 		ID:               j.ID,
 		Kind:             j.Kind,
 		Label:            j.Label,
+		Description:      j.Present.Description,
+		Detail:           j.Present.Detail,
 		SessionID:        j.SessionID,
 		OwnerID:          m.ownerID,
 		Status:           st,
@@ -752,9 +664,11 @@ func (m *Manager) recordStalled(parentSession, id, kind, label string) {
 	m.mu.Unlock()
 	if shouldEmit {
 		m.sink.Emit(event.Event{
-			Kind:  event.Notice,
-			Level: event.LevelWarn,
-			Text:  fmt.Sprintf("background %s %s has written nothing to its own output for %s — it may be writing to a file, or stuck; check with wait/bash_output or stop with kill_shell", kind, id, m.stalledWarning.Round(time.Second)),
+			Kind:   event.Notice,
+			Level:  event.LevelWarn,
+			Code:   event.NoticeCodeJobStalled,
+			Text:   fmt.Sprintf("background %s %s has written nothing to its own output for %s — it may be writing to a file, or stuck; check with wait/bash_output or stop with kill_shell", kind, id, m.stalledWarning.Round(time.Second)),
+			Detail: event.JobNotice{Kind: kind, ID: id, Label: label, QuietSeconds: int(m.stalledWarning / time.Second)}.Encode(),
 		})
 	}
 }
@@ -939,41 +853,6 @@ func (m *Manager) resolve(parentSession string, ids []string) []*Job {
 		if j := m.findJobLocked(parentSession, id); j != nil {
 			out = append(out, j)
 		}
-	}
-	return out
-}
-
-// Running returns a snapshot of the still-running jobs (for the status bar).
-func (m *Manager) Running() []View {
-	return m.RunningForSession("")
-}
-
-// RunningForSession returns still-running jobs owned by parentSession. Empty
-// parentSession preserves the legacy unscoped behavior.
-func (m *Manager) RunningForSession(parentSession string) []View {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	var out []View
-	for _, key := range m.order {
-		j := m.jobs[key]
-		if !sessionMatches(parentSession, j.SessionID) {
-			continue
-		}
-		select {
-		case <-j.done:
-			continue
-		default:
-		}
-		j.mu.Lock()
-		// A cancellation request flips the persisted/result status to Killed
-		// synchronously, but the process tree may still be unwinding. Keep the job
-		// on the operational running surface until its done channel closes so
-		// Desktop rebuild guards and Delivery workspace leases cannot declare the
-		// runtime idle early. The public view remains "running" while a stop is
-		// in flight; clients may render a local "stopping" state after they
-		// request cancellation.
-		out = append(out, View{ID: j.ID, Kind: j.Kind, Label: j.Label, Status: string(Running), StartedAt: j.times.started})
-		j.mu.Unlock()
 	}
 	return out
 }
@@ -1467,6 +1346,7 @@ func (m *Manager) loadSessionArtifacts(parentSession, sessionPath, dir string) {
 			ID:        id,
 			Kind:      meta.Kind,
 			Label:     meta.Label,
+			Present:   Presentation{Description: meta.Description, Detail: meta.Detail},
 			SessionID: parentSession,
 			status:    meta.Status,
 			times:     jobTimes{started: meta.StartedAt, activity: meta.FinishedAt, finished: meta.FinishedAt},
@@ -1608,7 +1488,9 @@ func (m *Manager) Close() {
 // persistent cleanup, but still needs the manager's root context and temporary
 // artifact root released eventually.
 func (m *Manager) CloseAsync() {
+	m.mu.Lock()
 	m.cancel()
+	m.mu.Unlock()
 	go func() {
 		m.wg.Wait()
 		m.releaseOwner()
@@ -1619,7 +1501,9 @@ func (m *Manager) CloseAsync() {
 // CloseWithGrace is Close with an explicit wait window, used by tests and
 // callers that need to surface non-cooperative jobs.
 func (m *Manager) CloseWithGrace(grace time.Duration) TeardownResult {
+	m.mu.Lock()
 	m.cancel()
+	m.mu.Unlock()
 	done := make(chan struct{})
 	go func() {
 		m.wg.Wait()
@@ -1704,9 +1588,9 @@ func (m *Manager) closeTargets() []teardownTarget {
 		j.mu.Lock()
 		switch j.status {
 		case Running:
-			j.status = Killed
+			j.status = Interrupted
 			targets = append(targets, teardownTarget{info: TeardownJob{ID: j.ID, Kind: j.Kind, Label: j.Label}, done: j.done})
-		case Killed:
+		case Killed, Interrupted:
 			targets = append(targets, teardownTarget{info: TeardownJob{ID: j.ID, Kind: j.Kind, Label: j.Label}, done: j.done})
 		}
 		j.mu.Unlock()
@@ -1738,9 +1622,7 @@ func (m *Manager) emitTeardownTimeout(action string, result TeardownResult) {
 }
 
 func (m *Manager) removeTempRoot() {
-	if m.tempRoot != "" {
-		_ = os.RemoveAll(m.tempRoot)
-	}
+	_ = m.scratch.Remove()
 }
 
 func nowMs() int64 { return time.Now().UnixMilli() }

@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+
+	"gopkg.in/yaml.v3"
 )
 
 type docClass int
@@ -45,6 +47,7 @@ var docClassByPrefix = []struct {
 	{"REASONIX.md", classMachine},
 	{"AGENTS.md", classMachine},
 	{"CLAUDE.md", classMachine},
+	{"docs/EXTENSION_PROTOCOL.generated.md", classMachine},
 	{".github/", classMachine},
 	{".reasonix/", classMachine},
 	{"internal/ext/skill/builtincontent/", classMachine},
@@ -66,9 +69,11 @@ var translatedDocs = []string{
 var (
 	docStatuses       = []string{"active", "deprecated"}
 	releaseNoteGroups = []string{"新增", "变更", "修复", "移除", "升级须知"}
-	isoDate           = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
-	listItem          = regexp.MustCompile(`^\s*(?:[-*+]|\d+\.)\s+`)
-	changeReference   = regexp.MustCompile(`#\d+|\b[0-9a-f]{7,40}\b|https?://`)
+	// A second language follows releaseNoteEnglishMark in the same file and is held to the same shape under these headings.
+	releaseNoteEnglishGroups = []string{"New", "Changed", "Fixed", "Removed", "Upgrade notes"}
+	isoDate                  = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+	listItem                 = regexp.MustCompile(`^\s*(?:[-*+]|\d+\.)\s+`)
+	changeReference          = regexp.MustCompile(`#\d+|\b[0-9a-f]{7,40}\b|https?://`)
 )
 
 func classifyDoc(rel string) (docClass, bool) {
@@ -167,7 +172,14 @@ func docMetadata(lines []string) (map[string]string, bool) {
 			return meta, true
 		}
 		if key, value, ok := strings.Cut(line, ":"); ok {
-			meta[strings.TrimSpace(key)] = strings.TrimSpace(value)
+			value = strings.TrimSpace(value)
+			if strings.HasPrefix(value, `"`) || strings.HasPrefix(value, "'") {
+				var scalar string
+				if err := yaml.Unmarshal([]byte(value), &scalar); err == nil {
+					value = scalar
+				}
+			}
+			meta[strings.TrimSpace(key)] = value
 		}
 	}
 	return nil, false
@@ -206,7 +218,7 @@ func proseBlocks(lines []string) []proseBlock {
 			continue
 		case inFence:
 			continue
-		case t == "" || strings.HasPrefix(t, "#") || strings.HasPrefix(t, "|") || strings.HasPrefix(t, "<"):
+		case t == "" || t == ">" || strings.HasPrefix(t, "#") || strings.HasPrefix(t, "|") || strings.HasPrefix(t, "<"):
 			flush()
 			continue
 		}
@@ -262,22 +274,41 @@ func blockKind(b proseBlock) string {
 	return "paragraph"
 }
 
+const releaseNoteEnglishMark = "<!-- lang:en -->"
+
 // checkReleaseNote holds a version's notes to the published shape: one summary
 // line, changes grouped under the fixed headings, one short referenced line per
-// change. The reasoning behind a change lives in its commit.
+// change. The reasoning behind a change lives in its commit. A file may carry
+// an English part after releaseNoteEnglishMark; each language is held to the
+// same shape under its own headings.
 func checkReleaseNote(rel string, lines []string) []Finding {
+	for i, raw := range lines {
+		if strings.TrimSpace(raw) != releaseNoteEnglishMark {
+			continue
+		}
+		first := lines[:i]
+		for len(first) > 0 && slices.Contains([]string{"", "---"}, strings.TrimSpace(first[len(first)-1])) {
+			first = first[:len(first)-1]
+		}
+		out := checkReleaseNoteBody(rel, first, 0, releaseNoteGroups)
+		return append(out, checkReleaseNoteBody(rel, lines[i+1:], i+1, releaseNoteEnglishGroups)...)
+	}
+	return checkReleaseNoteBody(rel, lines, 0, releaseNoteGroups)
+}
+
+func checkReleaseNoteBody(rel string, lines []string, offset int, groups []string) []Finding {
 	var out []Finding
 	paragraphs := 0
 	for i, raw := range lines {
 		t := strings.TrimSpace(raw)
 		switch {
 		case strings.HasPrefix(t, "## "):
-			if !slices.Contains(releaseNoteGroups, strings.TrimSpace(t[3:])) {
-				out = append(out, Finding{rel, i + 1, ruleReleaseNote,
-					fmt.Sprintf("heading %q is not one of %v", t, releaseNoteGroups), 1})
+			if !slices.Contains(groups, strings.TrimSpace(t[3:])) {
+				out = append(out, Finding{rel, offset + i + 1, ruleReleaseNote,
+					fmt.Sprintf("heading %q is not one of %v", t, groups), 1})
 			}
 		case strings.HasPrefix(t, "#"):
-			out = append(out, Finding{rel, i + 1, ruleReleaseNote, "only ## group headings; a change is one list item, not a section", 1})
+			out = append(out, Finding{rel, offset + i + 1, ruleReleaseNote, "only ## group headings; a change is one list item, not a section", 1})
 		}
 	}
 	for _, b := range proseBlocks(lines) {
@@ -285,17 +316,17 @@ func checkReleaseNote(rel string, lines []string) []Finding {
 		case !b.item:
 			paragraphs++
 			if paragraphs > 1 {
-				out = append(out, Finding{rel, b.line, ruleReleaseNote, "only the first line may be a summary paragraph; state changes as list items", 1})
+				out = append(out, Finding{rel, offset + b.line, ruleReleaseNote, "only the first line may be a summary paragraph; state changes as list items", 1})
 			}
 		case !changeReference.MatchString(b.text):
-			out = append(out, Finding{rel, b.line, ruleReleaseNote, "a change names its issue, pull request or commit", 1})
+			out = append(out, Finding{rel, offset + b.line, ruleReleaseNote, "a change names its issue, pull request or commit", 1})
 		}
 		limit := docProseWidth
 		if b.item {
 			limit = releaseNoteItemWidth
 		}
 		if b.width > limit {
-			out = append(out, Finding{rel, b.line, ruleDocProse,
+			out = append(out, Finding{rel, offset + b.line, ruleDocProse,
 				fmt.Sprintf("%s is %d columns, over %d", blockKind(b), b.width, limit),
 				(b.width - limit + proseWeightUnit - 1) / proseWeightUnit})
 		}

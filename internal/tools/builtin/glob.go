@@ -25,9 +25,11 @@ func init() { tool.RegisterBuiltin(globTool{}) }
 // session-scoped read aliases for external folder refs. forbidRoots lists
 // directories the tool may not search inside.
 type globTool struct {
+	netRoots    []string
 	workDir     string
 	paths       *PathResolver
 	forbidRoots []string
+	readRoots   []string
 }
 
 func (globTool) Name() string { return "glob" }
@@ -41,6 +43,8 @@ func (globTool) Schema() json.RawMessage {
 }
 
 func (globTool) ReadOnly() bool { return true }
+
+func (globTool) Reach() tool.Reach { return tool.ReachLocalRead }
 
 // SnipHint keeps a long head and short tail like grep: the first paths matter
 // most, the tail confirms how many more there were.
@@ -74,6 +78,12 @@ func (g globTool) Execute(ctx context.Context, args json.RawMessage) (string, er
 	rawPattern := p.Pattern
 	rp := resolveReadablePath(g.workDir, p.Pattern, g.paths)
 	p.Pattern = rp.Path
+	if err := rp.refuseNetwork(g.netRoots); err != nil {
+		return "", err
+	}
+	if err := confineScope(g.readRoots, globBase(p.Pattern)); err != nil {
+		return "", err
+	}
 	p.Pattern = filepath.FromSlash(p.Pattern) // models emit "/" (see Description); WalkDir/Match compare OS-native paths
 	displayPattern := rp.DisplayPath
 
@@ -96,7 +106,7 @@ func (g globTool) Execute(ctx context.Context, args json.RawMessage) (string, er
 		}
 		return "", fmt.Errorf("glob %q: %w", displayPattern, err)
 	}
-	matches = filterForbidMatches(matches, g.forbidRoots)
+	matches = filterForbidMatches(matches, g.forbidRoots, g.readRoots)
 	if len(matches) == 0 && !strings.ContainsAny(rawPattern, "/\\") {
 		fallback := filepath.Join(g.workDir, "**", rawPattern)
 		return g.globRecursive(ctx, fallback, fallback, ResolvedPath{}, to)
@@ -112,13 +122,13 @@ func (g globTool) Execute(ctx context.Context, args json.RawMessage) (string, er
 	return strings.Join(matches, "\n"), nil
 }
 
-func filterForbidMatches(matches, forbidRoots []string) []string {
-	if len(matches) == 0 || (len(forbidRoots) == 0 && !secrets.ProtectSensitiveFiles() && !secrets.ProtectCredentialFiles()) {
+func filterForbidMatches(matches, forbidRoots, scope []string) []string {
+	if len(matches) == 0 || (len(forbidRoots) == 0 && len(scope) == 0 && !secrets.ProtectSensitiveFiles() && !secrets.ProtectCredentialFiles()) {
 		return matches
 	}
 	out := matches[:0]
 	for _, match := range matches {
-		if !confineRead(forbidRoots, match) {
+		if !readOutsideScope(scope, match) && !confineRead(forbidRoots, match) {
 			out = append(out, match)
 		}
 	}
@@ -159,8 +169,12 @@ func (g globTool) globRecursive(ctx context.Context, pattern, displayPattern str
 		return tool.NoMatches, nil
 	}
 
+	if err := confineScope(g.readRoots, root); err != nil {
+		return "", err
+	}
 	var matches []string
 	truncated := false
+	confine := newWalkConfine(g.forbidRoots, g.readRoots, root)
 
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if ctx.Err() != nil {
@@ -170,12 +184,12 @@ func (g globTool) globRecursive(ctx context.Context, pattern, displayPattern str
 			return nil // skip unreadable entries
 		}
 		if d.IsDir() {
-			if skipWalkDir(root, path, d.Name()) || skipForbidDir(path, g.forbidRoots) {
+			if skipWalkDir(root, path, d.Name()) || confine.blocked(path, d) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if confineRead(g.forbidRoots, path) {
+		if confine.blocked(path, d) {
 			return nil
 		}
 		rel, rerr := filepath.Rel(root, path)
@@ -230,4 +244,18 @@ func displayGlobMatches(matches []string, rp ResolvedPath) []string {
 
 func matchGlobPattern(path, pattern string) bool {
 	return fileutil.MatchSlashGlob(path, pattern)
+}
+
+// globBase is the literal directory a pattern is anchored at: everything before
+// its first metacharacter, cut back to a path separator.
+func globBase(pattern string) string {
+	i := strings.IndexAny(pattern, "*?[{")
+	if i < 0 {
+		return pattern
+	}
+	base := pattern[:i]
+	if j := strings.LastIndexAny(base, "/\\"); j >= 0 {
+		return base[:j+1]
+	}
+	return "."
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"reasonix/internal/contract/event"
+	"reasonix/internal/contract/eventwire"
 )
 
 // SSEWatermarkInterval is how often a transport restates the last numbered
@@ -21,14 +22,64 @@ const SSEWatermarkInterval = sseKeepaliveInterval
 // eventsReplay answers what a client missed. `complete` false means the log no
 // longer reaches that far back, so each read model has to be re-read from the
 // authority that answers it — the transcript for one, the run graph for
-// another. Said plainly, because a hole looks like a quiet turn.
+// another. Said plainly, because a hole looks like a quiet turn. An attach also
+// carries what the log cannot: a pending prompt, which is connection-local.
 func (s *Server) eventsReplay(w http.ResponseWriter, r *http.Request) {
-	frames, complete := s.bc.Replay(lastEventID(r))
+	if attaching(r) {
+		// An attach is not a resume: the numbered log is another connection's
+		// history. What it owes is the connection-local state no numbered frame
+		// carries — the approval or question a run is stopped on.
+		frames, watermark := s.pendingPromptSnapshot()
+		writeEventsReplayFrames(w, frames, true, watermark)
+		return
+	}
+	writeEventsReplay(w, r, s.bc)
+}
+
+// pendingPromptSnapshot is what a run is waiting on, encoded as the stream does
+// — the same frames events would push to an attaching subscriber, unnumbered —
+// read together with the watermark under one hold of the prompt-emission lock.
+// Reading the watermark later would let a prompt raised in between be numbered
+// below the cursor the client adopts and skipped by it.
+func (s *Server) pendingPromptSnapshot() ([]json.RawMessage, int64) {
+	var frames []json.RawMessage
+	var watermark int64
+	s.ctl().ReplayPendingPromptsWith(func() event.Sink {
+		// Before the snapshot, still inside the lock: a prompt raised after this
+		// is numbered above the watermark and reached by the next resume.
+		watermark = s.bc.Watermark()
+		return event.FuncSink(func(e event.Event) {
+			data, err := json.Marshal(eventwire.ToWire(e))
+			if err != nil {
+				return
+			}
+			frames = append(frames, data)
+		})
+	})
+	return frames, watermark
+}
+
+// attaching reports whether a request carries no resume cursor. Both transports
+// tell an attach from a resume the same way, so a polled one cannot drift from
+// the stream's answer to the same question.
+func attaching(r *http.Request) bool {
+	return r.Header.Get("Last-Event-ID") == "" && r.URL.Query().Get("lastEventId") == ""
+}
+
+func writeEventsReplay(w http.ResponseWriter, r *http.Request, bc *Broadcaster) {
+	frames, complete := bc.Replay(lastEventID(r))
+	writeEventsReplayFrames(w, frames, complete, bc.Watermark())
+}
+
+func writeEventsReplayFrames(w http.ResponseWriter, frames []json.RawMessage, complete bool, watermark int64) {
+	if frames == nil {
+		frames = []json.RawMessage{}
+	}
 	writeJSON(w, struct {
 		Frames    []json.RawMessage `json:"frames"`
 		Complete  bool              `json:"complete"`
 		Watermark int64             `json:"watermark"`
-	}{frames, complete, s.bc.Watermark()})
+	}{frames, complete, watermark})
 }
 
 // lastEventID reads the resume point a client carries. The header is
@@ -68,6 +119,7 @@ type Frame struct {
 // replayFrame is one numbered frame kept for clients that have to resume.
 type replayFrame struct {
 	seq  int64
+	kind event.Kind
 	data []byte
 }
 
@@ -80,8 +132,8 @@ type replayLog struct {
 	bytes  int
 }
 
-func (l *replayLog) add(seq int64, data []byte) {
-	l.frames = append(l.frames, replayFrame{seq: seq, data: data})
+func (l *replayLog) add(seq int64, kind event.Kind, data []byte) {
+	l.frames = append(l.frames, replayFrame{seq: seq, kind: kind, data: data})
 	l.bytes += len(data)
 	for l.bytes > replayBudget && len(l.frames) > 1 {
 		l.bytes -= len(l.frames[0].data)
@@ -239,6 +291,40 @@ const sseKeepaliveInterval = 15 * time.Second
 // disconnects. Each event is one `data:` frame of the JSON wire form, and every
 // frame a client cannot afford to miss also carries an `id:` it can resume from.
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {
+	ch, unsubscribe := s.subscribeEvents(lastEventID(r), attaching(r), false)
+	defer unsubscribe()
+
+	streamFrames(w, r, s.bc, ch)
+}
+
+// subscribeEvents opens one client's view of this runtime's event flow.
+// EventSource carries its last id on a reconnect unasked, so a dropped
+// connection costs only what the replay log can no longer reach; `first` is a
+// client that holds nothing yet.
+func (s *Server) subscribeEvents(after int64, first, attached bool) (<-chan Frame, func()) {
+	var ch <-chan Frame
+	var unsubscribe func()
+	// Subscribe and replay as one handoff. Prompt producers are serialized with
+	// this operation, so no original event can land between the two steps.
+	s.ctl().ReplayPendingPromptsWith(func() event.Sink {
+		switch {
+		case first && attached:
+			ch, unsubscribe = s.bc.SubscribeAttached()
+		case first:
+			ch, unsubscribe = s.bc.SubscribeInitialNotices()
+		case attached:
+			ch, unsubscribe = s.bc.SubscribeResume(after)
+		default:
+			ch, unsubscribe = s.bc.SubscribeFrom(after)
+		}
+		return event.FuncSink(func(e event.Event) {
+			s.bc.EmitTo(ch, e)
+		})
+	})
+	return ch, unsubscribe
+}
+
+func streamFrames(w http.ResponseWriter, r *http.Request, bc *Broadcaster, ch <-chan Frame) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		refuse(w, http.StatusInternalServerError, "stream.unsupported", "this transport cannot stream", nil)
@@ -247,21 +333,6 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-
-	var ch <-chan Frame
-	var unsubscribe func()
-	// EventSource carries its last id on a reconnect unasked, so a dropped
-	// connection costs only what the replay log can no longer reach.
-	after := lastEventID(r)
-	// Subscribe and replay as one handoff. Prompt producers are serialized with
-	// this operation, so no original event can land between the two steps.
-	s.ctl().ReplayPendingPromptsWith(func() event.Sink {
-		ch, unsubscribe = s.bc.SubscribeFrom(after)
-		return event.FuncSink(func(e event.Event) {
-			s.bc.EmitTo(ch, e)
-		})
-	})
-	defer unsubscribe()
 
 	fmt.Fprint(w, ": connected\n\n") // open the stream immediately
 	flusher.Flush()
@@ -287,7 +358,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 			// A real frame, not a comment: a comment never reaches onmessage.
 			// Losing the last frame of a turn is what nothing else reveals, and
 			// this is how a client finds out within one interval.
-			fmt.Fprintf(w, "data: {\"kind\":\"stream_watermark\",\"seq\":%d}\n\n", s.bc.Watermark())
+			fmt.Fprintf(w, "data: {\"kind\":\"stream_watermark\",\"seq\":%d}\n\n", bc.Watermark())
 			flusher.Flush()
 		case <-r.Context().Done():
 			return

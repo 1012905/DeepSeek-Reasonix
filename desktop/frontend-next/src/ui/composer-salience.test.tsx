@@ -26,8 +26,8 @@ describe("what the composer shows when nothing is unusual", () => {
   it("keeps policy discoverable without default-state noise", () => {
     const { container } = draw();
     expect(container.querySelector(".policy[data-quiet]")).toBeTruthy();
-    expect(container.querySelector('[data-action="chrome.policy"]')?.getAttribute("aria-label")).toBe("执行权限：逐项确认");
-    expect(container.querySelector('[data-action="chrome.policy"]')?.textContent).toMatch(/逐项确认/);
+    expect(container.querySelector('[data-action="chrome.policy"]')?.getAttribute("aria-label")).toBe("执行权限：询问");
+    expect(container.querySelector('[data-action="chrome.policy"]')?.textContent).toMatch(/询问/);
   });
 
   // A status may recede to its baseline. The only way into a mode may not: the
@@ -70,7 +70,7 @@ describe("every deviation is visible", () => {
   it.each([
 
     ["effort", status({ effort: "high" }), /High/],
-    ["approval", status({ toolApprovalMode: "auto" as ApprovalMode }), /自动继续/],
+    ["approval", status({ toolApprovalMode: "auto" as ApprovalMode }), /自动批准/],
     ["a stricter approval", status({ toolApprovalMode: "dontAsk" as ApprovalMode }), /不询问/],
   ])("surfaces %s", (_what, st, want) => {
     const { container } = draw(st);
@@ -119,11 +119,11 @@ describe("the emphasised action while a turn runs", () => {
     expect(primary?.textContent).toBe("停下");
   });
 
-  it("leaves steering where sending was, so the rightmost button never moves", () => {
+  it("shows only stop during a live turn with an empty draft", () => {
     const idle = draw().container.querySelector(".go .btn:last-child span:last-child")?.textContent;
     cleanup();
     const live = draw(status(), true).container.querySelector(".go .btn:last-child span:last-child")?.textContent;
-    expect([idle, live]).toEqual(["发送", "插话"]);
+    expect([idle, live]).toEqual(["发送", "停下"]);
   });
 
   it("puts it back on sending once the turn is over", () => {

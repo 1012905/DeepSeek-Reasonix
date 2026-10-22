@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"reasonix/internal/base/fileutil"
 	fileencoding "reasonix/internal/base/fileutil/encoding"
 	"reasonix/internal/base/frontmatter"
 	"reasonix/internal/contract/config"
@@ -142,18 +141,22 @@ func (s Store) dirs() []string {
 // Path returns the absolute file path a memory with the given name lives at.
 // It checks GlobalDir first, then Dir, returning the first match. If no file
 // exists yet, it returns the path in Dir (the default project scope).
-func (s Store) Path(name string) string {
-	if _, path, ok := s.findActive(name); ok {
-		return path
+func (s Store) Path(name string) (string, error) {
+	_, path, ok, err := s.findActive(name)
+	if err != nil {
+		return "", err
+	}
+	if ok {
+		return path, nil
 	}
 	ref := parseMemoryReference(name)
 	stem := ref.name + ".md"
 	if ref.qualified {
 		p, err := safeJoin(s.DirFor(ref.scope), stem)
 		if err != nil {
-			return ""
+			return "", err
 		}
-		return p
+		return p, nil
 	}
 	for _, dir := range s.dirs() {
 		if dir == "" {
@@ -164,14 +167,14 @@ func (s Store) Path(name string) string {
 			continue
 		}
 		if _, err := os.Stat(p); err == nil {
-			return p
+			return p, nil
 		}
 	}
 	p, sjErr := safeJoin(s.Dir, stem)
 	if sjErr != nil {
-		return ""
+		return "", sjErr
 	}
-	return p
+	return p, nil
 }
 
 // Save writes (or overwrites) a memory file and refreshes its MEMORY.md index
@@ -192,6 +195,11 @@ func (s Store) Save(m Memory) (string, error) {
 func (s Store) Archive(name string) (string, error) {
 	memoryStoreMutationMu.Lock()
 	defer memoryStoreMutationMu.Unlock()
+	release, err := s.lockMutations()
+	if err != nil {
+		return "", err
+	}
+	defer release()
 	return s.archiveLocked(name)
 }
 
@@ -201,7 +209,11 @@ func (s Store) archiveLocked(name string) (string, error) {
 	}
 	ref := strings.TrimSpace(name)
 	parsed := parseMemoryReference(ref)
-	if active, path, ok := s.findActive(ref); ok && ref == active.ID {
+	active, path, ok, err := s.findActive(ref)
+	if err != nil {
+		return "", err
+	}
+	if ok && ref == active.ID {
 		return archiveMemoryInDir(filepath.Dir(path), active.Name)
 	} else if ok && parsed.qualified {
 		return archiveMemoryInDir(filepath.Dir(path), active.Name)
@@ -213,6 +225,13 @@ func (s Store) archiveLocked(name string) (string, error) {
 		}
 		return archiveMemoryInDir(s.DirFor(parsed.scope), parsed.name)
 	} else {
+		p, repaired, err := s.repairArchivedRef(ref)
+		if err != nil {
+			return "", err
+		}
+		if repaired {
+			return p, nil
+		}
 		name = slug(name)
 	}
 	if name == "" {
@@ -223,12 +242,16 @@ func (s Store) archiveLocked(name string) (string, error) {
 		if dir == "" {
 			continue
 		}
-		p, err := archiveInDir(dir, name)
+		lines, contains, err := indexLinesExceptIn(dir, name)
 		if err != nil {
 			return "", err
 		}
-		if p != "" || indexContainsIn(dir, name) {
-			if err := flushIndexIn(dir, indexLinesExceptIn(dir, name)); err != nil {
+		p, err := archiveInDir(dir, name, lines)
+		if err != nil {
+			return "", err
+		}
+		if p == "" && contains {
+			if err := flushIndexIn(dir, lines); err != nil {
 				return "", err
 			}
 		}
@@ -240,12 +263,16 @@ func (s Store) archiveLocked(name string) (string, error) {
 }
 
 func archiveMemoryInDir(dir, name string) (string, error) {
-	path, err := archiveInDir(dir, name)
+	lines, contains, err := indexLinesExceptIn(dir, name)
 	if err != nil {
 		return "", err
 	}
-	if path != "" || indexContainsIn(dir, name) {
-		if err := flushIndexIn(dir, indexLinesExceptIn(dir, name)); err != nil {
+	path, err := archiveInDir(dir, name, lines)
+	if err != nil {
+		return "", err
+	}
+	if path == "" && contains {
+		if err := flushIndexIn(dir, lines); err != nil {
 			return "", err
 		}
 	}
@@ -262,7 +289,45 @@ func (s Store) Delete(name string) error {
 	return err
 }
 
-func archiveInDir(dir, name string) (string, error) {
+// repairArchivedRef reconciles a reference whose active file is already gone. It
+// repairs only a stable id: a legacy name can match several historical archives,
+// and picking the first one would be a guess. It drops the stale index line that
+// still claims the fact is active, and only that removal counts as a hand-off.
+func (s Store) repairArchivedRef(ref string) (string, bool, error) {
+	for _, dir := range s.dirs() {
+		if strings.TrimSpace(dir) == "" {
+			continue
+		}
+		entries, err := readMemoryDirectory(filepath.Join(dir, ".archive"))
+		if err != nil {
+			return "", false, err
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+				continue
+			}
+			path := filepath.Join(dir, ".archive", entry.Name())
+			memory, ok := loadMemory(path)
+			if !ok || memory.ID != ref {
+				continue
+			}
+			lines, contains, err := indexLinesExceptIn(dir, slug(memory.Name))
+			if err != nil {
+				return "", false, err
+			}
+			if !contains {
+				continue
+			}
+			if err := flushIndexIn(dir, lines); err != nil {
+				return "", false, err
+			}
+			return path, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+func archiveInDir(dir, name string, lines map[string]string) (string, error) {
 	root, err := os.OpenRoot(dir)
 	if os.IsNotExist(err) {
 		return "", nil
@@ -287,6 +352,12 @@ func archiveInDir(dir, name string) (string, error) {
 		return "", err
 	}
 	if err := renameMemoryFile(root, file, dest); err != nil {
+		return "", err
+	}
+	if err := flushIndexIn(dir, lines); err != nil {
+		if back := renameMemoryFile(root, dest, file); back != nil {
+			return "", fmt.Errorf("%w (and %q could not be moved back out of the archive: %w)", err, name, back)
+		}
 		return "", err
 	}
 	out, err := safeJoin(dir, dest)
@@ -340,129 +411,10 @@ func safeJoin(base, name string) (string, error) {
 	return pathAbs, nil
 }
 
-func renameMemoryFile(root *os.Root, path, dest string) error {
-	err := root.Rename(path, dest)
-	if err == nil || os.IsNotExist(err) {
-		return nil
-	}
-	if !os.IsPermission(err) {
-		return err
-	}
-	repairOwnerWrite(root, path, false)
-	repairOwnerWrite(root, filepath.Dir(path), true)
-	repairOwnerWrite(root, filepath.Dir(dest), true)
-	err = root.Rename(path, dest)
-	if err == nil || os.IsNotExist(err) {
-		return nil
-	}
-	return err
-}
-
-func repairOwnerWrite(root *os.Root, path string, dir bool) {
-	info, err := root.Stat(path)
-	if err != nil {
-		return
-	}
-	need := os.FileMode(0o600)
-	if dir {
-		need = 0o700
-	}
-	_ = root.Chmod(path, info.Mode().Perm()|need)
-}
-
 // indexLineRe matches a managed index line so reindex/Delete can target the line
 // for one memory by its filename without disturbing the rest of a hand-edited
 // MEMORY.md.
 var indexLineRe = regexp.MustCompile(`(?m)^\s*-\s\[.+?\]\(([^)]+)\.md\)\s*—\s.*$`)
-
-// indexLinesExceptIn returns the managed MEMORY.md lines keyed by filename stem
-// in the given directory, dropping the entry for name (a missing index → empty map).
-func indexLinesExceptIn(dir, name string) map[string]string {
-	existing, _ := fileencoding.ReadFileUTF8(filepath.Join(dir, indexFile))
-	keep := map[string]string{}
-	for line := range strings.SplitSeq(string(existing), "\n") {
-		if mt := indexLineRe.FindStringSubmatch(line); mt != nil && mt[1] != name {
-			keep[mt[1]] = strings.TrimRight(line, "\r")
-		}
-	}
-	return keep
-}
-
-func indexContainsIn(dir, name string) bool {
-	existing, err := fileencoding.ReadFileUTF8(filepath.Join(dir, indexFile))
-	if err != nil {
-		return false
-	}
-	for line := range strings.SplitSeq(string(existing), "\n") {
-		if mt := indexLineRe.FindStringSubmatch(line); mt != nil && mt[1] == name {
-			return true
-		}
-	}
-	return false
-}
-
-// flushIndexIn rewrites MEMORY.md in the given directory from the managed lines,
-// preserving hand-written content. Managed lines are updated or removed, and
-// new managed entries are appended in sorted order.
-func flushIndexIn(dir string, lines map[string]string) error {
-	path := filepath.Join(dir, indexFile)
-	existing, _ := fileencoding.ReadFileUTF8(path)
-	processed := map[string]bool{}
-	var preserved strings.Builder
-	preservedEmpty := true
-	for line := range strings.SplitSeq(string(existing), "\n") {
-		trimmed := strings.TrimRight(line, "\r")
-		if mt := indexLineRe.FindStringSubmatch(trimmed); mt != nil {
-			name := mt[1]
-			if fresh, ok := lines[name]; ok {
-				preserved.WriteString(fresh)
-				preserved.WriteString("\n")
-				processed[name] = true
-				preservedEmpty = false
-			}
-			continue
-		}
-		preserved.WriteString(trimmed)
-		preserved.WriteString("\n")
-		if strings.TrimSpace(trimmed) != "" {
-			preservedEmpty = false
-		}
-	}
-
-	names := make([]string, 0, len(lines))
-	for n := range lines {
-		if !processed[n] {
-			names = append(names, n)
-		}
-	}
-	slices.Sort(names)
-
-	var b strings.Builder
-	if preservedEmpty && len(names) > 0 {
-		b.WriteString("# Memory\n\n")
-	} else {
-		b.WriteString(preserved.String())
-	}
-	for _, n := range names {
-		b.WriteString(lines[n])
-		b.WriteString("\n")
-	}
-	result := strings.TrimRight(b.String(), "\n")
-	if result != "" {
-		result += "\n"
-	}
-	// The index is derived state, but a torn write would still hide facts
-	// from the next session's prefix until the next reindex.
-	return fileutil.AtomicWriteFile(path, []byte(result), 0o644)
-}
-
-// reindexIn rewrites the MEMORY.md line for name in the given directory,
-// preserving every other managed line.
-func reindexIn(dir, name string, m Memory) error {
-	lines := indexLinesExceptIn(dir, name)
-	lines[name] = renderIndexLine(name, m)
-	return flushIndexIn(dir, lines)
-}
 
 func renderIndexLine(name string, m Memory) string {
 	marker := ""
@@ -478,9 +430,9 @@ func renderIndexLine(name string, m Memory) string {
 // by `/memory` and the desktop memory panel. Reads from both GlobalDir and Dir,
 // merging results. Files that fail to parse are skipped so one bad file never
 // hides the rest.
-func (s Store) List() []Memory {
+func (s Store) List() ([]Memory, error) {
 	if s.Dir == "" && s.GlobalDir == "" {
-		return nil
+		return nil, nil
 	}
 	var out []Memory
 	seen := map[string]bool{}
@@ -488,9 +440,9 @@ func (s Store) List() []Memory {
 		if dir == "" {
 			continue
 		}
-		entries, err := os.ReadDir(dir)
+		entries, err := readMemoryDirectory(dir)
 		if err != nil {
-			continue
+			return nil, err
 		}
 		for _, e := range entries {
 			if e.IsDir() || e.Name() == indexFile || !strings.HasSuffix(e.Name(), ".md") {
@@ -508,24 +460,24 @@ func (s Store) List() []Memory {
 		}
 	}
 	slices.SortFunc(out, func(a, b Memory) int { return cmp.Compare(a.Name, b.Name) })
-	return out
+	return out, nil
 }
 
 // ListAll returns every active fact from both scopes without the legacy
 // name-based deduplication performed by List. Callers that understand scope can
 // use it to resolve project-over-global overrides without hiding either source.
-func (s Store) ListAll() []Memory {
+func (s Store) ListAll() ([]Memory, error) {
 	if s.Dir == "" && s.GlobalDir == "" {
-		return nil
+		return nil, nil
 	}
 	var out []Memory
 	for _, dir := range s.dirs() {
 		if dir == "" {
 			continue
 		}
-		entries, err := os.ReadDir(dir)
+		entries, err := readMemoryDirectory(dir)
 		if err != nil {
-			continue
+			return nil, err
 		}
 		for _, entry := range entries {
 			if entry.IsDir() || entry.Name() == indexFile || !strings.HasSuffix(entry.Name(), ".md") {
@@ -544,7 +496,7 @@ func (s Store) ListAll() []Memory {
 	slices.SortFunc(out, func(a, b Memory) int {
 		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.Scope, b.Scope), cmp.Compare(a.ID, b.ID))
 	})
-	return out
+	return out, nil
 }
 
 // PinnedBudgetOff is the unset pinned budget. Pinned bodies do cost prefix
@@ -556,15 +508,15 @@ const PinnedBudgetOff = 0
 // pinnedGuidance snapshots explicitly pinned facts (plus legacy global
 // user/feedback, which ResolveActivation keeps pinned for compatibility) for
 // the stable session prefix, most recently updated first.
-func (s Store) pinnedGuidance() []Memory {
+func (s Store) pinnedGuidance() ([]Memory, error) {
 	var out []Memory
 	for _, dir := range s.dirs() {
 		if dir == "" {
 			continue
 		}
-		entries, err := os.ReadDir(dir)
+		entries, err := readMemoryDirectory(dir)
 		if err != nil {
-			continue
+			return nil, err
 		}
 		for _, e := range entries {
 			if e.IsDir() || e.Name() == indexFile || !strings.HasSuffix(e.Name(), ".md") {
@@ -580,27 +532,46 @@ func (s Store) pinnedGuidance() []Memory {
 			if ResolveActivation(m) != ActivationPinned || strings.TrimSpace(m.Body) == "" {
 				continue
 			}
+			// An explicit expiry is a hard boundary: the index and automatic
+			// recall already drop the fact past it, so the prefix must not keep
+			// sending the body.
+			if memoryFreshness(m, time.Now()) == FreshnessExpired {
+				continue
+			}
 			out = append(out, m)
 		}
 	}
 	slices.SortFunc(out, func(a, b Memory) int {
 		return cmp.Or(b.UpdatedAt.Compare(a.UpdatedAt), cmp.Compare(a.Name, b.Name))
 	})
-	return out
+	return out, nil
 }
 
 // pinnedGuidanceForProject removes pinned guidance shadowed by an equivalent
 // project fact before the stable session prefix is built. This makes the
 // documented project-over-global rule deterministic on the first turn instead
 // of depending on whether automatic recall happens to match the request.
-func (s Store) pinnedGuidanceForProject() []Memory {
-	guidance := s.pinnedGuidance()
-	if len(guidance) == 0 || s.Dir == "" {
-		return guidance
+func (s Store) pinnedGuidanceForProject() ([]Memory, error) {
+	guidance, err := s.pinnedGuidance()
+	if err != nil {
+		return nil, err
 	}
+	if len(guidance) == 0 || s.Dir == "" {
+		return guidance, nil
+	}
+	now := time.Now()
 	projectKeys := map[string]bool{}
-	for _, fact := range s.ListAll() {
+	facts, err := s.ListAll()
+	if err != nil {
+		return nil, err
+	}
+	for _, fact := range facts {
 		if NormalizeFactScope(string(fact.Scope)) != FactScopeProject {
+			continue
+		}
+		// An expired project fact sends nothing, so it cannot shadow the global
+		// guidance it used to override.
+		if memoryFreshness(fact, now) == FreshnessExpired {
 			continue
 		}
 		for _, key := range recallIdentityKeys(fact) {
@@ -611,7 +582,7 @@ func (s Store) pinnedGuidanceForProject() []Memory {
 		}
 	}
 	if len(projectKeys) == 0 {
-		return guidance
+		return guidance, nil
 	}
 	out := guidance[:0]
 	for _, fact := range guidance {
@@ -630,16 +601,16 @@ func (s Store) pinnedGuidanceForProject() []Memory {
 			out = append(out, fact)
 		}
 	}
-	return out
+	return out, nil
 }
 
 // ListArchived returns archived memories parsed from .archive/, newest first.
 // Archived files stay out of List() and the prompt index, so stale facts remain
 // inspectable without being reused as active truth. Reads from both GlobalDir
 // and Dir.
-func (s Store) ListArchived() []ArchivedMemory {
+func (s Store) ListArchived() ([]ArchivedMemory, error) {
 	if s.Dir == "" && s.GlobalDir == "" {
-		return nil
+		return nil, nil
 	}
 	var out []ArchivedMemory
 	for _, base := range s.dirs() {
@@ -647,9 +618,9 @@ func (s Store) ListArchived() []ArchivedMemory {
 			continue
 		}
 		dir := filepath.Join(base, ".archive")
-		entries, err := os.ReadDir(dir)
+		entries, err := readMemoryDirectory(dir)
 		if err != nil {
-			continue
+			return nil, err
 		}
 		for _, e := range entries {
 			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
@@ -675,7 +646,7 @@ func (s Store) ListArchived() []ArchivedMemory {
 	slices.SortFunc(out, func(a, b ArchivedMemory) int {
 		return cmp.Or(b.ArchivedAt.Compare(a.ArchivedAt), cmp.Compare(a.Name, b.Name), cmp.Compare(a.Path, b.Path))
 	})
-	return out
+	return out, nil
 }
 
 func archiveTimeFromName(name string) time.Time {
@@ -690,48 +661,22 @@ func archiveTimeFromName(name string) time.Time {
 	return when
 }
 
-// loadMemory parses one fact file back into a Memory. It tolerates the minimal
-// frontmatter render writes; a file without frontmatter still loads with its
-// body and a name derived from the filename.
+// loadMemory parses one fact file back into a Memory, deriving its body and a
+// name from the filename when the frontmatter is minimal or absent.
 func loadMemory(path string) (Memory, bool) {
 	b, err := fileencoding.ReadFileUTF8(path)
 	if err != nil {
 		return Memory{}, false
 	}
-	fm, body := splitFrontmatter(string(b))
-	m := Memory{
-		ID:             fm["id"],
-		Revision:       parsePositiveInt(fm["revision"]),
-		CreatedAt:      parseMemoryTime(fm["created_at"]),
-		UpdatedAt:      parseMemoryTime(fm["updated_at"]),
-		Name:           fm["name"],
-		Title:          fm["title"],
-		Description:    fm["description"],
-		Keywords:       fm["keywords"],
-		Activation:     NormalizeActivation(fm["activation"]),
-		Volatility:     NormalizeVolatility(fm["volatility"]),
-		SubjectKey:     NormalizeSubjectKey(fm["subject_key"]),
-		ExpiresAt:      parseMemoryTime(fm["expires_at"]),
-		LastVerifiedAt: parseMemoryTime(fm["last_verified_at"]),
-		Type:           persistedFactType(fm),
-		Scope:          factScopeFromFrontmatter(fm["scope"]),
-		Body:           strings.TrimSpace(body),
-	}
-	if m.Name == "" {
-		m.Name = strings.TrimSuffix(filepath.Base(path), ".md")
-	}
-	if m.ID == "" {
-		m.ID = legacyMemoryID(m.Name, legacyIdentityScope(m))
-	}
-	if m.Revision <= 0 {
-		m.Revision = 1
-	}
-	if info, err := os.Stat(path); err == nil {
-		if m.CreatedAt.IsZero() {
-			m.CreatedAt = info.ModTime().UTC()
-		}
-		if m.UpdatedAt.IsZero() {
-			m.UpdatedAt = info.ModTime().UTC()
+	m := parseMemory(filepath.Base(path), b)
+	if m.CreatedAt.IsZero() || m.UpdatedAt.IsZero() {
+		if info, err := os.Stat(path); err == nil {
+			if m.CreatedAt.IsZero() {
+				m.CreatedAt = info.ModTime().UTC()
+			}
+			if m.UpdatedAt.IsZero() {
+				m.UpdatedAt = info.ModTime().UTC()
+			}
 		}
 	}
 	return m, true

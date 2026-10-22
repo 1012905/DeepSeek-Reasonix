@@ -33,6 +33,7 @@ type PackageMCPServer struct {
 	Headers   map[string]string
 	AutoStart *bool
 	Tier      string
+	Load      string
 }
 
 // installedPackages lists the enabled plugin packages under a Reasonix home.
@@ -40,15 +41,20 @@ type PackageMCPServer struct {
 // how a package is parsed.
 var installedPackages func(home string) []InstalledPackage
 
-// SetInstalledPackages names where enabled plugin packages come from.
-func SetInstalledPackages(source func(home string) []InstalledPackage) { installedPackages = source }
+// SetInstalledPackages names where enabled plugin packages come from and
+// returns the source it replaced.
+func SetInstalledPackages(source func(home string) []InstalledPackage) func(home string) []InstalledPackage {
+	prev := installedPackages
+	installedPackages = source
+	return prev
+}
 
 func (r Roots) enabledPackages() []InstalledPackage {
 	home := r.Home()
 	if strings.TrimSpace(home) == "" || installedPackages == nil {
 		return nil
 	}
-	out := installedPackages(home)
+	out := packageFlights.load(home, installedPackages)
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
@@ -83,6 +89,7 @@ func (r Roots) mergeInstalledPluginPackages(cfg *Config, root string) []string {
 				Headers:   pluginPackageWorkspaceMap(item.Root, root, srv.Headers),
 				AutoStart: srv.AutoStart,
 				Tier:      srv.Tier,
+				Load:      srv.Load,
 				Source:    MCPSourcePluginPackage,
 			}
 			if existing, ok := pluginEntryByName(cfg.Plugins, name); ok {
@@ -189,6 +196,7 @@ func pluginPackageCommand(root, command string) string {
 
 func pluginPackageEnv(installed InstalledPackage, workspaceRoot string, env map[string]string) map[string]string {
 	root := installed.Root
+	workspaceRoot = WorkspaceRootValue(workspaceRoot)
 	out := pluginPackageWorkspaceMap(root, workspaceRoot, env)
 	if out == nil {
 		out = map[string]string{}
@@ -206,6 +214,7 @@ func pluginPackageEnv(installed InstalledPackage, workspaceRoot string, env map[
 
 func pluginPackageWorkspaceValue(root, workspaceRoot, value string) string {
 	value = pluginPackageValue(root, value)
+	workspaceRoot = WorkspaceRootValue(workspaceRoot)
 	value = expandPluginPathVar(value, "${CLAUDE_PROJECT_DIR}", workspaceRoot)
 	return expandPluginPathVar(value, "$CLAUDE_PROJECT_DIR", workspaceRoot)
 }

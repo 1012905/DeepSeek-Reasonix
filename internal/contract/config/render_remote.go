@@ -21,7 +21,15 @@ func renderRemoteSection(b *strings.Builder, r RemoteConfig) {
 	for _, h := range r.Hosts {
 		b.WriteString("\n[[remote.hosts]]\n")
 		fmt.Fprintf(b, "name = %q\n", h.Name)
-		fmt.Fprintf(b, "host = %q\n", h.Host)
+		if h.Kind != "" {
+			fmt.Fprintf(b, "kind = %q   # ssh (default) | wsl, a WSL distribution on this machine\n", h.Kind)
+		}
+		if h.Distro != "" {
+			fmt.Fprintf(b, "distro = %q\n", h.Distro)
+		}
+		if h.Host != "" || h.HostKind() == RemoteKindSSH {
+			fmt.Fprintf(b, "host = %q\n", h.Host)
+		}
 		if h.Port > 0 {
 			fmt.Fprintf(b, "port = %d\n", h.Port)
 		}
@@ -51,6 +59,9 @@ func renderRemoteSection(b *strings.Builder, r RemoteConfig) {
 		}
 		if h.UseSSHConfig {
 			b.WriteString("use_ssh_config = true   # layer ~/.ssh/config values under unset fields\n")
+		}
+		if h.Disabled {
+			b.WriteString("disabled = true   # kept in the book but not dialed\n")
 		}
 		for _, f := range h.Forwards {
 			b.WriteString("\n[[remote.hosts.forwards]]\n")

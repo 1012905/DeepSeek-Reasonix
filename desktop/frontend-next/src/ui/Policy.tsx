@@ -4,25 +4,16 @@ import { StudioIcon } from "./StudioIcon";
 import { reason } from "../i18n/kernel";
 import type { AgentPort, ApprovalMode, SessionStatus } from "../port/port";
 import { useDismiss } from "./dismiss";
+import { APPROVALS, approvalName } from "./approvals";
 
 // Permission is one boundary, not a catch-all for every way a turn can run.
 // Work strategy and model effort live in their own controls beside this one.
-const APPROVALS: [ApprovalMode, string, string][] = [
-  ["ask", "逐项确认", "每次执行操作前请求确认。"],
-  ["dontAsk", "不询问", "不显示审批请求；需要批准的操作一律不执行。"],
-  ["auto", "自动继续", "低风险操作自动放行，写入操作仍需确认。"],
-  ["yolo", "全部放行", "不再请求确认，仅在完全信任当前工作区时使用。"],
-];
-
 interface Props {
   port: AgentPort;
   status: SessionStatus | null;
   onChanged: () => void;
   onBoundary?: () => void;
 }
-
-const approvalName = (mode: ApprovalMode) =>
-  t(APPROVALS.find(([id]) => id === mode)?.[1] ?? "逐项确认");
 
 export function Policy({ port, status, onChanged, onBoundary }: Props) {
   const [open, setOpen] = useState(false);
@@ -66,14 +57,14 @@ export function Policy({ port, status, onChanged, onBoundary }: Props) {
             : <svg viewBox="0 0 16 16"><path d="M8 2.2 13 4v3.5c0 3-1.8 5.1-5 6.3-3.2-1.2-5-3.3-5-6.3V4l5-1.8Z" /></svg>}
         </span>
         <span className={apv === "yolo" ? "lb polrisk" : "lb"} data-display={label}>{label}</span>
-        <span className="studio-control-chevron" aria-hidden="true">⌄</span>
+        <StudioIcon name="down" className="studio-control-chevron" />
       </button>
-      <div className="menu modemenu polmenu" role="group" aria-label={t("执行权限")} hidden={!open}>
+      <div className="menu modemenu polmenu composer-menu" role="group" aria-label={t("执行权限")} hidden={!open}>
         <div className="studio-policy-head"><b>{t("执行权限")}</b><small>{t("当前任务")}</small></div>
         <div className="studio-policy-primary">
-          {APPROVALS.map(([value, name, note], index) => (
+          {APPROVALS.map(([value, name, note]) => (
             <div key={value}>
-              {index === 3 && <div className="studio-policy-risk">{t("高风险")}</div>}
+              {value === "yolo" && <div className="studio-policy-risk">{t("高风险")}</div>}
               <button
                 className={`studio-permission-option${value === "yolo" ? " studio-permission-yolo" : ""}`}
                 data-action="tool-approval.mode"

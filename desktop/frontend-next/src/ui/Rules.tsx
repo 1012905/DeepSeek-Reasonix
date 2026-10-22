@@ -3,7 +3,8 @@ import { useEscape } from "./dismiss";
 import { t } from "../i18n";
 import type { AgentPort, PermissionLists, PermissionRules } from "../port/port";
 import { Switch } from "./Switch";
-import { reason } from "../i18n/kernel";
+import { reason, savedNotApplied } from "../i18n/kernel";
+import { SaveNote } from "./SaveNote";
 
 type List = "deny" | "ask" | "allow";
 
@@ -159,7 +160,7 @@ function group(lists: PermissionLists, query: string): Group[] {
 export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => void }) {
   const [rules, setRules] = useState<PermissionRules | null>(null);
   const [busy, setBusy] = useState("");
-  const [error, setError] = useState("");
+  const [note, setNote] = useState<{ text: string; unapplied: boolean } | null>(null);
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
   useEscape(adding, () => setAdding(false));
@@ -174,17 +175,18 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
 
   if (!rules || !lists) return <div className="empty">{t("无法读取权限配置。")}</div>;
 
+  const dormant = new Set((rules.dormant ?? []).map((d) => `${d.list}\u0000${d.rule}`));
   const counts = { deny: rules.deny.length, ask: rules.ask.length, allow: rules.allow.length };
   const total = counts.deny + counts.ask + counts.allow;
 
   const apply = async (what: string, next: PermissionLists) => {
     setBusy(what);
-    setError("");
+    setNote(null);
     try {
       setRules(await port.savePermissions(next));
       onChanged();
     } catch (e) {
-      setError(reason(e));
+      setNote({ text: reason(e), unapplied: savedNotApplied(e) });
     } finally {
       setBusy("");
     }
@@ -192,11 +194,24 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
 
   const revoke = async (rule: string) => {
     setBusy(rule || "all");
-    setError("");
+    setNote(null);
     try {
       setRules(await port.revokeSessionGrant(rule));
     } catch (e) {
-      setError(reason(e));
+      setNote({ text: reason(e), unapplied: savedNotApplied(e) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const revokeRemembered = async (rule: string) => {
+    setBusy(`remembered:${rule}`);
+    setNote(null);
+    try {
+      setRules(await port.revokeRememberedProjectRule(rule));
+      onChanged();
+    } catch (e) {
+      setNote({ text: reason(e), unapplied: savedNotApplied(e) });
     } finally {
       setBusy("");
     }
@@ -240,6 +255,13 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
         </div>
       )}
 
+      {!!rules.dormant?.length && (
+        <div className="find" data-lvl="warn" role="status">
+          <span className="t">{t("有 {n} 条规则没有对应的工具，不会生效", { n: rules.dormant.length })}</span>
+          <span className="why">{t("命令要写成 Bash(命令:*)；下方标出的规则可以删除或改写。")}</span>
+        </div>
+      )}
+
       <div className="recipes">
         {RECIPES.map((r) => (
           <div className="recipe" key={r.id} data-on={has(r) ? "" : undefined}>
@@ -265,6 +287,30 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
         </div>
       </div>
       <p className="note">{t(MODES.find(([id]) => id === rules.mode)?.[2] ?? "")}</p>
+
+      {rules.rememberedErrorCode && (
+        <div className="find" data-lvl="warn" role="status">
+          <span className="t">{t("已记住的权限规则无法读取")}</span>
+          <span className="why">{t("请检查或修复用户目录中的授权记录文件。")}</span>
+          <span className="path">{rules.rememberedPath}</span>
+        </div>
+      )}
+
+      {!!rules.remembered?.length && (
+        <section className="rtable" aria-label={t("当前项目记住的放行规则")}>
+          <div className="rhead">{t("当前项目记住的放行规则")}</div>
+          {rules.remembered.map((rule) => (
+            <div className="rrow" data-k="allow" key={rule}>
+              <i className="dot" aria-hidden="true" />
+              <span className="pat"><code>{rule}</code></span>
+              <button className="act ghost" data-action="permissions.revoke-remembered" data-target={rule}
+                disabled={!!busy} aria-label={t("收回 {rule}", { rule })}
+                onClick={() => void revokeRemembered(rule)}>{t("收回")}</button>
+            </div>
+          ))}
+          <p className="path">{rules.rememberedPath}</p>
+        </section>
+      )}
 
       {/* The table's own header: how big the boundary is, how to find one row in
           it, and the single way in. Three separate add boxes made one act look
@@ -300,7 +346,7 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
                 <i className="caret" aria-hidden="true" />
                 <code>{g.tool}</code>
                 <span className="what">{t(TOOL_LABEL.get(g.tool) ?? "")}</span>
-                <span className="how">{t(MATCHING[g.tool] ?? pathMatching)}</span>
+                {!g.rows.every((row) => dormant.has(`${row.level}\u0000${row.rule}`)) && <span className="how">{t(MATCHING[g.tool] ?? pathMatching)}</span>}
                 <span className="cnt">{t("{n} 条", { n: g.rows.length })}</span>
               </button>
               {!closed &&
@@ -309,7 +355,9 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
                     <i className="dot" aria-hidden="true" />
                     <span className="pat">
                       <code>{row.pattern || t("整个工具")}</code>
-                      {odd(g.tool, row.pattern) && <span className="says">{odd(g.tool, row.pattern)}</span>}
+                      {dormant.has(`${row.level}\u0000${row.rule}`)
+                        ? <span className="says" data-dormant="">{t("没有名为 {tool} 的工具，这条规则不会生效", { tool: g.tool })}</span>
+                        : odd(g.tool, row.pattern) && <span className="says">{odd(g.tool, row.pattern)}</span>}
                     </span>
                     <select value={row.level} data-action="permissions.rule-level" disabled={!!busy} aria-label={t("{rule} 的处理方式", { rule: row.rule })}
                       onChange={(e) => move(row.rule, e.target.value as List)}>
@@ -331,7 +379,7 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
       </div>
 
       {total > 0 && <p className="path">{rules.path}</p>}
-      {error && <div className="why">{error}</div>}
+      <SaveNote note={note} />
     </div>
   );
 }
@@ -403,3 +451,6 @@ function Granted({ rules, busy, onRevoke }: { rules: string[]; busy: string; onR
     </section>
   );
 }
+
+// The tool switches sit beside the rules that govern the same tools.
+export { ToolList } from "./ToolList";

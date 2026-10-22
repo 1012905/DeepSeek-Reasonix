@@ -73,10 +73,9 @@ func TestFinishReasonMessage(t *testing.T) {
 		}
 	}
 	loud := map[string]string{
-		"length":                 "max output",
-		"client_reasoning_limit": "client reasoning safety limit",
-		"content_filter":         "content filter",
-		"repetition_truncation":  "repetition",
+		"length":                "max output",
+		"content_filter":        "content filter",
+		"repetition_truncation": "repetition",
 	}
 	for reason, fragment := range loud {
 		msg, ok := finishReasonMessage(&provider.Usage{FinishReason: reason})
@@ -449,7 +448,7 @@ func TestExecuteBatchMarksOnlyExecutedWritersForWorkspaceRefresh(t *testing.T) {
 	reg.Add(fakeTool{name: "write_file", writesPaths: true})
 	reg.Add(fakeTool{name: "read_file", readOnly: true})
 	sink := &recordSink{}
-	a := New(nil, reg, sessionstore.NewSession(""), Options{}, sink)
+	a := New(nil, reg, sessionstore.NewSession(""), Options{CheckTargetAccess: allowTestFileAccess}, sink)
 	a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{
 		{Name: "write_file", Arguments: `{"path":"pkg/main.go","content":"x"}`},
 		{Name: "read_file", Arguments: `{"path":"pkg/main.go"}`},
@@ -470,7 +469,7 @@ func TestExecuteBatchMarksFailedWriterForWorkspaceRefresh(t *testing.T) {
 	reg := tool.NewRegistry()
 	reg.Add(fakeTool{name: "write_file", err: errors.New("partial write"), writesPaths: true})
 	sink := &recordSink{}
-	a := New(nil, reg, sessionstore.NewSession(""), Options{}, sink)
+	a := New(nil, reg, sessionstore.NewSession(""), Options{CheckTargetAccess: allowTestFileAccess}, sink)
 	a.executeBatch(context.Background(), &a.turn, []provider.ToolCall{{Name: "write_file", Arguments: `{"path":"partial.go"}`}})
 	results := sink.kinds(event.ToolResult)
 	if len(results) != 1 || !results[0].Tool.WorkspaceMutation {
@@ -485,7 +484,7 @@ func TestExecuteBatchPublishesWorkspaceMutationBeforeLaterToolCompletes(t *testi
 	reg.Add(fakeTool{name: "write_file", writesPaths: true})
 	reg.Add(blockingTool{name: "slow_read", started: started, release: release})
 	sink := newWorkspaceSignalSink()
-	a := New(nil, reg, sessionstore.NewSession(""), Options{}, sink)
+	a := New(nil, reg, sessionstore.NewSession(""), Options{CheckTargetAccess: allowTestFileAccess}, sink)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

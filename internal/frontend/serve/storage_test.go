@@ -51,7 +51,7 @@ func storageRootsOf(t *testing.T, body map[string]any) map[string]map[string]any
 // arrive — including the ones it may only show and never offer to move.
 func TestStorageListsEveryRootWithItsRelocationFacts(t *testing.T) {
 	s := newProviderEditServer(t)
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	roots := storageRootsOf(t, readStorage(t, srv.URL))
@@ -74,7 +74,7 @@ func TestStorageListsEveryRootWithItsRelocationFacts(t *testing.T) {
 func TestStoragePlanReportsCostAndRefusalsWithoutMoving(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	before := config.RootDir(config.RootState)
@@ -104,7 +104,7 @@ func TestStoragePlanReportsCostAndRefusalsWithoutMoving(t *testing.T) {
 // is the one thing a server reachable over a network must not let a client do.
 func TestStorageMoveIsRefusedUntilTheHostGrantsIt(t *testing.T) {
 	s := newProviderEditServer(t)
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp := postProvider(t, srv.URL, "/storage/move", `{"root":"state","dir":"`+storagePathLiteral(testenv.TempDir(t))+`"}`)
@@ -119,7 +119,7 @@ func TestStorageMoveIsRefusedUntilTheHostGrantsIt(t *testing.T) {
 func TestStorageMoveRunsAndReportsThroughTheListing(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	home := config.RootDir(config.RootState)
@@ -165,4 +165,67 @@ func storagePathLiteral(p string) string {
 		return p
 	}
 	return string(b[1 : len(b)-1])
+}
+
+func getStorage(t *testing.T, url string) map[string]map[string]any {
+	t.Helper()
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	return storageRootsOf(t, body)
+}
+
+// A panel that cannot measure one root still has to draw the others: the
+// layout answers without reading disk, and a root is measured on its own.
+func TestStorageAnswersLayoutFirstThenOneRootAtATime(t *testing.T) {
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	s := newProviderEditServer(t)
+	srv := httptest.NewServer(operatorHandler(s))
+	defer srv.Close()
+
+	layout := getStorage(t, srv.URL+"/storage?layout=1")
+	if len(layout) != len(config.RootIDs()) {
+		t.Fatalf("layout has %d roots, want %d", len(layout), len(config.RootIDs()))
+	}
+	for id, row := range layout {
+		if row["dir"] != "" && row["pending"] != true {
+			t.Fatalf("layout root %s is not marked pending: %v", id, row)
+		}
+	}
+	one := getStorage(t, srv.URL+"/storage?root=state")
+	if len(one) != 1 || one["state"]["pending"] == true {
+		t.Fatalf("?root=state = %v", one)
+	}
+	for url, code := range map[string]int{
+		"/storage?root=nope":           http.StatusBadRequest,
+		"/storage?layout=1&root=state": http.StatusBadRequest,
+		"/storage?layout=0":            http.StatusOK,
+	} {
+		resp, err := http.Get(srv.URL + url)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var body map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&body)
+		resp.Body.Close()
+		if resp.StatusCode != code {
+			t.Fatalf("%s = %d, want %d", url, resp.StatusCode, code)
+		}
+		if code == http.StatusBadRequest && body["code"] != "request.bad_value" {
+			t.Fatalf("%s refused with %v", url, body["code"])
+		}
+		if url == "/storage?layout=0" {
+			for _, row := range storageRootsOf(t, body) {
+				if row["pending"] == true {
+					t.Fatalf("layout=0 took the layout branch: %v", row)
+				}
+			}
+		}
+	}
 }

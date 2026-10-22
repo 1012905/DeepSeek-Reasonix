@@ -2,9 +2,11 @@ package storage
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"reasonix/internal/base/testenv"
 	"reasonix/internal/contract/config"
@@ -130,5 +132,128 @@ func TestCancelledSurveyStops(t *testing.T) {
 	state := find(t, Survey(ctx), config.RootState)
 	if state.Err == "" {
 		t.Fatal("a cancelled walk must report why it stopped")
+	}
+}
+
+// stalledWalkBudget is the budget a test gives a walk that never returns: it
+// must outlast reaching the first entry on a loaded runner, and it is also how
+// long that test waits.
+const stalledWalkBudget = 500 * time.Millisecond
+
+// stallAfterWalk stands in for a filesystem whose walk reports what it found
+// and then never comes back, the way a huge or network-mounted tree does.
+func stallAfterWalk(t *testing.T) {
+	t.Helper()
+	release := make(chan struct{})
+	real := walkDir
+	walkDir = func(root string, fn fs.WalkDirFunc) error {
+		err := real(root, fn)
+		<-release
+		return err
+	}
+	t.Cleanup(func() {
+		close(release)
+		walkDir = real
+	})
+}
+
+func TestSurveyReturnsPartialCountWhenAWalkStalls(t *testing.T) {
+	home := testenv.TempDir(t)
+	t.Setenv("REASONIX_HOME", home)
+	t.Setenv("REASONIX_STATE_HOME", "")
+	write(t, filepath.Join(home, "sessions", "a.jsonl"), 1200)
+	stallAfterWalk(t)
+	old := Budget
+	Budget = stalledWalkBudget
+	t.Cleanup(func() { Budget = old })
+
+	done := make(chan []Root, 1)
+	go func() { done <- Survey(t.Context()) }()
+	select {
+	case roots := <-done:
+		state := find(t, roots, config.RootState)
+		if !state.Truncated {
+			t.Fatalf("a stalled walk must report Truncated, got %+v", state)
+		}
+		if state.Bytes != 1200 || state.Files != 1 {
+			t.Fatalf("the partial count must survive: %d bytes, %d files", state.Bytes, state.Files)
+		}
+		if state.Err != "" {
+			t.Fatalf("a spent budget is Truncated, not an error: %q", state.Err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Survey blocked on a stalled walk")
+	}
+}
+
+func TestSurveyRootDoesNotWaitForOtherRoots(t *testing.T) {
+	home := testenv.TempDir(t)
+	t.Setenv("REASONIX_HOME", home)
+	t.Setenv("REASONIX_STATE_HOME", "")
+	write(t, filepath.Join(home, "sessions", "a.jsonl"), 10)
+	root, ok := SurveyRoot(t.Context(), config.RootState)
+	if !ok || root.Bytes != 10 || root.Truncated {
+		t.Fatalf("SurveyRoot = %+v ok=%v", root, ok)
+	}
+	if _, ok := SurveyRoot(t.Context(), config.RootID("nope")); ok {
+		t.Fatal("an undeclared root must not be measured")
+	}
+}
+
+func TestLayoutReadsNothing(t *testing.T) {
+	home := testenv.TempDir(t)
+	t.Setenv("REASONIX_HOME", home)
+	t.Setenv("REASONIX_STATE_HOME", "")
+	write(t, filepath.Join(home, "sessions", "a.jsonl"), 10)
+	stallAfterWalk(t)
+	roots := Layout()
+	if len(roots) != len(config.RootIDs()) {
+		t.Fatalf("layout has %d roots", len(roots))
+	}
+	state := find(t, roots, config.RootState)
+	if !state.Pending || state.Bytes != 0 || state.Dir == "" {
+		t.Fatalf("layout root = %+v", state)
+	}
+}
+
+func TestTruncatedRootKeepsTheErrorFoundBeforeTheBudgetRanOut(t *testing.T) {
+	dir := testenv.TempDir(t)
+	write(t, filepath.Join(dir, "a"), 5)
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	old := walkDir
+	walkDir = func(root string, fn fs.WalkDirFunc) error {
+		_ = fn(root, nil, fs.ErrPermission)
+		<-release
+		return nil
+	}
+	t.Cleanup(func() { walkDir = old })
+	_, _, _, truncated, errText := measureRoot(t.Context(), config.RootID("x"), dir, stalledWalkBudget)
+	if !truncated || errText == "" {
+		t.Fatalf("truncated=%v err=%q: both must be reported", truncated, errText)
+	}
+}
+
+// State falls back to home, so on a default Windows install they are one folder.
+// Home declares no entries of its own, and it must not be credited with the
+// sessions and archive that state declares in that same folder.
+func TestRootSharingItsDirectoryIsNotCreditedWithTheNeighboursEntries(t *testing.T) {
+	home := testenv.TempDir(t)
+	t.Setenv("REASONIX_HOME", home)
+	t.Setenv("REASONIX_STATE_HOME", "")
+
+	write(t, filepath.Join(home, "sessions", "a.jsonl"), 4000)
+	write(t, filepath.Join(home, "archive", "old.jsonl"), 2000)
+	write(t, filepath.Join(home, ".env"), 100)
+	write(t, filepath.Join(home, "browser", "profile.bin"), 500)
+
+	roots := Survey(t.Context())
+	state := find(t, roots, config.RootState)
+	if state.Bytes != 6000 || state.Files != 2 {
+		t.Fatalf("state = %d bytes / %d files, want 6000 / 2", state.Bytes, state.Files)
+	}
+	homeRoot := find(t, roots, config.RootHome)
+	if homeRoot.Bytes != 600 || homeRoot.Files != 2 {
+		t.Fatalf("home = %d bytes / %d files, want 600 / 2: it counted what state owns", homeRoot.Bytes, homeRoot.Files)
 	}
 }

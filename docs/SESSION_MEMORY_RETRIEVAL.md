@@ -1,3 +1,10 @@
+---
+owner: @esengine
+backup: @SivanCola
+status: active
+reviewed: 2026-09-29
+---
+
 # Context Engine v2: Instructions, Memory, and Retrieval
 
 Context Engine v2 gives Reasonix two durable context layers with different
@@ -29,7 +36,7 @@ A minimal project file is usually enough:
 # Build and verify
 
 - Run `go test ./...` before reporting completion.
-- Do not edit generated files under `desktop/frontend/wailsjs/`.
+- Do not edit generated files under `internal/ext/extension/protocol/`.
 - Keep public API changes backward compatible.
 ```
 
@@ -39,17 +46,13 @@ agent's background-fact `remember` tool.
 
 ## Instruction resolution
 
-Reasonix recognizes `REASONIX.md`, `AGENTS.md`, and `CLAUDE.md`, plus matching
-`.local.md` variants. It first loads user-global instruction files from the
-Reasonix home directory. It then walks from the workspace root to the target
-path; at each directory it loads the normal files followed by that directory's
-`.local.md` files.
+Reasonix recognizes `REASONIX.md`, `AGENTS.md`, and `CLAUDE.md`, plus matching `.local.md` variants. It first loads user-global instruction files from the Reasonix home directory.
 
-Deeper directories beat broader directories, and a local variant beats normal
-files in the same directory. Later entries therefore win when rules conflict.
-The current user request remains the highest-authority user instruction. Files
-with identical expanded content are deduplicated, preferring the more specific
-source.
+It then walks from the workspace root to the target path; at each directory it loads the normal files followed by that directory's `.local.md` files.
+
+Deeper directories beat broader directories, and a local variant beats normal files in the same directory. Later entries therefore win when rules conflict. The current user request remains the highest-authority user instruction.
+
+Files with identical expanded content are deduplicated, preferring the more specific source.
 
 An instruction file can import another file with a standalone relative line:
 
@@ -101,25 +104,19 @@ Each fact is a Markdown file with:
 Type does not imply scope. Project feedback remains project-local, and a global
 reference remains a reference.
 
-A subject key is the knowledge-conflict model: one scope holds at most one
-active value per subject. Saving a second fact for a held subject is rejected
-with the holder's id, so "npm → pnpm" becomes a revision of one fact instead
-of two contradicting facts both staying active. `/memory subjects` lists the
-keys in use; facts answering the same subject count as equivalent for
-overrides and recall suppression regardless of their names and titles.
+A subject key is the knowledge-conflict model: one scope holds at most one active value per subject. Saving a second fact for a held subject is rejected with the holder's id, so "npm → pnpm" becomes a revision of one fact instead of two contradicting facts both staying active.
+
+`/memory subjects` lists the keys in use; facts answering the same subject count as equivalent for overrides and recall suppression regardless of their names and titles.
 
 When equivalent project and global facts exist, automatic recall uses the
 project fact. Both remain visible in Context Center and `/memory`, with the
 override explained instead of deleting or hiding either source.
 
-A third dimension, `activation`, is orthogonal to both: `relevant` (the
-default) keeps a fact retrieval-only, while `pinned` snapshots its body into a
-lower-priority stable-guidance section at session start. Pinning is an
-explicit user choice (`/memory pin <id-or-name>`, or asking the assistant),
-and total pinned bodies are capped at 1,500 characters — enforced when
-pinning, with overflow directed to REASONIX.md/AGENTS.md instructions, where
-always-binding rules belong. A fact is either pinned (in the prefix) or
-relevant (recallable): never both, never neither.
+A third dimension, `activation`, is orthogonal to both: `relevant` (the default) keeps a fact retrieval-only, while `pinned` snapshots its body into a lower-priority stable-guidance section at session start.
+
+Pinning is an explicit user choice (`/memory pin <id-or-name>`, or asking the assistant), and total pinned bodies are capped at 1,500 characters — enforced when pinning, with overflow directed to REASONIX.md/AGENTS.md instructions, where always-binding rules belong.
+
+A fact is either pinned (in the prefix) or relevant (recallable): never both, never neither.
 
 For compatibility, legacy globally scoped `user` and `feedback` facts that
 predate the field stay pinned until explicitly unpinned. When an equivalent
@@ -133,6 +130,24 @@ Before each real user turn, Reasonix searches active facts using the raw user
 message. Host-added provider context is not fed back into the query. The selected
 facts are appended to that user turn as a bounded, low-authority suffix; they do
 not mutate the system prompt or tool schema.
+
+The search runs over the snapshot the session loaded; this session's own
+memory writes refresh it. Edits made outside the session are handled as follows:
+
+- Before each recall, the facts the previous turn handed the model — its recall
+  hits, plus any fact an update note carried — are re-read from their own files,
+  one file each, and compared by content.
+- A recall that returns no hits keeps the previous set: those facts are still the
+  ones the model holds, so they are still the ones re-checked.
+- Content that no longer matches, or a file that is gone, reloads the snapshot,
+  so the model reads the edit. Size and modification time decide nothing: a
+  rewrite can preserve both.
+- A fact whose own file no longer parses to the very body the turn delivered —
+  the file changed between the snapshot load and its first recall — is checked by
+  its identity instead of its bytes, so the next turn still sees the edit. A fact
+  whose file is not where its name says is checked the same way.
+- A fact edited into relevance without ever having been a hit stays invisible
+  until the session reloads: recall does no full scan.
 
 Recall is conservative:
 
@@ -157,15 +172,12 @@ Freshness defaults depend on fact type:
 | `project` | 30 days | 180 days | 180 days |
 | `user`, `feedback` | 90 days | 365 days | 365 days |
 
-Type is a default, not a truth about volatility — a README location can hold
-for years while a release branch dies in days. An explicit `volatility`
-overrides the type windows: `volatile` (7 / 30 days), `stable` (90 / 365
-days), or `evergreen` (never ages). Two optional timestamps refine it further:
-`expires_at` is a hard boundary — past it the fact is `expired` and excluded
-from automatic recall entirely (explicit search still finds it) — and
-`last_verified_at`, stamped by `/memory verify <id-or-name>` or by the
-assistant re-confirming a fact, renews the freshness clock without changing
-what `updated_at` means.
+Type is a default, not a truth about volatility — a README location can hold for years while a release branch dies in days. An explicit `volatility` overrides the type windows: `volatile` (7 / 30 days), `stable` (90 / 365 days), or `evergreen` (never ages).
+
+Two optional timestamps refine it further:
+
+- `expires_at` is a hard boundary — past it the fact is `expired` and excluded from automatic recall entirely (explicit search still finds it).
+- `last_verified_at`, stamped by `/memory verify <id-or-name>` or by the assistant re-confirming a fact, renews the freshness clock without changing what `updated_at` means.
 
 Freshness is a warning and ranking signal, not a truth claim. Recalled text
 explicitly tells the model that it may be wrong and cannot override the current
@@ -210,11 +222,9 @@ Everything else still requires explicit confirmation:
 - sensitive or oversized content;
 - every `forget` operation.
 
-Auto and Yolo do not bypass those confirmations. Guardian and permission hooks
-cannot approve them for the user. A top-level headless controller may use only
-the same one-shot low-risk create path above. Sub-agents and headless surfaces
-without the owning scoped controller fail closed; all other memory mutations
-still require an interactive confirmation surface.
+Auto and Yolo do not bypass those confirmations. Guardian and permission hooks cannot approve them for the user. A top-level headless controller may use only the same one-shot low-risk create path above.
+
+Sub-agents and headless surfaces without the owning scoped controller fail closed; all other memory mutations still require an interactive confirmation surface.
 
 Direct edits made by the user in Context Center, `/remember`, restore, and
 recovery commands are already explicit user actions and do not add another
@@ -246,6 +256,26 @@ Recovered content also becomes a new monotonic revision. Restore and recovery
 apply to the current session through a one-turn tail note, then join the stable
 prefix naturally on the next session.
 
+A missing memory directory is treated as empty. Permission denial and other
+directory I/O errors are reported instead of returning partial lists or
+calculating a revision from incomplete history.
+
+Recovery stops before creating
+a snapshot or an active fact when history cannot be read. Session loading keeps
+the read failure, omits incomplete pinned guidance, and reports recall as
+unavailable on relevant turns.
+
+These conditions require a permission change,
+sandbox denial, or storage fault; they do not establish data deletion.
+
+缺失的记忆目录按空目录处理；权限拒绝和其他目录 I/O 错误会明确报错，
+不会返回不完整的列表，也不会根据不完整的历史计算版本号。
+
+历史读取失败时，
+归档恢复会在创建快照或活动记忆前停止。会话加载保留读取错误，省略不完整的
+固定记忆，并在相关回合说明召回不可用。触发条件是权限变化、沙箱拒绝或存储
+故障；这些现象本身不能证明数据已被删除。
+
 ## Zero-configuration suggestions
 
 Opening the desktop Suggestions tab automatically scans recent local user turns.
@@ -255,11 +285,9 @@ There is no setup toggle. It proposes:
   conventions;
 - Skill candidates from repeated workflow patterns.
 
-Scanning uses original user content, deduplicates against facts from both scopes
-and loaded instruction bodies, and never writes by itself. Every candidate shows
-evidence and must be explicitly accepted. Remote workspaces fail closed:
-Reasonix does not fall back to local sessions or local memory when the remote
-surface cannot provide the feature.
+Scanning uses original user content, deduplicates against facts from both scopes and loaded instruction bodies, and never writes by itself. Every candidate shows evidence and must be explicitly accepted.
+
+Remote workspaces fail closed: Reasonix does not fall back to local sessions or local memory when the remote surface cannot provide the feature.
 
 ## Management surfaces
 
@@ -298,17 +326,42 @@ Context Engine v2 upgrades existing stores without requiring setup:
 No vector database, embedding service, setup wizard, or re-index command is
 required.
 
+### Legacy migration backups
+
+Before rewriting a legacy fact, migration saves its exact original bytes under
+`<memory-store>/.migration-backup/<original-filename>`. `manifest.json` records
+the first backup time (UTC) and app version.
+
+Backups are never overwritten or automatically pruned. They are retained
+indefinitely and are excluded from active memory listings, recall, the prompt
+prefix, and configuration backup exports.
+
+The migrated fact still starts at revision 1; these copies are outside revision
+history and cannot be selected by `/memory restore`.
+
+To recover manually:
+
+1. Close sessions using the store. Copy the current fact and its migration backup
+   to a separate recovery directory before editing either.
+2. Open the backup copy to recover unknown metadata, original formatting, or
+   content. Merge needed content into the active fact, retaining its current ID
+   and revision, or use the normal memory update flow for an audited revision.
+3. For an exact original-file recovery, copy the backup over the active file while
+   the app is closed. The next boot migrates it again; the first backup remains.
+   Keep the separate recovery copy if exact legacy bytes must remain available.
+
+If preservation fails, boot warns with `memory.migration_backup` and leaves that
+fact untouched. Correct the storage problem and restart to retry migration.
+
 ## Cache and privacy contract
 
-- Standing instructions and the derived memory index join the stable prefix at
-  session start.
+- Standing instructions and pinned memory bodies join the stable prefix at
+  session start. The derived fact index does not: it is reached through the
+  `memory` tool.
 - Provider-visible instruction provenance uses stable `workspace/...` and
   `user/...` labels; absolute source and store paths stay in local diagnostics.
-- Provider-visible memory tool results use stable `project/<name>.md` and
-  `global/<name>.md` references. Those references round-trip directly through
-  read, update, revision, and archive operations, including when both scopes
-  contain the same name; Context Center and local recovery diagnostics retain
-  the real storage paths.
+- Provider-visible memory tool results use stable `project/<name>.md` and `global/<name>.md` references.
+- Those references round-trip directly through read, update, revision, and archive operations, including when both scopes contain the same name; Context Center and local recovery diagnostics retain the real storage paths.
 - Dynamic recall and mid-session changes are appended only to the current user
   turn.
 - Diagnostics never enter provider requests.

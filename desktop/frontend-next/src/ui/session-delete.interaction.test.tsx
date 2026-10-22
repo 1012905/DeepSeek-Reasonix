@@ -25,29 +25,37 @@ function tree(over: Partial<TreeWorkspace> = {}): TreeWorkspace[] {
 function draw(over: { runtimes?: RuntimeView[]; workspaces?: TreeWorkspace[] } = {}) {
   const hub = new MockHub() as unknown as HubPort;
   const removeSession = vi.spyOn(hub, "removeSession").mockResolvedValue(undefined);
+  const renameSession = vi.spyOn(hub, "renameSession").mockResolvedValue(undefined);
+  const autoNameSession = vi.spyOn(hub, "autoNameSession").mockResolvedValue({ title: "a generated title" });
   const onClose = vi.fn().mockResolvedValue(undefined);
+  const onOpen = vi.fn().mockResolvedValue(undefined);
   const reload = vi.fn().mockResolvedValue(undefined);
   const onError = vi.fn();
-  render(
+  const onRename = vi.fn();
+  const view = (workspaces: TreeWorkspace[]) => (
     <Workspaces
       hub={hub}
-      tree={over.workspaces ?? tree()}
+      tree={workspaces}
+      treeRead
       runtimes={over.runtimes ?? []}
       active=""
       folded={new Set()}
       onFold={() => {}}
       reload={reload}
-      onOpen={async () => {}}
+      onOpen={onOpen}
       onFocus={() => {}}
       onClose={onClose}
       liveIds={() => []}
       runs={{}}
-      onRename={() => {}}
+      onRename={onRename}
       onError={onError}
       adder={{ add: () => {}, close: () => {}, at: null } as never}
-    />,
+    />
   );
-  return { removeSession, onClose, reload, onError };
+  const { rerender } = render(view(over.workspaces ?? tree()));
+  // What the kernel lists after a write: the tree the next reload brings back.
+  const relist = (workspaces: TreeWorkspace[]) => rerender(view(workspaces));
+  return { removeSession, renameSession, autoNameSession, onClose, reload, onError, onRename, onOpen, relist };
 }
 
 it("projects each open session's run state onto its own row", () => {
@@ -59,6 +67,7 @@ it("projects each open session's run state onto its own row", () => {
     <Workspaces
       hub={{} as never}
       tree={workspaces}
+      treeRead
       runtimes={[runtime]}
       active=""
       folded={new Set()}
@@ -79,7 +88,7 @@ it("projects each open session's run state onto its own row", () => {
 });
 
 const trash = async () => {
-  await userEvent.click(screen.getByRole("button", { name: /会话操作：/ }));
+  await userEvent.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /the one to delete|open here/ }) });
   return screen.getByRole("menuitem", { name: "删除会话" });
 };
 const confirmGo = () => within(screen.getByRole("alertdialog")).getByRole("button", { name: "删除" });
@@ -129,12 +138,211 @@ describe("deleting a conversation from the rail", () => {
 });
 
 describe("the conversation action menu", () => {
+  it("opens on a title right-click without opening the conversation; left-click still opens it", async () => {
+    const { onOpen } = draw();
+    await userEvent.pointer({ keys: "[MouseRight]", target: screen.getByText("the one to delete") });
+    expect(screen.getByRole("menu", { name: "会话操作" })).toBeTruthy();
+    expect(onOpen).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(screen.getByText("the one to delete"));
+    expect(onOpen).toHaveBeenCalledWith({ root: "/w", sessionPath: SESSION });
+  });
+
+  it("keeps repeated right-clicks open and returns focus on Escape", async () => {
+    draw();
+    const row = screen.getByRole("treeitem", { name: /the one to delete/ });
+    await userEvent.pointer({ keys: "[MouseRight]", target: row });
+    await userEvent.pointer({ keys: "[MouseRight]", target: row });
+    expect(screen.getByRole("menu", { name: "会话操作" })).toBeTruthy();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("menu", { name: "会话操作" })).toBeNull();
+    expect(document.activeElement).toBe(row);
+  });
+
   it("closes when the reader clicks outside it", async () => {
     draw();
-    await userEvent.click(screen.getByRole("button", { name: /会话操作：/ }));
+    await userEvent.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /the one to delete/ }) });
     expect(screen.getByRole("menu", { name: "会话操作" })).toBeTruthy();
 
     await userEvent.click(document.body);
     expect(screen.queryByRole("menu", { name: "会话操作" })).toBeNull();
+  });
+});
+
+describe("the Delete key on a focused conversation", () => {
+  const row = () => screen.getByRole("treeitem", { name: /the one to delete/ });
+
+  it("asks through the same confirmation the menu uses, and Escape deletes nothing", async () => {
+    const { removeSession } = draw();
+    row().focus();
+    await userEvent.keyboard("{Delete}");
+    expect(screen.getByRole("alertdialog", { name: "删除「the one to delete」？" })).toBeTruthy();
+
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(removeSession).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(row());
+  });
+
+  it("deletes once the question is answered", async () => {
+    const { removeSession } = draw();
+    row().focus();
+    await userEvent.keyboard("{Delete}");
+    await userEvent.click(confirmGo());
+    expect(removeSession).toHaveBeenCalledWith(SESSION);
+  });
+
+  it("acts on the focused row only, never the hovered one", async () => {
+    draw();
+    await userEvent.hover(row());
+    await userEvent.keyboard("{Delete}");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("does not pull focus back to a row whose question another one replaced", async () => {
+    const OTHER = "/w/.reasonix/sessions/20260902-120000.jsonl";
+    draw({
+      workspaces: tree({
+        sessions: [
+          { path: SESSION, name: "20260901-120000", title: "the one to delete" },
+          { path: OTHER, name: "20260902-120000", title: "the other one" },
+        ],
+      }),
+    });
+    row().focus();
+    await userEvent.keyboard("{Delete}");
+    await userEvent.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /the other one/ }) });
+    await userEvent.click(screen.getByRole("menuitem", { name: "删除会话" }));
+
+    const other = screen.getByRole("alertdialog", { name: "删除「the other one」？" });
+    expect(other.contains(document.activeElement)).toBe(true);
+  });
+
+  it("hands focus to the next row once the focused one is deleted", async () => {
+    const NEXT = "/w/.reasonix/sessions/20260902-120000.jsonl";
+    const both = tree({
+      sessions: [
+        { path: SESSION, name: "20260901-120000", title: "the one to delete" },
+        { path: NEXT, name: "20260902-120000", title: "the next one" },
+      ],
+    });
+    const { reload, relist } = draw({ workspaces: both });
+    reload.mockImplementation(async () => relist(tree({ sessions: [both[0].sessions[1]] })));
+    row().focus();
+    await userEvent.keyboard("{Delete}");
+    await userEvent.keyboard("{Enter}");
+
+    expect(screen.queryByRole("treeitem", { name: /the one to delete/ })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("treeitem", { name: /the next one/ }));
+  });
+
+  it("double-clicks a sidebar title into inline editing without opening twice", async () => {
+    const { onRename, removeSession, onOpen } = draw();
+    await userEvent.dblClick(screen.getByText("the one to delete"));
+    const input = screen.getByRole("textbox", { name: "重命名该会话" });
+    await userEvent.clear(input);
+    await userEvent.type(input, "  renamed inline  {Enter}");
+    expect(onRename).toHaveBeenCalledExactlyOnceWith(SESSION, "renamed inline", "inline");
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(removeSession).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("cancels sidebar title double-click renaming with Escape", async () => {
+    const { onRename } = draw();
+    await userEvent.dblClick(screen.getByText("the one to delete"));
+    const input = screen.getByRole("textbox", { name: "重命名该会话" });
+    await userEvent.clear(input);
+    await userEvent.keyboard("{Escape}");
+    expect(onRename).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("does not save a cleared sidebar title on Enter", async () => {
+    const { onRename } = draw();
+    await userEvent.dblClick(screen.getByText("the one to delete"));
+    await userEvent.clear(screen.getByRole("textbox", { name: "重命名该会话" }));
+    await userEvent.keyboard("{Enter}");
+    expect(onRename).not.toHaveBeenCalled();
+  });
+
+  it("opens the rename dialog from the sidebar rename menu", async () => {
+    const { onRename } = draw();
+    await userEvent.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /the one to delete/ }) });
+    await userEvent.click(screen.getByRole("menuitem", { name: "重命名" }));
+    expect(onRename).toHaveBeenCalledExactlyOnceWith(SESSION, "the one to delete");
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("names the conversation from its menu in one step, without opening a dialog", async () => {
+    const { autoNameSession, renameSession, reload } = draw();
+    await userEvent.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /the one to delete/ }) });
+    await userEvent.click(screen.getByRole("menuitem", { name: "自动命名" }));
+    expect(autoNameSession).toHaveBeenCalledExactlyOnceWith(SESSION);
+    await vi.waitFor(() => expect(renameSession).toHaveBeenCalledExactlyOnceWith(SESSION, "a generated title"));
+    await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+    expect(screen.queryByRole("menu", { name: "会话操作" })).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("keeps the title and says why when naming is refused", async () => {
+    const { autoNameSession, renameSession, onError } = draw();
+    autoNameSession.mockRejectedValueOnce(new Error("no model"));
+    await userEvent.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /the one to delete/ }) });
+    await userEvent.click(screen.getByRole("menuitem", { name: "自动命名" }));
+    await vi.waitFor(() => expect(onError).toHaveBeenCalled());
+    expect(renameSession).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleting a conversation that has recovery copies", () => {
+  const COPY_A = "/w/.reasonix/sessions/20260901-120000.recovered-1.jsonl";
+  const COPY_B = "/w/.reasonix/sessions/20260901-120000.recovered-2.jsonl";
+  const withCopies = () => tree({
+    sessions: [{
+      path: SESSION, name: "20260901-120000", title: "the one to delete",
+      copies: [
+        { path: COPY_A, name: "a", title: "", turns: 3 },
+        { path: COPY_B, name: "b", title: "", turns: 4 },
+      ],
+    }] as never,
+  });
+
+  const askToDelete = async () => {
+    await userEvent.pointer({ keys: "[MouseRight]", target: screen.getByRole("treeitem", { name: /the one to delete/ }) });
+    await userEvent.click(screen.getByRole("menuitem", { name: "删除会话" }));
+    return screen.getByRole("alertdialog");
+  };
+
+  it("offers to take the copies along, and says what plain Delete leaves behind", async () => {
+    draw({ workspaces: withCopies() });
+    const ask = await askToDelete();
+    expect(ask.textContent).toContain("2");
+    expect(within(ask).getByRole("button", { name: /连同 2 份副本/ })).toBeTruthy();
+  });
+
+  it("removes the copies and then the conversation when asked to take them along", async () => {
+    const { removeSession } = draw({ workspaces: withCopies() });
+    const ask = await askToDelete();
+    await userEvent.click(within(ask).getByRole("button", { name: /连同 2 份副本/ }));
+    await vi.waitFor(() => expect(removeSession).toHaveBeenCalledTimes(3));
+    expect(removeSession.mock.calls.map((c) => c[0])).toEqual([COPY_A, COPY_B, SESSION]);
+  });
+
+  it("plain Delete removes only the conversation", async () => {
+    const { removeSession } = draw({ workspaces: withCopies() });
+    const ask = await askToDelete();
+    await userEvent.click(within(ask).getByRole("button", { name: "删除" }));
+    await vi.waitFor(() => expect(removeSession).toHaveBeenCalledTimes(1));
+    expect(removeSession).toHaveBeenCalledWith(SESSION);
+  });
+
+  it("stops at a copy the kernel refuses and leaves the conversation in place", async () => {
+    const { removeSession, onError } = draw({ workspaces: withCopies() });
+    removeSession.mockRejectedValueOnce(new Error("copy is open"));
+    const ask = await askToDelete();
+    await userEvent.click(within(ask).getByRole("button", { name: /连同 2 份副本/ }));
+    await vi.waitFor(() => expect(onError).toHaveBeenCalled());
+    expect(removeSession).toHaveBeenCalledTimes(1);
   });
 });

@@ -11,6 +11,14 @@ import (
 // whether the resolver answered here or on the machine holding the keys.
 var ErrUnknownModel = errors.New("unknown model")
 
+// ErrKeyMissing is what a model the catalog knows answers while its provider has
+// no API key yet; callers wrap it after the model's name.
+var ErrKeyMissing = errors.New("has no API key")
+
+// ErrNoProvider is what a request answers while no model provider is configured:
+// the runtime started without one so the window could ask for a connection.
+var ErrNoProvider = errors.New("no model provider is configured")
+
 // Descriptor is the non-sensitive provider/model metadata shared across
 // process boundaries. It intentionally contains no endpoint, credential,
 // header, proxy, or environment-variable information.
@@ -31,6 +39,8 @@ type Descriptor struct {
 	ToolCallReasoning              bool     `json:"toolCallReasoning,omitempty"`
 	ReasoningRoundTrip             bool     `json:"reasoningRoundTrip,omitempty"`
 	WarnOnMissingToolCallReasoning bool     `json:"warnOnMissingToolCallReasoning,omitempty"`
+	// ForcesThinking tells frontends that even the lowest effort still reasons.
+	ForcesThinking bool `json:"forcesThinking,omitempty"`
 	// Default marks the model a new session starts on when nobody names one.
 	// The catalog's owner decides it, because only the owner knows which of
 	// its models can answer.

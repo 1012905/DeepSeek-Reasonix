@@ -17,6 +17,57 @@ the gate is named.
 - `interpolate-size: allow-keywords` lets `height: auto` take part in a
   transition; engines without it jump, which is the prior behaviour.
 
+## Theme packs
+
+- A pack's values are the declarations of one generated rule,
+  `:root:root[data-pack]`, in a `<style id="pack-theme">` appended to `<head>`
+  when a pack is first applied and left where it is.
+- Nothing is written to the root's inline style: a stylesheet of equal
+  specificity added later wins without `!important`, and one already present
+  loses the tie.
+- The selector ties the contrast tiers (`:root[data-theme][data-contrast]`) and
+  beats them by order. With no pack there is no element: the tiers alone carry
+  the inks, and the reader's contrast is theirs.
+- A pack's own inks take the reader's contrast as a relative-colour lightness
+  offset inside that rule; the built-in inks need none.
+- `--ok --warn --err --net --deleg --add --del --focus` are not in the pack
+  vocabulary and are never written.
+- Decoration that is not a status has its own tokens, which a pack may set
+  (see Decorative roles). A pack that names `net` or `deleg` has them dropped
+  with a warning by the kernel; the frontend has no entry that could write them.
+
+## Decorative roles
+
+`net` and `deleg` say what the agent is doing: running, connected, delegated
+out. A hyperlink, the product accent and a hover halo are not that, so they read
+their own tokens. Each default is the status colour it replaces, in both schemes
+and at every contrast step, so nothing paints differently until a pack sets one.
+
+| Pack key | Variable | Default | Job |
+| --- | --- | --- | --- |
+| `link` | `--link` | `--net` | Hyperlinks and URLs: `.md a`, `.fbk a`, `.lk`, `.hit-row .u` |
+| `brand` | `--brand` | `--net` | The product's own tint: wallet and toolbar icons, info notes, feedback status chips, skill chips, the selected option and the open workspace's bar |
+| `halo` | `--halo` | `--net` | Hover and drag-over emphasis: card hover, screenshot hover, the reference-drop ring |
+| `labelAgent` | `--label-agent` | `--deleg` | An agent's name: `.who` labels and sub-agent chips |
+| derived | `--brand-wash` | `--net-wash` | Tint behind `brand`; a pack that sets `brand` derives it at 12% over its ground, as `--accent-wash` follows `accent` |
+| derived | `--label-agent-wash` | `--deleg-wash` | Tint behind `labelAgent`, derived the same way |
+
+- `--halo` is not `--glow`: `--glow` is the running compose ring's own local
+  variable, set to `--net` while a turn runs, and stays a status.
+- The running compose ring, call lines, pips, carets and the delegated nest keep
+  `net` and `deleg`.
+
+## Elevation
+
+| Pack key | Variable | Default | Job |
+| --- | --- | --- | --- |
+| `shadowFloat` | `--shadow-float`, `--shadow-pack` | per scheme, as in `tokens.css` | What menus, popovers and dialogs cast |
+
+- The kernel accepts `none`, or up to four layers of an optional `inset`, two to four `px` lengths and a hex colour.
+- The blur cannot be negative.
+- Nothing paints differently until a pack sets it.
+- `--shadow-pack` is for the light menus that keep their own default; they read it and fall back to that default.
+
 ## Faces
 
 The interface ships its own faces. On Windows it otherwise resolved to Segoe UI
@@ -42,6 +93,9 @@ grid to break.
 
 ## Surfaces
 
+- Studio's default light palette separates the frame (`#F0F0ED`), reading
+  surface (`#FAFAF8`) and composer (`--raised`). Its composer uses a short
+  `--compose-shadow`; installed packs retain their existing surface recipe.
 - `--float` / `--float-hi` exist apart from `--raised`. In dark, `--raised` and
   what it covers are nearly the same lightness, and a black shadow on a
   near-black ground paints nothing, so a menu read as transparent. A floating
@@ -63,6 +117,14 @@ grid to break.
   itself now, with dark ink on it. `--err` carries its own ink for the same
   reason: a danger button borrowed `--accent-fg`, which held only while the two
   hues happened to share a lightness.
+- Text takes the ink, never the base.
+  - Light `--warn` reads 4.58:1 on white and 3.86:1 on the floating layer, under
+    the 4.5 line.
+  - A label, count or note coloured `--warn`, `--ok` or `--err` uses
+    `--warn-ink`, `--ok-ink` or `--err-ink`.
+  - Borders, washes and glyph marks (status symbols, check ticks, hover icons)
+    stay on the base: a graphic needs 3:1, which the base clears.
+  - `ink-text.test.ts` fails a bare hue as `color` outside its glyph list.
 - An ink is read on every tint it lands on, not only the lightest one. The
   light `--accent-ink` cleared the popover's own surface at 6.4:1 and the
   selected row inside it — that same surface with 7% text mixed in — at 4.40,
@@ -87,6 +149,11 @@ grid to break.
     lightness band, chroma floor, adjacent-pair colour-vision separation
     (ΔE ≥ 8), normal-vision floor (≥ 15), and contrast with the ground.
   - In light, four segments fall below 3:1 and rely on the legend's text labels.
+  - Chart series take `--cat-1` … `--cat-5` by index. A sixth series onward
+    repeats the ramp with a second channel (dash for lines, hatch for bars,
+    lower opacity for slices) because five distinguishable hues is the ceiling,
+    and every chart carries a legend or a data table so colour is never the only
+    way to read a series.
 - `--lights-w` / `--lights-h` are the window corner macOS draws its controls
   over, and they are zero everywhere the shell does not hand that corner to the
   page. Whichever element occupies the corner reserves them, so a layout change
@@ -110,6 +177,10 @@ Radii were 1/2/3/4 — near square, and every container in the window is stroked
 so square read as table cells rather than operable surfaces. The whole tier was
 raised with its ratios kept.
 
+A pack's `recipes.corners` is a factor on that tier rather than a radius of its
+own: `square` is 0, `soft` leaves the four radii as written, `round` is 1.5. A
+pack states a shape, never a number the layout has to agree with.
+
 ## Motion
 
 - Three durations for three weights: `--t-line` a line, `--t-card` a card,
@@ -119,6 +190,10 @@ raised with its ratios kept.
 - `--t-live` (.6s) is not a weight. A meter or a fill reports work that is
   running, and reports it by growing, so this tier drives a fill's own geometry
   and never answers a click — at .6s it would answer late.
+- `--tip-delay` (.3s) is how long a pointer rests before a hint is drawn: VS Code
+  waits 250ms by default, and an instant hint flashes on every pass across a
+  column of icons. Keyboard focus is not hovering and is never delayed. It is a
+  wait, not motion, so reduced motion keeps it: dropping it would bring the flash back.
 - `--t-press` (.06s) is contact itself; anything slower reads as the interface
   thinking it over. What a press looks like is a token, so reduced motion
   answers for every control by changing one value.
@@ -136,6 +211,23 @@ raised with its ratios kept.
 
 ## Space
 
+- Layout spacing is eight steps, 2 / 4 / 6 / 8 / 10 / 12 / 16 / 24px. The floor
+  is 2px, below which a gap stops reading as a gap, and 24px is the ceiling:
+  past it the distance is layout rather than spacing.
+- Which step a surface takes belongs to that surface: 2px between a mark and
+  its label, 4px between a control's own parts, 6px inside a chip, 8px between
+  rows, 10px inside a dense card, 12px inside a card, 16px between blocks, 24px
+  between sections.
+- A distance off the scale takes the nearer step; a tie takes the lower one,
+  because an off-scale distance is a step with air added by hand, and the tie
+  returns the air and nothing else.
+
+| Written | 3 | 5 | 7 | 9 | 11 | 14 | 20 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Takes | 2 | 4 | 6 | 8 | 10 | 12 | 16 |
+
+- A surface that still writes a distance has not been migrated yet; it is not
+  an exception the scale allows.
 - `--y-line` / `--y-card` / `--y-panel` are the same three weights in space.
   With only the durations tiered, a one-file read and a call carrying twenty
   lines of output weighed the same, and a long turn had no readable sections.
@@ -151,8 +243,30 @@ raised with its ratios kept.
 - That action is present for the whole life of the card. A control that appears
   only under a pointer is one nobody finds, and on touch it does not appear at
   all; it rests at `--muted` and comes forward on hover.
+- A pack's `recipes.density` scales `--pane-gutter`, `--call-gap`, `--call-sym`
+  and `--close-h`: `compact` is 0.85, `comfortable` leaves them as written.
+- Density moves a distance or a control's own height, never a type size and
+  never a panel's width. How large the interface reads is the reader's setting,
+  and a panel's width is layout rather than rhythm.
 
 ## Type
+
+- Composer menus share `composer-menu.css`: 280–340px widths capped by the
+  viewport, 12px corners and 8px insets. Labels use 13px medium type,
+  descriptions 11px and headings 12px. Selection uses a neutral fill and check;
+  permission warnings retain semantic colour.
+- The composer scope covers work mode, workspace, permissions, model and effort.
+  Search results wrap long names; large lists scroll within the viewport. Other
+  pickers retain their own density.
+- Workspace controls share the branch slot in the composer's bottom toolbar,
+  including its pill radius, hover surface and narrow-pane label folding.
+  Runtime statistics remain below the input card.
+- Git labels inherit the toolbar control's font and line-height. Mode, effort
+  and branch wrappers use flex layout so inline baselines do not shift their
+  labels when interface text is enlarged.
+- Empty phone toolbars keep their compact geometry when a control receives
+  focus, so a pointer press and release target the same button. Draft content,
+  attachments and open menus expand the toolbar.
 
 - The scale carried 24 sizes, 442 uses of them inside the four steps between 10
   and 11.5px. Half a pixel is not a level; it reads as nothing quite matching.
@@ -162,12 +276,14 @@ raised with its ratios kept.
 - `--read` is the conversation body's own size, separate from interface zoom, so
   "I cannot read this" adjusts one thing. The value here is the first-frame
   fallback; the real default is `look.ts`'s `readDefault()`.
-- `--doc` is the reading column: terminal blocks, cards and prose share one
-  boundary so the right edge lines up. The floor comes from the narrowest block
-  in it — 80 columns of IBM Plex Mono at `--fs-ui` is 624px, and the transcript's
-  indent and padding want another 82px. Line length moves with `--read`: about
-  80 Latin characters at 15px, about 36 Han characters at 16px. Column width and
-  body size are one reading, never two.
+- `--column` is the reading column's width. The composer is laid at it in
+  every measure; the transcript takes it through `--doc`.
+- `--doc` is the column the transcript is laid in: `--column`, or the whole
+  pane in the full measure. Cards, prose and the composer share its edges.
+- The column's floor is its narrowest block: 80 columns of IBM Plex Mono at
+  `--fs-ui` is 624px, and the transcript's indent and padding want 82px more.
+- Line length moves with `--read`: about 80 Latin characters at 15px, about 36
+  Han characters at 16px. Column width and body size are one reading.
 - `--srail-w` is the locator rail's own column. It is a `pointer-events: auto`
   strip laid over the transcript's right edge, so content that clears it must
   reference the same number.
@@ -178,6 +294,19 @@ raised with its ratios kept.
   letters.
 
 ## Weight and contrast
+
+- Default and plain-palette light Studio replies use `--w-read: 400` for prose only. Headings,
+  emphasis and small UI text keep their existing weights. A chosen weight,
+  illustrated/sky pack or dark scheme falls back to `--w-reg`.
+- `--default-*` holds the canonical Studio preview palette independently of
+  the active pack. Default surfaces and the default picker card share it.
+- `--accent-ink` is text on ordinary or tinted surfaces, distinct from
+  `--accent-fg` on filled controls. Packs may set `accentInk`; legacy packs
+  derive it by mixing their accent towards their body text colour.
+- `background.textGlow: none` paints `--flow-text-shadow: none` through the
+  pack sheet. The backdrop transcript rule defaults to its 2px shadow and 7px
+  halo when this variable is absent. The choice affects text only; the frosted
+  backing remains. Reduced effects overrides the text shadow.
 
 - Stroke weight is an axis beside contrast, not part of it: however bright the
   colour, 400 Han at 11px is thin. Han strokes are dense and blur at a size
@@ -193,6 +322,10 @@ raised with its ratios kept.
   line and the other two step up; the body end does not move, because near-white
   on a dark ground haloes and narrowing the span is what "softer" means.
   Enforced by `perf/contrast.mjs`.
+- `--ghost` is `--faint`'s value in every tier: a lighter one fails the floor.
+- `perf/tiers.mjs` holds every tier: each ink is at least as legible as the
+  default palette stepped once (3.0/10.1, 3.5/7.5 and 3.5/7.0 lightness points
+  for text, muted and faint) and as the floors recorded there, on both grounds.
 - `prefers-contrast: more` is followed when the user has not chosen a tier.
   Light and dark are judged separately: a manual dark choice under a light
   system scheme would otherwise paint the light theme's dark body text onto a

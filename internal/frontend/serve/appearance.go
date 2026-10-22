@@ -46,12 +46,23 @@ type appearanceView struct {
 	// the language the model answers in — that follows each message you write.
 	Language string  `json:"language,omitempty"`
 	Zoom     float64 `json:"zoom,omitempty"`
-	ReadSize float64 `json:"readSize,omitempty"`
+	// The range Zoom is held to, so the page draws its slider from the same
+	// bounds the save clamps to.
+	ZoomRange zoomRangeView `json:"zoomRange"`
+	ReadSize  float64       `json:"readSize,omitempty"`
+	// Interface text alone, held to config.TextSizeMin..TextSizeMax on save.
+	TextSize float64 `json:"textSize,omitempty"`
 	FontUI   string  `json:"fontUi,omitempty"`
 	FontMono string  `json:"fontMono,omitempty"`
 	// standard | full — how far the transcript's prose runs.
 	Width     string         `json:"width,omitempty"`
 	Wallpaper *wallpaperView `json:"wallpaper,omitempty"`
+}
+
+type zoomRangeView struct {
+	Min  float64 `json:"min"`
+	Max  float64 `json:"max"`
+	Step float64 `json:"step"`
 }
 
 type wallpaperView struct {
@@ -69,7 +80,16 @@ func appearanceDir() string {
 }
 
 func viewOf(a config.AppearanceConfig, language, width string) appearanceView {
-	out := appearanceView{Language: language, Zoom: a.Zoom, ReadSize: a.ReadSize, FontUI: a.FontUI, FontMono: a.FontMono, Width: width}
+	out := appearanceView{
+		Language:  language,
+		Zoom:      config.ClampZoom(a.Zoom),
+		ZoomRange: zoomRangeView{Min: config.ZoomMin, Max: config.ZoomMax, Step: config.ZoomStep},
+		ReadSize:  a.ReadSize,
+		TextSize:  config.ClampTextSize(a.TextSize),
+		FontUI:    a.FontUI,
+		FontMono:  a.FontMono,
+		Width:     width,
+	}
 	if a.Wallpaper.File != "" {
 		out.Wallpaper = &wallpaperView{
 			URL:     "/appearance/wallpaper/" + a.Wallpaper.File,
@@ -98,6 +118,7 @@ func (s *Server) saveAppearance(w http.ResponseWriter, r *http.Request) {
 		Language string  `json:"language"`
 		Zoom     float64 `json:"zoom"`
 		ReadSize float64 `json:"readSize"`
+		TextSize float64 `json:"textSize"`
 		FontUI   string  `json:"fontUi"`
 		FontMono string  `json:"fontMono"`
 		Width    string  `json:"width"`
@@ -120,8 +141,13 @@ func (s *Server) saveAppearance(w http.ResponseWriter, r *http.Request) {
 		edit.Desktop.Language = ""
 	}
 	a := &edit.Desktop.Appearance
-	a.Zoom = clampOrZero(body.Zoom, 0.7, 1.8)
+	// The page posts back the clamped value it was shown, so one equal to what
+	// the stored value reads as is the user leaving it alone.
+	if body.Zoom != config.ClampZoom(a.Zoom) {
+		a.Zoom = config.ClampZoom(body.Zoom)
+	}
 	a.ReadSize = clampOrZero(body.ReadSize, 10, 26)
+	a.TextSize = config.ClampTextSize(body.TextSize)
 	a.FontUI = sanitizeFamily(body.FontUI)
 	a.FontMono = sanitizeFamily(body.FontMono)
 	// Anything but the one named alternative is the default, the same way the

@@ -33,7 +33,7 @@ func PluginNameFromComponentID(id extension.ComponentID) string {
 // clients from previous. previous may be nil. Required start failures fail
 // the whole call and close the new Manager's resources.
 func StartPackagesWithPlan(ctx context.Context, home string, sessionCtx protocol.SessionContext, ui UIHandler, previous *Manager, plan *extension.RuntimePlan) (*Manager, []string, error) {
-	packages, warnings := LoadRuntimePackages(home)
+	packages, warnings := LoadRuntimePackagesFor(home, sessionCtx.WorkspaceRoot)
 	if plan == nil || plan.IsNoOp() && previous == nil {
 		startupCtx, cancel := context.WithTimeout(ctx, packageStartupBudget)
 		defer cancel()
@@ -132,7 +132,7 @@ func StartPackagesWithPlan(ctx context.Context, home string, sessionCtx protocol
 }
 
 func adoptAll(previous *Manager) *Manager {
-	m := &Manager{clients: make(map[string]*Client)}
+	m := &Manager{clients: make(map[string]*Client), planAdopted: make(map[string]*Client)}
 	if previous == nil {
 		return m
 	}
@@ -140,6 +140,7 @@ func adoptAll(previous *Manager) *Manager {
 		id := client.PluginID()
 		if c := previous.Detach(id); c != nil {
 			m.clients[id] = c
+			m.planAdopted[id] = c
 		}
 	}
 	return m

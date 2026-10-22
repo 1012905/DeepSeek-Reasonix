@@ -43,9 +43,10 @@ func (b *blockingAttacher) Probe(context.Context, string) (RemoteProbe, error) {
 // assumed, because the answer settles what a reload is allowed to recover.
 func TestARemoteDialRunsUnderTheRequestThatAskedForIt(t *testing.T) {
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	saveTestRemoteHosts(t, "gpu-box")
 	link := &blockingAttacher{dialing: make(chan context.Context, 1)}
 	h := NewHub(HubOptions{Remote: link})
-	front := httptest.NewServer(h.Handler())
+	front := httptest.NewServer(operatorHandler(h))
 	defer front.Close()
 
 	cases := []struct {
@@ -241,7 +242,7 @@ func TestTheAnswerEndpointNamesWhatWentWrong(t *testing.T) {
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
 	b := NewAskBroker(nil)
 	h := NewHub(HubOptions{Asks: b})
-	front := httptest.NewServer(h.Handler())
+	front := httptest.NewServer(operatorHandler(h))
 	defer front.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -309,13 +310,14 @@ func (a *askingAttacher) Probe(context.Context, string) (RemoteProbe, error) {
 // shell drives it.
 func TestAnsweringAQuestionLetsTheDialFinishAndThePaneOpen(t *testing.T) {
 	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	saveTestRemoteHosts(t, "gpu-box")
 	far := fakeRemoteKernel(t)
 	asks := NewAskBroker(nil)
 	h := NewHub(HubOptions{
 		Asks:   asks,
 		Remote: &askingAttacher{asks: asks, endpoint: RemoteEndpoint{Addr: far.Listener.Addr().String(), Token: "remote-secret"}},
 	})
-	front := httptest.NewServer(h.Handler())
+	front := httptest.NewServer(operatorHandler(h))
 	defer front.Close()
 
 	const operation = "op-the-client-named"

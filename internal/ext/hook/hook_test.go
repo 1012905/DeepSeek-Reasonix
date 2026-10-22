@@ -3,17 +3,21 @@ package hook
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	fileencoding "reasonix/internal/base/fileutil/encoding"
+	"reasonix/internal/base/fileutil/encoding/encodingtest"
 	"reasonix/internal/base/testenv"
+	"reasonix/internal/contract/config"
 	"reasonix/internal/ext/pluginpkg"
 	"reasonix/internal/safety/sandbox"
 )
@@ -91,12 +95,27 @@ func hookSettingsWithCommand(t *testing.T, event Event, command string) string {
 	return string(body)
 }
 
-func TestLoadProjectHooksByDefault(t *testing.T) {
+func approveProjectHooks(t *testing.T, opts LoadOptions) {
+	t.Helper()
+	program, ok := ProjectHooksProgram(opts.ProjectRoot)
+	if !ok {
+		return
+	}
+	if err := config.NewProjectProgramStore(reasonixHomeForOptions(opts)).Approve(opts.ProjectRoot, program); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoadProjectHooksOnceApproved(t *testing.T) {
 	home := testenv.TempDir(t)
 	proj := testenv.TempDir(t)
 	writeSettings(t, proj, sampleSettings)
 	writeSettings(t, home, `{"hooks":{"PostToolUse":[{"command":"echo g"}]}}`)
 
+	if got := Load(LoadOptions{ProjectRoot: proj, HomeDir: home}); len(got) != 1 || got[0].Scope != ScopeGlobal {
+		t.Fatalf("unapproved project hooks loaded: %+v", got)
+	}
+	approveProjectHooks(t, LoadOptions{ProjectRoot: proj, HomeDir: home})
 	got := Load(LoadOptions{ProjectRoot: proj, HomeDir: home})
 	if len(got) != 3 {
 		t.Fatalf("default load should include project + global, got %d", len(got))
@@ -106,10 +125,26 @@ func TestLoadProjectHooksByDefault(t *testing.T) {
 	}
 }
 
+func TestLoadUserScopesSkipProjectHooks(t *testing.T) {
+	home := testenv.TempDir(t)
+	proj := testenv.TempDir(t)
+	writeSettings(t, proj, sampleSettings)
+	writeSettings(t, home, `{"hooks":{"PostToolUse":[{"command":"echo g"}]}}`)
+
+	approveProjectHooks(t, LoadOptions{ProjectRoot: proj, HomeDir: home})
+	got := Load(LoadOptions{ProjectRoot: proj, HomeDir: home, Scopes: UserScopes})
+	if len(got) != 1 || got[0].Scope != ScopeGlobal || got[0].Command != "echo g" {
+		t.Fatalf("user-scope load = %+v, want only the global hook", got)
+	}
+	if got := Load(LoadOptions{ProjectRoot: proj, HomeDir: home, Scopes: []Scope{ScopeProject}}); len(got) != 2 || got[0].Scope != ScopeProject || got[1].Scope != ScopeProject {
+		t.Fatalf("project-scope load = %+v, want only the two project hooks", got)
+	}
+}
+
 func TestLoadDecodesGB18030GlobalSettings(t *testing.T) {
 	home := testenv.TempDir(t)
 	body := `{"hooks":{"Stop":[{"command":"echo 中文","description":"全局"}]}}`
-	writeHookTestBytes(t, GlobalSettingsPath(home), fileencoding.Encode(body, fileencoding.GB18030))
+	writeHookTestBytes(t, GlobalSettingsPath(home), encodingtest.MustEncode(body, fileencoding.GB18030))
 
 	got := Load(LoadOptions{HomeDir: home})
 	if len(got) != 1 {
@@ -124,9 +159,10 @@ func TestLoadDecodesUTF8BOMProjectSettings(t *testing.T) {
 	home := testenv.TempDir(t)
 	proj := testenv.TempDir(t)
 	body := `{"hooks":{"PreToolUse":[{"match":"bash","command":"echo pre"}]}}`
-	writeHookTestBytes(t, ProjectSettingsPath(proj), fileencoding.Encode(body, fileencoding.UTF8BOM))
+	writeHookTestBytes(t, ProjectSettingsPath(proj), encodingtest.MustEncode(body, fileencoding.UTF8BOM))
 
-	got := Load(LoadOptions{HomeDir: home, ProjectRoot: proj, Trusted: true})
+	approveProjectHooks(t, LoadOptions{HomeDir: home, ProjectRoot: proj})
+	got := Load(LoadOptions{HomeDir: home, ProjectRoot: proj})
 	if len(got) != 1 {
 		t.Fatalf("Load hooks = %+v, want one decoded project hook", got)
 	}
@@ -151,7 +187,8 @@ func TestLoadNormalizesQuotedNodeEvalHooksPerProject(t *testing.T) {
 	writeSettings(t, projB, hookSettingsWithCommand(t, PreToolUse, bad))
 
 	for _, project := range []string{projA, projB, projB} {
-		hooks := Load(LoadOptions{HomeDir: home, ProjectRoot: project, Trusted: true})
+		approveProjectHooks(t, LoadOptions{HomeDir: home, ProjectRoot: project})
+		hooks := Load(LoadOptions{HomeDir: home, ProjectRoot: project})
 		if len(hooks) != 1 {
 			t.Fatalf("Load(%q) hooks = %+v, want one", project, hooks)
 		}
@@ -973,6 +1010,9 @@ func TestDefaultSpawnerUsesGitBashForExplicitShOnWindows(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("exercises Git for Windows Bash discovery")
 	}
+	if !slices.ContainsFunc(sandbox.DetectShells(), func(sh sandbox.Shell) bool { return sh.Kind == sandbox.ShellBash }) {
+		t.Skip("Git Bash is optional on Windows and absent on this host")
+	}
 	r := DefaultSpawner(context.Background(), SpawnInput{
 		Command: `sh -c 'printf "%s" "$HOOK_TEST_MARKER"'`,
 		Timeout: realSpawnTimeout,
@@ -985,7 +1025,7 @@ func TestDefaultSpawnerUsesGitBashForExplicitShOnWindows(t *testing.T) {
 
 func TestDecodeHookOutputRecoversGB18030WindowsErrors(t *testing.T) {
 	want := `'sh' 不是内部或外部命令，也不是可运行的程序`
-	raw := fileencoding.Encode(want, fileencoding.GB18030)
+	raw := encodingtest.MustEncode(want, fileencoding.GB18030)
 	if got := decodeHookOutput(raw, false); got != want {
 		t.Fatalf("decoded hook stderr = %q, want %q", got, want)
 	}
@@ -1080,36 +1120,39 @@ func TestMatchesTool(t *testing.T) {
 	pre := func(match string) ResolvedHook {
 		return ResolvedHook{HookConfig: HookConfig{Match: match}, Event: PreToolUse}
 	}
-	if MatchesTool(pre("file"), "read_file") {
+	if matchesTool(pre("file"), "read_file") {
 		t.Error(`anchored "file" must not match "read_file"`)
 	}
-	if !MatchesTool(pre(".*file"), "read_file") {
+	if !matchesTool(pre(".*file"), "read_file") {
 		t.Error(`".*file" should match "read_file"`)
 	}
-	if !MatchesTool(pre("bash"), "bash") {
+	if !matchesTool(pre("bash"), "bash") {
 		t.Error(`"bash" should match "bash"`)
 	}
-	if !MatchesTool(pre("*"), "anything") || !MatchesTool(pre(""), "anything") {
+	if !matchesTool(pre("*"), "anything") || !matchesTool(pre(""), "anything") {
 		t.Error(`"*"/"" should match every tool`)
 	}
-	if MatchesTool(pre("["), "bash") {
-		t.Error("malformed regex should not fire")
+	if matchesTool(pre("["), "bash") {
+		t.Error("a malformed regex matches no tool")
+	}
+	if _, err := matchTool(pre("["), "bash"); !errors.Is(err, ErrInvalidMatcher) {
+		t.Errorf("a malformed regex must be reported as unevaluable, got %v", err)
 	}
 	perm := func(match string) ResolvedHook {
 		return ResolvedHook{HookConfig: HookConfig{Match: match}, Event: PermissionRequest}
 	}
-	if !MatchesTool(perm("bash"), "bash") {
+	if !matchesTool(perm("bash"), "bash") {
 		t.Error(`PermissionRequest "bash" should match "bash"`)
 	}
-	if MatchesTool(perm("bash"), "read_file") {
+	if matchesTool(perm("bash"), "read_file") {
 		t.Error(`PermissionRequest "bash" must not match "read_file"`)
 	}
-	if MatchesTool(perm("["), "bash") {
-		t.Error("malformed PermissionRequest regex should not fire")
+	if matchesTool(perm("["), "bash") {
+		t.Error("a malformed PermissionRequest regex matches no tool")
 	}
 	// Non-tool events always match regardless of the match field.
 	prompt := ResolvedHook{HookConfig: HookConfig{Match: "bash"}, Event: UserPromptSubmit}
-	if !MatchesTool(prompt, "") {
+	if !matchesTool(prompt, "") {
 		t.Error("non-tool events should always match")
 	}
 }
@@ -1118,40 +1161,40 @@ func TestMatchesToolTranslatesClaudeToolNames(t *testing.T) {
 	claude := func(match string) ResolvedHook {
 		return ResolvedHook{HookConfig: HookConfig{Match: match, PayloadFormat: "claude"}, Event: PreToolUse}
 	}
-	if !MatchesTool(claude("Bash"), "bash") {
+	if !matchesTool(claude("Bash"), "bash") {
 		t.Error(`Claude matcher "Bash" should match Reasonix tool "bash"`)
 	}
-	if !MatchesTool(claude("Write|Edit"), "write_file") {
+	if !matchesTool(claude("Write|Edit"), "write_file") {
 		t.Error(`Claude matcher "Write|Edit" should match Reasonix tool "write_file"`)
 	}
-	if !MatchesTool(claude("Write|Edit"), "edit_file") {
+	if !matchesTool(claude("Write|Edit"), "edit_file") {
 		t.Error(`Claude matcher "Write|Edit" should match Reasonix tool "edit_file"`)
 	}
-	if MatchesTool(claude("Bash"), "write_file") {
+	if matchesTool(claude("Bash"), "write_file") {
 		t.Error(`Claude matcher "Bash" must not match Reasonix tool "write_file"`)
 	}
 	// A native (non-Claude) hook's matcher stays in Reasonix's own vocabulary.
 	native := ResolvedHook{HookConfig: HookConfig{Match: "bash"}, Event: PreToolUse}
-	if MatchesTool(native, "Bash") {
+	if matchesTool(native, "Bash") {
 		t.Error("native hook matcher must not be interpreted against Claude tool names")
 	}
 	// The subagent tool was renamed "Task" -> "Agent" by Claude; a matcher
 	// using either name must still fire against Reasonix's "task" tool.
-	if !MatchesTool(claude("Agent"), "task") {
+	if !matchesTool(claude("Agent"), "task") {
 		t.Error(`Claude matcher "Agent" (current name) should match Reasonix tool "task"`)
 	}
-	if !MatchesTool(claude("Task"), "task") {
+	if !matchesTool(claude("Task"), "task") {
 		t.Error(`Claude matcher "Task" (legacy alias) should still match Reasonix tool "task"`)
 	}
-	if !MatchesTool(claude("AskUserQuestion"), "ask") {
+	if !matchesTool(claude("AskUserQuestion"), "ask") {
 		t.Error(`Claude matcher "AskUserQuestion" should match Reasonix tool "ask"`)
 	}
 	for _, name := range []string{"bash_output", "wait"} {
-		if !MatchesTool(claude("TaskOutput"), name) || !MatchesTool(claude("BashOutput"), name) {
+		if !matchesTool(claude("TaskOutput"), name) || !matchesTool(claude("BashOutput"), name) {
 			t.Errorf(`current "TaskOutput" and legacy "BashOutput" matchers should match Reasonix tool %q`, name)
 		}
 	}
-	if !MatchesTool(claude("TaskStop"), "kill_shell") || !MatchesTool(claude("KillShell"), "kill_shell") {
+	if !matchesTool(claude("TaskStop"), "kill_shell") || !matchesTool(claude("KillShell"), "kill_shell") {
 		t.Error(`current "TaskStop" and legacy "KillShell" matchers should match Reasonix tool "kill_shell"`)
 	}
 }
@@ -1186,11 +1229,11 @@ func TestClaudeFacingToolNameUsesCurrentNames(t *testing.T) {
 			t.Errorf(`claudeFacingToolName(%q) = %q, want "Agent"`, name, got)
 		}
 		claude := ResolvedHook{HookConfig: HookConfig{Match: "Agent", PayloadFormat: "claude"}, Event: PreToolUse}
-		if !MatchesTool(claude, name) {
+		if !matchesTool(claude, name) {
 			t.Errorf(`Claude matcher "Agent" should match Reasonix tool %q`, name)
 		}
 		legacy := ResolvedHook{HookConfig: HookConfig{Match: "Task", PayloadFormat: "claude"}, Event: PreToolUse}
-		if !MatchesTool(legacy, name) {
+		if !matchesTool(legacy, name) {
 			t.Errorf(`legacy Claude matcher "Task" should still match Reasonix tool %q`, name)
 		}
 	}
@@ -1342,7 +1385,11 @@ func TestDecideOutcome(t *testing.T) {
 		{"timeout-blocking", UserPromptSubmit, "", SpawnResult{TimedOut: true}, DecisionBlock},
 		{"permission-timeout-warns", PermissionRequest, "", SpawnResult{TimedOut: true}, DecisionWarn},
 		{"timeout-nonblocking", Stop, "", SpawnResult{TimedOut: true}, DecisionWarn},
-		{"spawn-error", PreToolUse, "", SpawnResult{SpawnErr: os.ErrNotExist}, DecisionError},
+		{"spawn-error-gating-blocks", PreToolUse, "", SpawnResult{SpawnErr: os.ErrNotExist}, DecisionBlock},
+		{"spawn-error-prompt-blocks", UserPromptSubmit, "", SpawnResult{SpawnErr: os.ErrNotExist}, DecisionBlock},
+		{"spawn-error-observing-errors", PostToolUse, "", SpawnResult{SpawnErr: os.ErrNotExist}, DecisionError},
+		{"spawn-error-native-permission-errors", PermissionRequest, "", SpawnResult{SpawnErr: os.ErrNotExist}, DecisionError},
+		{"spawn-error-claude-permission-blocks", PermissionRequest, "claude", SpawnResult{SpawnErr: os.ErrNotExist}, DecisionBlock},
 		// Claude's own PermissionRequest contract blocks on exit 2/timeout the
 		// same way PreToolUse does; native Reasonix PermissionRequest hooks
 		// (format == "") stay advisory-only, verified above.
@@ -1683,7 +1730,7 @@ func TestRunClaudeAgentGuardFiresAndSeesRequiredFields(t *testing.T) {
 }
 
 func TestClaudeToolResponsePreservesPlainText(t *testing.T) {
-	stdin := marshalPayload(Payload{Event: PostToolUse, ToolName: "read_file", ToolResult: "plain output"}, "claude")
+	stdin, _ := marshalPayload(Payload{Event: PostToolUse, ToolName: "read_file", ToolResult: "plain output"}, "claude")
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(stdin), &payload); err != nil {
 		t.Fatal(err)
@@ -1699,7 +1746,7 @@ func TestClaudeToolResponsePreservesPlainText(t *testing.T) {
 // string, and never raw JSON even when the command's output happens to be a
 // valid JSON document.
 func TestClaudeToolResponseBashShape(t *testing.T) {
-	stdin := marshalPayload(Payload{Event: PostToolUse, ToolName: "bash", ToolResult: `{"looks":"like json"}`}, "claude")
+	stdin, _ := marshalPayload(Payload{Event: PostToolUse, ToolName: "bash", ToolResult: `{"looks":"like json"}`}, "claude")
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(stdin), &payload); err != nil {
 		t.Fatal(err)
@@ -1713,7 +1760,7 @@ func TestClaudeToolResponseBashShape(t *testing.T) {
 	}
 
 	// An interrupted failure carries the error and the interrupt flag.
-	stdin = marshalPayload(Payload{
+	stdin, _ = marshalPayload(Payload{
 		Event: PostToolUseFailure, ToolName: "bash",
 		ToolResult: "partial", Error: "context canceled", IsInterrupt: true,
 	}, "claude")
@@ -1726,7 +1773,7 @@ func TestClaudeToolResponseBashShape(t *testing.T) {
 	}
 
 	// PreToolUse has no result yet: no fabricated Bash response object.
-	stdin = marshalPayload(Payload{Event: PreToolUse, ToolName: "bash", ToolArgs: json.RawMessage(`{"command":"ls"}`)}, "claude")
+	stdin, _ = marshalPayload(Payload{Event: PreToolUse, ToolName: "bash", ToolArgs: json.RawMessage(`{"command":"ls"}`)}, "claude")
 	if err := json.Unmarshal([]byte(stdin), &payload); err != nil {
 		t.Fatal(err)
 	}

@@ -2,18 +2,19 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
 	"reasonix/internal/assembly/boot"
 	"reasonix/internal/base/i18n"
-	"reasonix/internal/base/netclient"
 	"reasonix/internal/contract/ablation"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/provider"
@@ -41,6 +42,7 @@ func acpCommand(args []string, version string) int {
 	plannerFlag := fs.String("planner", "auto", "planner policy: auto | off")
 	networkFlag := fs.String("sandbox-network", "auto", "sandbox network policy: auto | on | off")
 	bashFlag := fs.String("sandbox-bash", "auto", "bash sandbox policy: auto | enforce")
+	permissionFlag := fs.String("permission-mode", "", "tool approval posture the session starts in and clients cannot raise: read-only | dontAsk | manual | ask | auto | acceptEdits | bypassPermissions (default: unset, clients choose)")
 	workspaceOnly := fs.Bool("workspace-only", false, "ignore configured extra write roots and confine writes to the session cwd")
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
@@ -75,10 +77,23 @@ func acpCommand(args []string, version string) int {
 		return 2
 	}
 
+	var posture cliPermissionMode
+	if strings.TrimSpace(*permissionFlag) != "" {
+		posture, err = parsePermissionMode(*permissionFlag)
+		if err == nil && posture.plan {
+			err = errors.New("--permission-mode plan requires an interactive session")
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
+			return 2
+		}
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
 	factory := &acpFactory{
+		postureCeiling: posture.approval, permissionAllow: posture.allow,
 		model: *model, profile: profile, plannerOff: plannerMode == "off",
 		networkOverride: networkOverride, workspaceOnly: *workspaceOnly,
 		bashOverride: bashMode, requireSandbox: bashMode == "enforce",
@@ -96,6 +111,8 @@ func acpCommand(args []string, version string) int {
 // desktop, and serve assembly while still adding the host-supplied MCP servers
 // for this session only.
 type acpFactory struct {
+	postureCeiling   string
+	permissionAllow  []string
 	model            string
 	profile          string
 	plannerOff       bool
@@ -105,6 +122,9 @@ type acpFactory struct {
 	requireSandbox   bool
 	sandboxAvailable func() bool
 }
+
+// PostureCeiling implements acp.PostureCeiling.
+func (f *acpFactory) PostureCeiling() string { return f.postureCeiling }
 
 func (f *acpFactory) SessionDir() string {
 	return config.SessionDir()
@@ -161,11 +181,15 @@ func (f *acpFactory) sessionBootOptions(p acp.SessionParams) (boot.Options, erro
 	if root != "" && !filepath.IsAbs(root) {
 		return boot.Options{}, fmt.Errorf("session cwd must be an absolute path: %s", root)
 	}
+	if f.workspaceOnly && len(p.AdditionalDirs) > 0 {
+		return boot.Options{}, acp.ErrAdditionalDirectoriesDisabled
+	}
 	bashOverride := ""
 	if f.bashOverride == "enforce" {
 		bashOverride = "enforce"
 	}
 	return boot.Options{
+		AgentComposition: p.AgentComposition, Composition: p.Composition,
 		Model:                    firstNonEmpty(p.Model, f.model),
 		TokenMode:                firstNonEmpty(p.RuntimeProfile, f.profile),
 		AgentPreset:              boot.NormalizeAgentPreset(firstNonEmpty(p.RuntimeProfile, f.profile)),
@@ -176,6 +200,7 @@ func (f *acpFactory) sessionBootOptions(p acp.SessionParams) (boot.Options, erro
 		Stderr:                   os.Stderr,
 		WorkspaceRoot:            root,
 		ExtraPlugins:             p.MCPServers,
+		AdditionalDirs:           p.AdditionalDirs,
 		CleanupPendingReconciler: acp.ReconcileCleanupPending,
 		OnSessionRecovered:       p.OnSessionRecovered,
 		FileOverlay:              p.FileOverlay,
@@ -184,6 +209,8 @@ func (f *acpFactory) sessionBootOptions(p acp.SessionParams) (boot.Options, erro
 		SandboxNetworkOverride:   f.networkOverride,
 		SandboxBashOverride:      bashOverride,
 		WorkspaceOnly:            f.workspaceOnly,
+		NewConversation:          p.NewConversation,
+		PermissionAllow:          f.permissionAllow,
 	}, nil
 }
 
@@ -196,6 +223,12 @@ func (f *acpFactory) SessionRuntimeState(_ context.Context, p acp.SessionRuntime
 	writeRoots := cfg.WriteRootsForRoot(p.Cwd)
 	if f.workspaceOnly {
 		writeRoots = []string{p.Cwd}
+	} else {
+		for _, dir := range p.AdditionalDirs {
+			if !slices.Contains(writeRoots, dir) {
+				writeRoots = append(writeRoots, dir)
+			}
+		}
 	}
 	networkEnabled := cfg.Sandbox.Network
 	if f.networkOverride != nil {
@@ -295,7 +328,7 @@ func (f *acpFactory) SessionConfigState(_ context.Context, p acp.SessionConfigSt
 		return acp.SessionConfigState{}, err
 	}
 	if strings.TrimSpace(ref) == "" {
-		return acp.SessionConfigState{}, fmt.Errorf("no default_model configured")
+		return acp.SessionConfigState{}, fmt.Errorf("%w: no default_model configured", provider.ErrNoProvider)
 	}
 	// Plugin-namespaced refs belong to extension sidecars: they never resolve
 	// through the config catalog, so their configured/current handling keys off
@@ -306,13 +339,13 @@ func (f *acpFactory) SessionConfigState(_ context.Context, p acp.SessionConfigSt
 		return acp.SessionConfigState{}, fmt.Errorf("unknown model %q", ref)
 	}
 	if ok && !entry.Configured() {
-		return acp.SessionConfigState{}, fmt.Errorf("model %q is not configured", ref)
+		return acp.SessionConfigState{}, fmt.Errorf("model %q %w", ref, provider.ErrKeyMissing)
 	}
 	currentModel := ref
 	entryDescription := ""
 	if ok {
 		currentModel = entry.Name + "/" + entry.Model
-		entryDescription = entry.Name
+		entryDescription = entry.Label()
 	}
 	modelOptions, modelInfos := acpModelOptions(cfg)
 	if !hasModelOption(modelOptions, currentModel) {
@@ -372,7 +405,7 @@ func (f *acpFactory) SessionConfigState(_ context.Context, p acp.SessionConfigSt
 			Category:     "thought_level",
 			Type:         "select",
 			CurrentValue: currentEffort,
-			Options:      acpEffortOptions(cap.Levels),
+			Options:      acpEffortOptions(cap, &effortEntry),
 		})
 	} else if hadEffortOverride {
 		cleared := ""
@@ -407,16 +440,26 @@ func (f *acpFactory) SessionConfigState(_ context.Context, p acp.SessionConfigSt
 		},
 	})
 
+	return acpSessionConfigState(cfg, entry, ok, currentModel, effortOverride, runtimeProfile, modelInfos, options), nil
+}
+
+func acpSessionConfigState(cfg *config.Config, entry *config.ProviderEntry, resolved bool, currentModel string, effortOverride *string, runtimeProfile string, modelInfos []acp.ModelInfo, options []acp.SessionConfigOption) acp.SessionConfigState {
+	identity := boot.ProviderBuildIdentity{}
+	if resolved {
+		identity = boot.ResolveProviderBuildIdentity(entry, cfg.NetworkProxySpec(), effortOverride)
+	}
 	return acp.SessionConfigState{
-		Model:          currentModel,
-		EffortOverride: effortOverride,
-		RuntimeProfile: runtimeProfile,
+		Model:               currentModel,
+		EffortOverride:      effortOverride,
+		RuntimeProfile:      runtimeProfile,
+		ResolvedEffort:      identity.Effort,
+		ProviderFingerprint: identity.Fingerprint,
 		Models: &acp.SessionModelState{
 			AvailableModels: modelInfos,
 			CurrentModelID:  currentModel,
 		},
 		ConfigOptions: options,
-	}, nil
+	}
 }
 
 func acpRuntimeProfile(value string) string {
@@ -430,7 +473,7 @@ func acpRuntimeProfile(value string) string {
 }
 
 func acpBuiltinTools(cfg *config.Config, cwd string, writeRoots []string) []tool.Tool {
-	bashSpec := sandbox.Spec{Mode: cfg.BashMode(), WriteRoots: writeRoots, Network: cfg.Sandbox.Network}
+	bashSpec := sandbox.GrantSpec(sandbox.Spec{Mode: cfg.BashMode(), WriteRoots: writeRoots, Pins: sandbox.PinWriteRoots(writeRoots), Network: cfg.Sandbox.Network}, cfg.Roots().SandboxDir())
 	ws := builtin.Workspace{
 		Dir:          cwd,
 		WriteRoots:   writeRoots,
@@ -459,12 +502,12 @@ func acpModelOptions(cfg *config.Config) ([]acp.SessionConfigSelectOption, []acp
 			options = append(options, acp.SessionConfigSelectOption{
 				Value:       ref,
 				Name:        ref,
-				Description: p.Name,
+				Description: p.Label(),
 			})
 			models = append(models, acp.ModelInfo{
 				ModelID:     ref,
 				Name:        ref,
-				Description: p.Name,
+				Description: p.Label(),
 			})
 		}
 	}
@@ -480,12 +523,24 @@ func hasModelOption(options []acp.SessionConfigSelectOption, ref string) bool {
 	return false
 }
 
-func acpEffortOptions(levels []string) []acp.SessionConfigSelectOption {
-	out := make([]acp.SessionConfigSelectOption, 0, len(levels))
-	for _, level := range levels {
-		out = append(out, acp.SessionConfigSelectOption{Value: level, Name: effortOptionName(level)})
+func acpEffortOptions(cap config.EffortCapability, e *config.ProviderEntry) []acp.SessionConfigSelectOption {
+	out := make([]acp.SessionConfigSelectOption, 0, len(cap.Levels))
+	for _, level := range cap.Levels {
+		out = append(out, acp.SessionConfigSelectOption{
+			Value:       level,
+			Name:        effortOptionName(level),
+			Description: effortOptionDescription(cap, e, level),
+		})
 	}
 	return out
+}
+
+// Forced-thinking models still bill for reasoning at their cheapest real level.
+func effortOptionDescription(cap config.EffortCapability, e *config.ProviderEntry, level string) string {
+	if len(cap.Levels) > 1 && level == cap.Levels[1] && config.EffortForcesThinking(e) {
+		return i18n.M.ArgEffortForcedOn
+	}
+	return ""
 }
 
 func effortOptionName(level string) string {
@@ -513,55 +568,4 @@ func cloneStringPtr(p *string) *string {
 	}
 	cp := *p
 	return &cp
-}
-
-func acpTaskProfileDefaults(cfg *config.Config) (string, string) {
-	if cfg == nil {
-		return "", ""
-	}
-	model := strings.TrimSpace(cfg.Agent.SubagentModels["task"])
-	if model == "" {
-		model = strings.TrimSpace(cfg.Agent.SubagentModel)
-	}
-	effort := strings.TrimSpace(cfg.Agent.SubagentEfforts["task"])
-	if effort == "" {
-		effort = strings.TrimSpace(cfg.Agent.SubagentEffort)
-	}
-	return model, effort
-}
-
-func newACPSubagentProviderResolver(cfg *config.Config, parent *config.ProviderEntry, proxySpec netclient.ProxySpec) func(string, string) (provider.Provider, *provider.Pricing, int, error) {
-	return func(modelRef, effort string) (provider.Provider, *provider.Pricing, int, error) {
-		modelRef = strings.TrimSpace(modelRef)
-		effort = strings.TrimSpace(effort)
-
-		var entry *config.ProviderEntry
-		if modelRef != "" {
-			var ok bool
-			entry, ok = cfg.ResolveModel(modelRef)
-			if !ok {
-				return nil, nil, 0, fmt.Errorf("subagent_model %q is not a configured provider", modelRef)
-			}
-		} else {
-			cp := *parent
-			entry = &cp
-		}
-
-		if effort != "" {
-			normalized, err := config.NormalizeEffort(entry, effort)
-			if err != nil {
-				return nil, nil, 0, err
-			}
-			entry.Effort = normalized
-			if entry.Kind == "anthropic" && strings.TrimSpace(entry.Effort) != "" && strings.TrimSpace(entry.Thinking) == "" {
-				entry.Thinking = "adaptive"
-			}
-		}
-
-		prov, err := boot.NewProviderWithProxy(entry, proxySpec)
-		if err != nil {
-			return nil, nil, 0, err
-		}
-		return prov, entry.Price, entry.ContextWindow, nil
-	}
 }

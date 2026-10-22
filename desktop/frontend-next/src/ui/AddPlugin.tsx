@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { ModPreviewBlock } from "./ModPreviewBlock";
 import { useEscape } from "./dismiss";
-import { t } from "../i18n";
+import { current as language, plural, t } from "../i18n";
 import { useFileDrop } from "./filedrop";
 import type { AgentPort, PluginAction, PluginPackage, PluginPlan } from "../port/port";
 import { reason } from "../i18n/kernel";
+import { CopyButton } from "./CopyButton";
 
 // Installing and importing are the same act from two doors, so there is one
 // box: a link, or a folder picked off this machine.
@@ -17,7 +19,7 @@ const RISK_TITLE: Record<string, string> = {
   low: "以下项目仅添加文件",
 };
 
-const ORDER = ["high", "medium", "low"];
+export const ORDER = ["high", "medium", "low"];
 
 interface Props {
   port: AgentPort;
@@ -27,16 +29,30 @@ interface Props {
   // already known, so the box is skipped and the plan is read against what is
   // installed — a new version's new hook is the thing worth seeing.
   updating?: PluginPackage;
+  // A source someone already chose, such as a plugin named in a restored backup.
+  source?: string;
+  onApplying?: (applying: boolean) => void;
 }
 
-export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
-  // Mounted only while open, so this component is the layer Escape closes.
-  useEscape(true, onClose);
-  const [text, setText] = useState(updating?.source ?? "");
+export function AddPlugin(props: Props) {
+  const [connection, setConnection] = useState({ port: props.port, generation: 0 });
+  if (connection.port !== props.port) setConnection({ port: props.port, generation: connection.generation + 1 });
+  return <PluginInput key={connection.generation} {...props} />;
+}
+
+function PluginInput({ port, onClose, onInstalled, updating, source, onApplying }: Props) {
+  const sourceLabel = useId();
+  const [text, setText] = useState(updating?.source ?? source ?? "");
   const [plan, setPlan] = useState<PluginPlan | null>(null);
   const [done, setDone] = useState<PluginPlan | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const apply = useRef<HTMLButtonElement>(null);
+  useEscape(true, () => { if (!updating || !plan || !busy) onClose(); });
+  useEffect(() => {
+    const readingUpdate = !!updating?.name && !done && !plan;
+    if (readingUpdate || (!busy && (done || (updating?.name && plan)))) apply.current?.focus();
+  }, [updating?.name, plan, done, busy, error]);
 
   const request = (planId?: string) => ({
     source: text.trim(),
@@ -46,6 +62,7 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
   });
 
   const look = async () => {
+    if (busy || !text.trim()) return;
     setBusy(true);
     setError("");
     try {
@@ -69,6 +86,7 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
   const install = async () => {
     if (!plan) return;
     setBusy(true);
+    onApplying?.(true);
     setError("");
     try {
       const out = await port.installPlugin(request(plan.planId));
@@ -78,12 +96,22 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
       setError(reason(e));
     } finally {
       setBusy(false);
+      onApplying?.(false);
     }
   };
 
   const pick = async () => {
-    const dir = await port.pickFolder();
-    if (dir) setText(dir);
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const dir = await port.pickFolder();
+      if (dir) setText(dir);
+    } catch (e) {
+      setError(reason(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   // An update has nothing to type: its source was recorded at install. Going
@@ -98,14 +126,23 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
   // you agree to install it. A tab has no path to fill it with, so nothing is
   // typed there and the box still takes an address.
   const [over, setOver] = useState(false);
-  const drop = useFileDrop((d) => d.paths[0] && setText(d.paths[0]), setOver);
+  const drop = useFileDrop((d) => !busy && d.paths[0] && setText(d.paths[0]), setOver);
 
   if (done) {
     return (
       <div className="addpkg" data-stage="done">
         <Outcome plan={done} />
         <div className="acts">
-          <button className="act" data-action="extensions.finish" onClick={onClose}>
+          {!done.ok && (
+            <button className="act" data-action={updating ? "extensions.inspect" : "extensions.back"} data-primary ref={apply} disabled={busy} onClick={() => {
+              setDone(null);
+              setPlan(null);
+              if (updating) void look();
+            }}>
+              {t(updating ? "重试" : "返回")}
+            </button>
+          )}
+          <button className="act" data-action="extensions.finish" ref={done.ok ? apply : undefined} onClick={onClose}>
             {t("完成")}
           </button>
         </div>
@@ -120,7 +157,7 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
     })).filter((g) => g.actions.length > 0);
     const gained = updating ? newlyGained(updating, plan.actions ?? []) : [];
     return (
-      <div className="addpkg" data-stage="confirm">
+      <div className="addpkg" data-stage="confirm" aria-busy={busy}>
         {/* What this version brings that the installed one did not. A package
             that was only skills last time and starts a process this time is
             the case the whole confirmation exists for. */}
@@ -131,17 +168,18 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
                 ? `${updating.name} ${updating.version} → ${version(plan.actions)}`
                 : t("重装 {name}", { name: updating.name })}
             </span>
-            <span className="why">{gained.length ? t("本版本新增：{list}", { list: gained.join("、") }) : t("没有新增的可执行内容。")}</span>
+            <span className="why">{gained.length ? t("本版本新增：{list}", { list: gained.join(language() === "zh" ? "、" : " · ") }) : t("没有新增的可执行内容。")}</span>
           </div>
         )}
         {groups.map((g) => (
           <section className="rgrp" key={g.level} data-lvl={g.level}>
-            <h3>{RISK_TITLE[g.level] ?? g.level}</h3>
+            <h3>{t(RISK_TITLE[g.level] ?? g.level)}</h3>
             {g.actions.map((a, i) => (
               <Candidate a={a} key={`${a.kind}:${a.name}:${i}`} />
             ))}
           </section>
         ))}
+        <PreviewCut shown={plan.previewTruncated} hidden={plan.hiddenActions} />
         {plan.warnings?.map((wmsg) => (
           <div className="why" key={wmsg}>
             {wmsg}
@@ -152,6 +190,7 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
           <button
             className="act"
             data-action={updating ? "extensions.cancel" : "extensions.back"}
+            disabled={busy}
             onClick={() => (updating ? onClose() : setPlan(null))}
           >
             {t(updating ? "取消" : "返回")}
@@ -159,6 +198,7 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
           <button
             className="act"
             data-action={updating ? "extensions.update" : "extensions.install"}
+            ref={apply}
             data-primary
             disabled={busy}
             onClick={() => void install()}
@@ -166,7 +206,7 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
             {t(busy ? (updating ? "更新中…" : "安装中…") : updating ? "更新" : "安装")}
           </button>
         </div>
-        {error && <div className="why">{error}</div>}
+        {error && <div className="why" role="alert">{error}</div>}
       </div>
     );
   }
@@ -175,13 +215,14 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
   // a failure there is about the recorded source, not about what was typed.
   if (updating) {
     return (
-      <div className="addpkg" data-stage="reading">
+      <div className="addpkg" data-stage="reading" aria-busy={busy}>
         <div className="find" data-lvl={error ? "err" : undefined}>
           <span className="t">{error ? t("无法读取 {name} 的来源", { name: updating.name }) : t("正在读取 {name} 的来源…", { name: updating.name })}</span>
           <span className="why">{error || updating.source}</span>
         </div>
         <div className="acts">
-          <button className="act" data-action="extensions.cancel" onClick={onClose}>
+          {error && <button className="act" data-action="extensions.inspect" data-primary ref={apply} disabled={busy} onClick={() => void look()}>{t("重试")}</button>}
+          <button className="act" data-action="extensions.cancel" ref={error ? undefined : apply} onClick={onClose}>
             {t(error ? "关掉" : "取消")}
           </button>
         </div>
@@ -190,22 +231,27 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
   }
 
   return (
-    <div className="addpkg" data-stage="paste" ref={drop} data-over={over ? "" : undefined}>
+    <div className="addpkg" data-stage="paste" ref={drop} data-over={over ? "" : undefined} aria-busy={busy}>
       <textarea
         className="paste"
+        aria-labelledby={sourceLabel}
         data-action-keydown="extensions.inspect"
         rows={3}
         autoFocus
         value={text}
+        disabled={busy}
         placeholder={PLACEHOLDER}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void look();
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            e.preventDefault();
+            void look();
+          }
         }}
       />
       <div className="acts">
-        <span className="note">{t("仓库地址，或将文件夹拖入此处")}</span>
-        <button className="act" data-action="extensions.pick-folder" onClick={() => void pick()}>
+        <span className="note" id={sourceLabel}>{t("仓库地址，或将文件夹拖入此处")}</span>
+        <button className="act" data-action="extensions.pick-folder" disabled={busy} onClick={() => void pick()}>
           {t("选文件夹")}
         </button>
         <button className="act" data-action="extensions.cancel" onClick={onClose}>
@@ -221,7 +267,18 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
           {t(busy ? "读取中…" : "查看内容")}
         </button>
       </div>
-      {error && <div className="why">{error}</div>}
+      {error && <div className="why" role="alert">{error}</div>}
+    </div>
+  );
+}
+
+export function PreviewCut({ shown, hidden }: { shown?: boolean; hidden?: number }) {
+  if (!shown && !hidden) return null;
+  return (
+    <div className="why" data-testid="preview-cut">
+      {hidden ? t("另有 {n} 项未显示；高风险项都已列出。", { n: hidden }) : null}
+      {hidden && shown ? " " : null}
+      {shown ? t("部分文字过长或含不可见字符，预览没有显示全部。") : null}
     </div>
   );
 }
@@ -230,7 +287,7 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
 // JSON. What the user needs is the same facts as rows they can scan, so the
 // structured counts are rendered here and the kernel's wording stays behind a
 // fold — where a reason this UI does not know about yet is still readable.
-function Candidate({ a }: { a: PluginAction }) {
+export function Candidate({ a }: { a: PluginAction }) {
   const meta = [a.version, a.manifestKind, a.transport].filter(Boolean).join(" · ");
   const runs = executes(a);
   const adds = contributes(a);
@@ -240,13 +297,21 @@ function Candidate({ a }: { a: PluginAction }) {
         <span className="nm">{a.name || a.kind}</span>
         {meta && <span className="meta">{meta}</span>}
       </div>
+      {a.kind === "plugin" && a.commit && (
+        <div className="risk">
+          <span className="lb">{t("已解析提交")}</span>
+          <span className="dt">{a.commit}</span>
+          <CopyButton text={a.commit} label={t("复制提交号")} iconOnly showFeedback />
+        </div>
+      )}
       {runs.map((r) => (
         <div className="risk" data-kind="shell" key={r.label}>
-          <span className="lb">{r.label}</span>
+          <span className="lb">{t(r.label)}</span>
           <span className="dt">{r.detail}</span>
-          {r.why && <span className="why">{r.why}</span>}
+          {r.why && <span className="why">{t(r.why)}</span>}
         </div>
       ))}
+      {a.mod && <ModPreviewBlock mod={a.mod} />}
       {adds.length > 0 && (
         <div className="risk">
           <span className="lb">{t("将添加")}</span>
@@ -266,6 +331,12 @@ function Candidate({ a }: { a: PluginAction }) {
           <span className="why">{s.reason}</span>
         </div>
       ))}
+      {a.previewTruncated && (
+        <div className="risk">
+          <span className="lb">{t("已截断")}</span>
+          <span className="dt">{t("部分文字")}</span>
+        </div>
+      )}
       {a.riskReasons?.length ? (
         <details className="reasons">
           <summary>{t("内核给出的判定（{n}）", { n: a.riskReasons.length })}</summary>
@@ -291,13 +362,13 @@ function executes(a: PluginAction): { label: string; detail: string; why?: strin
     });
   }
   if (a.runtime?.tools?.length) {
-    out.push({ label: "新增工具", detail: a.runtime.tools.join("、"), why: "agent 可以调用，每次调用照常经过权限确认" });
+    out.push({ label: "新增工具", detail: a.runtime.tools.join(language() === "zh" ? "、" : ", "), why: "agent 可以调用，每次调用照常经过权限确认" });
   }
   if (a.hookCount) {
-    out.push({ label: "自动化钩子", detail: `${a.hookCount} 条`, why: "在会话生命周期内自动执行" });
+    out.push({ label: "自动化钩子", detail: language() === "zh" ? t("{n} 条", { n: a.hookCount }) : plural(a.hookCount, "1 条钩子", "{n} 条钩子"), why: "在会话生命周期内自动执行" });
   }
   if (a.toolCount) {
-    out.push({ label: "外部服务", detail: `${a.toolCount} 个 MCP 服务`, why: "为 agent 提供的能力与内置工具等同" });
+    out.push({ label: "外部服务", detail: plural(a.toolCount, "1 个 MCP 服务", "{n} 个 MCP 服务"), why: "为 agent 提供的能力与内置工具等同" });
   }
   if (a.kind === "mcp" && a.command) {
     out.push({ label: "将启动", detail: [a.command, ...(a.args ?? [])].join(" ") });
@@ -318,46 +389,58 @@ function version(actions?: PluginAction[]): string {
 function newlyGained(current: PluginPackage, actions: PluginAction[]): string[] {
   const plugin = actions.find((a) => a.kind === "plugin");
   const out: string[] = [];
-  if (plugin?.runtime && !current.runtime) out.push("一个常驻进程");
+  if (plugin?.runtime && !current.runtime) out.push(t("一个常驻进程"));
   const tools = (plugin?.runtime?.tools ?? []).filter((name) => !current.runtime?.tools?.includes(name));
-  if (tools.length > 0) out.push(`工具 ${tools.join("、")}`);
+  if (tools.length > 0) out.push(t("工具 {names}", { names: tools.join(language() === "zh" ? "、" : ", ") }));
   const hooks = (plugin?.hookCount ?? 0) - (current.hooks?.length ?? 0);
-  if (hooks > 0) out.push(`${hooks} 条钩子`);
+  if (hooks > 0) out.push(plural(hooks, "一条钩子", "{n} 条钩子"));
   const servers = (plugin?.toolCount ?? 0) - (current.mcpServers?.length ?? 0);
-  if (servers > 0) out.push(`${servers} 个外部服务`);
+  if (servers > 0) out.push(plural(servers, "一个外部服务", "{n} 个外部服务"));
   // A separate MCP action installs a server of its own, outside the package.
   const standalone = actions.filter((a) => a.kind === "mcp").length;
-  if (standalone > 0) out.push(`${standalone} 个独立的 MCP 服务`);
+  if (standalone > 0) out.push(plural(standalone, "一个独立的 MCP 服务", "{n} 个独立的 MCP 服务"));
   return out;
 }
 
 function contributes(a: PluginAction): string[] {
   const parts: string[] = [];
-  const add = (n: number | undefined, unit: string) => {
-    if (n) parts.push(`${n} ${unit}`);
+  const add = (n: number | undefined, one: string, many: string) => {
+    if (n) parts.push(plural(n, one, many));
   };
-  add(a.skillCount, "个技能");
-  add(a.commandCount, "个命令");
-  add(a.agentCount, "个子代理");
-  add(a.promptCount, "个提示词");
-  add(a.themeCount, "套配色");
+  add(a.skillCount, "1 个技能", "{n} 个技能");
+  add(a.commandCount, "1 个命令", "{n} 个命令");
+  add(a.agentCount, "1 个子代理", "{n} 个子代理");
+  add(a.promptCount, "1 个提示词", "{n} 个提示词");
+  add(a.themeCount, "1 套配色", "{n} 套配色");
   return parts;
 }
 
 // "Written" and "running" are different outcomes: a reload refused mid-turn
 // leaves the package on disk and out of this session, and saying so is the
 // difference between waiting and re-installing.
-function Outcome({ plan }: { plan: PluginPlan }) {
-  const state = plan.reloadError ? "action_required" : plan.ok ? "ready" : "issue";
-  return (
+export function Outcome({ plan }: { plan: PluginPlan }) {
+  const state = !plan.ok ? "issue" : plan.reloadError ? "action_required" : "ready";
+  const failed = plan.actions?.filter((action) => action.status === "failed") ?? [];
+  return <>
     <div className="outcome" data-state={state}>
       <i className="pip" />
       <span className="nm">{plan.actions?.[0]?.name || t("安装")}</span>
       <span className="dt">
         {state === "ready" && t("装好了，下一轮就能用")}
-        {state === "action_required" && t("装好了，但这一轮还在跑：等它结束或新建会话后生效")}
-        {state === "issue" && (plan.error || plan.next || t("没装上"))}
+        {state === "action_required" && t("装好了，但运行时未重载：{reason}。请用「重载运行时」重试。", { reason: plan.reloadError! })}
+        {state === "issue" && (plan.error || (failed.length ? t("有项目未安装成功，原因见下方。") : plan.next || t("没装上")))}
       </span>
     </div>
-  );
+    {failed.map((action, i) => (
+      <div className="why" role="alert" key={`${action.kind}:${action.name}:${i}`}>
+        {action.name || action.kind}: {action.error || action.next || t("没装上")}
+        {action.error && action.next && <div>{action.next}</div>}
+      </div>
+    ))}
+    {state === "issue" && plan.reloadError && (
+      <div className="why" role="status">
+        {t("运行时未重载：{reason}。请用「重载运行时」重试。", { reason: plan.reloadError })}
+      </div>
+    )}
+  </>;
 }

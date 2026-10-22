@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	fileencoding "reasonix/internal/base/fileutil/encoding"
 	"reflect"
 	"runtime"
 	"slices"
@@ -130,6 +131,25 @@ func TestUICursorShapeNormalizes(t *testing.T) {
 		c.UI.CursorShape = tt.in
 		if got := c.UICursorShape(); got != tt.want {
 			t.Errorf("UICursorShape(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestUICommandMode(t *testing.T) {
+	c := Default()
+	for _, tt := range []struct {
+		in   string
+		want bool
+	}{
+		{"", false},
+		{"VI", true},
+		{" vi ", true},
+		{"emacs", false},
+		{"unknown", false},
+	} {
+		c.UI.CommandMode = tt.in
+		if got := c.UICommandMode(); got != tt.want {
+			t.Errorf("UICommandMode(%q) = %v, want %v", tt.in, got, tt.want)
 		}
 	}
 }
@@ -267,6 +287,7 @@ func TestDesktopConversationWidthNormalizes(t *testing.T) {
 		{"", "standard", false},
 		{"standard", "standard", false},
 		{" FULL ", "full", false},
+		{"full-all", "full-all", false},
 		{"wide", "standard", true},
 	} {
 		c := Default()
@@ -424,8 +445,8 @@ func TestSetAutoPlanRejectsRetiredModes(t *testing.T) {
 
 func TestSetDesktopDefaultToolApprovalMode(t *testing.T) {
 	c := Default()
-	if got := c.DesktopDefaultToolApprovalMode(); got != "auto" {
-		t.Fatalf("desktop default tool approval mode = %q, want built-in auto", got)
+	if got := c.DesktopDefaultToolApprovalMode(); got != "" {
+		t.Fatalf("desktop default tool approval mode = %q, want unset so the sandbox and trust decide", got)
 	}
 	for _, mode := range []string{"ask", "auto", "yolo"} {
 		if err := c.SetDesktopDefaultToolApprovalMode(mode); err != nil {
@@ -446,13 +467,13 @@ func TestSetDesktopDefaultToolApprovalMode(t *testing.T) {
 	}
 }
 
-func TestLoadForEditMissingDesktopApprovalDefaultsAuto(t *testing.T) {
+func TestLoadForEditMissingDesktopApprovalStaysUnset(t *testing.T) {
 	path := filepath.Join(testenv.TempDir(t), "config.toml")
 	if err := os.WriteFile(path, []byte("config_version = 4\n"), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	if got := LoadForEdit(path).DesktopDefaultToolApprovalMode(); got != "auto" {
-		t.Fatalf("missing desktop default tool approval mode = %q, want auto", got)
+	if got := LoadForEdit(path).DesktopDefaultToolApprovalMode(); got != "" {
+		t.Fatalf("missing desktop default tool approval mode = %q, want unset", got)
 	}
 }
 
@@ -519,13 +540,25 @@ func TestUpsertProvider(t *testing.T) {
 		t.Fatalf("multi-model add: %v", err)
 	}
 
+	// idle_timeout_seconds is bounded to [1s, 32767s]; 0 means "use the default".
+	for _, secs := range []int{0, 1, 32767} {
+		if err := c.UpsertProvider(ProviderEntry{
+			Name: "idle", Kind: "openai", BaseURL: "http://localhost:7777/v1", Model: "m",
+			IdleTimeoutSeconds: secs,
+		}); err != nil {
+			t.Fatalf("idle_timeout_seconds=%d rejected: %v", secs, err)
+		}
+	}
+
 	// Missing required fields error.
 	for _, bad := range []ProviderEntry{
-		{Kind: "openai", BaseURL: "u", Model: "m"},                                   // no name
-		{Name: "a", BaseURL: "u", Model: "m"},                                        // no kind
-		{Name: "a", Kind: "openai", Model: "m"},                                      // no base_url
-		{Name: "a", Kind: "openai", BaseURL: "u"},                                    // no model
-		{Name: "a", Kind: "openai", BaseURL: "u", Model: "m", APIKeyEnv: "grok-4.5"}, // invalid credential variable name
+		{Kind: "openai", BaseURL: "u", Model: "m"},                                       // no name
+		{Name: "a", BaseURL: "u", Model: "m"},                                            // no kind
+		{Name: "a", Kind: "openai", Model: "m"},                                          // no base_url
+		{Name: "a", Kind: "openai", BaseURL: "u"},                                        // no model
+		{Name: "a", Kind: "openai", BaseURL: "u", Model: "m", APIKeyEnv: "grok-4.5"},     // invalid credential variable name
+		{Name: "a", Kind: "openai", BaseURL: "u", Model: "m", IdleTimeoutSeconds: -1},    // below the floor
+		{Name: "a", Kind: "openai", BaseURL: "u", Model: "m", IdleTimeoutSeconds: 32768}, // above the ceiling
 	} {
 		if err := c.UpsertProvider(bad); err == nil {
 			t.Errorf("expected validation error for %+v", bad)
@@ -925,11 +958,11 @@ func TestRemoveProvider(t *testing.T) {
 	for i := range c.Providers {
 		c.Providers[i].APIKeyEnv = ""
 	}
-	if err := c.RemoveProvider(c.DefaultModel); err != nil || c.DefaultModel != "" {
+	if _, err := c.RemoveProvider(c.DefaultModel); err != nil || c.DefaultModel != "" {
 		t.Errorf("remove the default with no fallback: err=%v default=%q, want it removed and cleared", err, c.DefaultModel)
 	}
 	// Removing the planner provider clears planner_model.
-	if err := c.RemoveProvider("deepseek-pro"); err != nil {
+	if _, err := c.RemoveProvider("deepseek-pro"); err != nil {
 		t.Fatalf("remove planner provider: %v", err)
 	}
 	if c.Agent.PlannerModel != "" {
@@ -939,7 +972,7 @@ func TestRemoveProvider(t *testing.T) {
 		t.Error("provider not actually removed")
 	}
 	// Unknown name errors.
-	if err := c.RemoveProvider("ghost"); err == nil {
+	if _, err := c.RemoveProvider("ghost"); err == nil {
 		t.Error("expected error for unknown provider")
 	}
 }
@@ -1167,24 +1200,63 @@ func TestAutoStartPlugins(t *testing.T) {
 	}
 }
 
-func TestPluginResolvedTierDefaultsToBackground(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		tier string
-		want string
-	}{
-		{name: "empty", tier: "", want: "background"},
-		{name: "legacy lazy", tier: "lazy", want: "background"},
-		{name: "background", tier: "background", want: "background"},
-		{name: "eager", tier: "eager", want: "eager"},
-		{name: "unknown", tier: "startup", want: "background"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got := (PluginEntry{Name: "mcp", Command: "mcp-server", Tier: tc.tier}).ResolvedTier()
-			if got != tc.want {
-				t.Fatalf("ResolvedTier(%q) = %q, want %q", tc.tier, got, tc.want)
-			}
-		})
+func TestMCPAlwaysLoadOverrideWinsOverDeclaration(t *testing.T) {
+	declared := PluginEntry{Name: "ops", Load: "always"}
+	plain := PluginEntry{Name: "docs"}
+	odd := PluginEntry{Name: "odd", Load: "sometimes"}
+	c := Default()
+	if !c.MCPAlwaysLoad(declared) || c.MCPAlwaysLoad(plain) || c.MCPAlwaysLoad(odd) {
+		t.Fatal("without overrides the declaration decides, and an unknown mode is deferred")
+	}
+	if err := c.SetMCPLoad("ops", "deferred"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetMCPLoad("docs", "always"); err != nil {
+		t.Fatal(err)
+	}
+	if c.MCPAlwaysLoad(declared) || !c.MCPAlwaysLoad(plain) {
+		t.Fatal("an override must win over the declaration in both directions")
+	}
+	if err := c.SetMCPLoad("docs", "sometimes"); err == nil {
+		t.Fatal("an unknown mode must be refused, not stored")
+	}
+	if err := c.SetMCPLoad("ops", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !c.MCPAlwaysLoad(declared) {
+		t.Fatal("clearing the override must hand the decision back to the declaration")
+	}
+}
+
+func TestMCPLoadSurvivesARenderRoundTrip(t *testing.T) {
+	c := Default()
+	c.Plugins = []PluginEntry{{Name: "ops", Command: "ops-mcp", Load: "always", Source: MCPSourceUserConfig}}
+	if err := c.SetMCPLoad("docs server", "always"); err != nil {
+		t.Fatal(err)
+	}
+	var back Config
+	if _, err := toml.Decode(RenderTOMLForScope(c, RenderScopeUser), &back); err != nil {
+		t.Fatalf("decode rendered config: %v", err)
+	}
+	if len(back.Plugins) != 1 || back.Plugins[0].Load != MCPLoadAlways {
+		t.Fatalf("plugin load lost on render: %+v", back.Plugins)
+	}
+	if back.Tools.MCPLoad["docs server"] != MCPLoadAlways {
+		t.Fatalf("[tools.mcp_load] lost on render: %+v", back.Tools.MCPLoad)
+	}
+}
+
+func TestMCPJSONAlwaysLoadMapsToLoad(t *testing.T) {
+	entries, err := ParseMCPServersJSON([]byte(`{"mcpServers":{"ops":{"command":"ops-mcp","alwaysLoad":true},"docs":{"command":"docs-mcp"}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loads := map[string]string{}
+	for _, e := range entries {
+		loads[e.Name] = e.DeclaredMCPLoad()
+	}
+	if loads["ops"] != MCPLoadAlways || loads["docs"] != MCPLoadDeferred {
+		t.Fatalf("loads = %v", loads)
 	}
 }
 
@@ -1418,10 +1490,7 @@ effort = "max"
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadForRoot(root)
-	if err != nil {
-		t.Fatalf("LoadForRoot: %v", err)
-	}
+	cfg := approveWorkspacePrograms(t, root)
 	userProvider, ok := cfg.Provider("deepseek")
 	if !ok {
 		t.Fatalf("user deepseek provider missing: %+v", cfg.Providers)
@@ -1473,10 +1542,7 @@ api_key_env = "PROJECT_ONLY_KEY"
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadForRoot(root)
-	if err != nil {
-		t.Fatalf("LoadForRoot: %v", err)
-	}
+	cfg := approveWorkspacePrograms(t, root)
 	shared, ok := cfg.Provider("shared")
 	if !ok {
 		t.Fatalf("shared provider missing: %+v", cfg.Providers)
@@ -1518,7 +1584,7 @@ temperature = 0.8
 		t.Fatal(err)
 	}
 
-	changed, err := MigrateLegacyAgentStepLimitsForRoot(root)
+	changed, err := retiredKeyMigration(root, func(m RetiredKeyMigrations) RetiredKeyResult { return m.StepLimits })
 	if err != nil {
 		t.Fatalf("MigrateLegacyAgentStepLimitsForRoot: %v", err)
 	}
@@ -1562,7 +1628,7 @@ temperature = 0.8
 		t.Fatalf("migration removed independent bot.max_steps:\n%s", userRaw)
 	}
 
-	again, err := MigrateLegacyAgentStepLimitsForRoot(root)
+	again, err := retiredKeyMigration(root, func(m RetiredKeyMigrations) RetiredKeyResult { return m.StepLimits })
 	if err != nil {
 		t.Fatalf("second migration: %v", err)
 	}
@@ -1592,7 +1658,7 @@ protect_sensitive_files = true
 		t.Fatal(err)
 	}
 
-	changed, err := MigrateLegacyRedactToolOutputForRoot(root)
+	changed, err := retiredKeyMigration(root, func(m RetiredKeyMigrations) RetiredKeyResult { return m.RedactToolOutput })
 	if err != nil {
 		t.Fatalf("MigrateLegacyRedactToolOutputForRoot: %v", err)
 	}
@@ -1623,7 +1689,7 @@ protect_sensitive_files = true
 		t.Fatalf("migration removed an unrelated project setting:\n%s", projectRaw)
 	}
 
-	again, err := MigrateLegacyRedactToolOutputForRoot(root)
+	again, err := retiredKeyMigration(root, func(m RetiredKeyMigrations) RetiredKeyResult { return m.RedactToolOutput })
 	if err != nil {
 		t.Fatalf("second migration: %v", err)
 	}
@@ -1653,7 +1719,7 @@ reasoning_language = "zh"
 		t.Fatal(err)
 	}
 
-	changed, err := MigrateLegacyMemoryCompilerForRoot(root)
+	changed, err := retiredKeyMigration(root, func(m RetiredKeyMigrations) RetiredKeyResult { return m.MemoryCompiler })
 	if err != nil {
 		t.Fatalf("MigrateLegacyMemoryCompilerForRoot: %v", err)
 	}
@@ -1684,7 +1750,7 @@ reasoning_language = "zh"
 		t.Fatalf("migration removed an unrelated project setting:\n%s", projectRaw)
 	}
 
-	again, err := MigrateLegacyMemoryCompilerForRoot(root)
+	again, err := retiredKeyMigration(root, func(m RetiredKeyMigrations) RetiredKeyResult { return m.MemoryCompiler })
 	if err != nil {
 		t.Fatalf("second migration: %v", err)
 	}
@@ -1709,7 +1775,8 @@ func TestRetiredConfigMigrationRequiresConfigFileLock(t *testing.T) {
 	configEditLockTimeout = 30 * time.Millisecond
 	t.Cleanup(func() { configEditLockTimeout = previousTimeout })
 
-	changed, err := migrateLegacyMemoryCompilerFile(path)
+	changedKeys, err := migrateRetiredKeysFile(path, fileencoding.ReadFileUTF8, []retiredKey{retiredMemoryCompiler})
+	changed := len(changedKeys) == 1 && changedKeys[0]
 	if err == nil || changed {
 		t.Fatalf("migration while file lock held = (%v, %v), want unchanged lock error", changed, err)
 	}
@@ -1773,7 +1840,7 @@ temperature = 0.2
 		t.Fatal(err)
 	}
 
-	changed, err := MigrateLegacyMemoryCompilerForRoot(root)
+	changed, err := retiredKeyMigration(root, func(m RetiredKeyMigrations) RetiredKeyResult { return m.MemoryCompiler })
 	if err != nil {
 		t.Fatalf("MigrateLegacyMemoryCompilerForRoot: %v", err)
 	}
@@ -1981,10 +2048,7 @@ api_key_env = "PROJECT_KEY"
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadForRoot(root)
-	if err != nil {
-		t.Fatalf("LoadForRoot: %v", err)
-	}
+	cfg := approveWorkspacePrograms(t, root)
 	if _, ok := cfg.Provider("global"); !ok {
 		t.Fatal("runtime config should include user provider before saving")
 	}
@@ -2053,6 +2117,7 @@ func TestSaveToExistingProjectRemovesResetSkillOverrides(t *testing.T) {
 		{name: "excluded paths", key: "excluded_paths", set: func(c *Config) { c.Skills.ExcludedPaths = []string{"project-skills"} }, reset: func(c *Config) { c.Skills.ExcludedPaths = nil }},
 		{name: "disabled skills", key: "disabled_skills", set: func(c *Config) { c.Skills.DisabledSkills = []string{"review"} }, reset: func(c *Config) { c.Skills.DisabledSkills = nil }},
 		{name: "implicit invocation", key: "disable_implicit_invocation", set: func(c *Config) { c.Skills.DisableImplicitInvocation = true }, reset: func(c *Config) { c.Skills.DisableImplicitInvocation = false }},
+		{name: "suppress warnings", key: "suppress_warnings", set: func(c *Config) { c.Skills.SuppressWarnings = true }, reset: func(c *Config) { c.Skills.SuppressWarnings = false }},
 		{name: "max depth", key: "max_depth", set: func(c *Config) { c.Skills.MaxDepth = 2 }, reset: func(c *Config) { c.Skills.MaxDepth = 0 }},
 	}
 	for _, tt := range tests {
@@ -3217,4 +3282,10 @@ func TestDesktopThemeStyleRejectsTheRetiredLayoutName(t *testing.T) {
 	if got := c.DesktopThemeStyle(); got != "" {
 		t.Fatalf("theme style = %q, want empty", got)
 	}
+}
+
+// retiredKeyMigration runs every retired-key migration and projects one result.
+func retiredKeyMigration(root string, pick func(RetiredKeyMigrations) RetiredKeyResult) (bool, error) {
+	r := pick(processRoots().MigrateRetiredKeysForRoot(root))
+	return r.Changed, r.Err
 }

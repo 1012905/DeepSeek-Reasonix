@@ -20,7 +20,25 @@ type Manifest struct {
 	Platforms       map[string]Asset `json:"platforms"`                   // keyed by PlatformKey, e.g. "darwin-arm64"
 	NativePackages  map[string]Asset `json:"native_packages,omitempty"`   // optional OS package assets, e.g. linux-amd64 → .deb
 	Downloads       map[string]Asset `json:"downloads,omitempty"`         // optional signed human-download assets keyed by exact filename
+	Deltas          map[string]Delta `json:"deltas,omitempty"`            // optional chunked update per PlatformKey; see package delta
 }
+
+// Delta is one platform's chunked update: the signed, zstd-compressed index of
+// the release tree, and the store its chunks are fetched from. A client that
+// cannot use it falls back to the platform's full artifact.
+type Delta struct {
+	Index  Asset  `json:"index"`
+	Chunks string `json:"chunks"` // base URL; a chunk is Chunks + "/" + delta.ObjectName(hash)
+}
+
+// StudioMirror is the release mirror Studio's catalog and deltas live on.
+const StudioMirror = "https://dl.reasonix.io"
+
+// StudioChunks is the one chunk store every Studio release shares.
+const StudioChunks = StudioMirror + "/studio/chunks"
+
+// DeltaIndexName is a platform's index file inside a release's delta directory.
+const DeltaIndexName = "index.json.zst"
 
 // Asset is one platform's downloadable artifact plus the metadata the updater
 // needs to verify and report on it.
@@ -34,12 +52,33 @@ type Asset struct {
 	// New clients require "versioned-v1" for self-update and reject unknown
 	// values without changing the active install.
 	InstallLayout string `json:"install_layout,omitempty"`
+	// Fallback and FallbackSig publish the same bytes at a second address,
+	// tried once the first gives up. Clients that predate them read only URL.
+	Fallback    string `json:"fallback,omitempty"`
+	FallbackSig string `json:"fallback_sig,omitempty"`
+}
+
+// Sources is every address the artifact is published at, in the order to try.
+func (a Asset) Sources() []string { return sources(a.URL, a.Fallback) }
+
+// SigSources is Sources for the detached signature.
+func (a Asset) SigSources() []string { return sources(a.Sig, a.FallbackSig) }
+
+func sources(primary, fallback string) []string {
+	if fallback == "" || fallback == primary {
+		return []string{primary}
+	}
+	return []string{primary, fallback}
 }
 
 // PlatformKey is the map key used in Manifest.Platforms for the given OS/arch.
 // The updater calls CurrentPlatform; the manifest generator builds keys the same
 // way, so lookups always agree.
 func PlatformKey(goos, goarch string) string { return goos + "-" + goarch }
+
+// RPMPackageKey is the native_packages key of an .rpm. It is not PlatformKey:
+// that key already names the .deb, which every installed client reads.
+func RPMPackageKey(goos, goarch string) string { return PlatformKey(goos, goarch) + "-rpm" }
 
 // CurrentPlatform is PlatformKey for the running binary.
 func CurrentPlatform() string { return PlatformKey(runtime.GOOS, runtime.GOARCH) }

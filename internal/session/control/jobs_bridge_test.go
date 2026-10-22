@@ -62,7 +62,7 @@ func TestJobCompletionQueuesHostOriginItem(t *testing.T) {
 	}
 	select {
 	case <-held:
-	case <-time.After(2 * time.Second):
+	case <-time.After(testenv.Budget(t)):
 		t.Fatal("the continuation never reached dispatch")
 	}
 	st, err := c.ensureInbox()
@@ -92,22 +92,53 @@ func TestBackgroundJobWakesSessionThroughManager(t *testing.T) {
 	dir := testenv.TempDir(t)
 	runner := &inboxDispatchRunner{inputs: make(chan string, 4)}
 	jm := jobs.NewManager(event.Discard)
+	turnDone := make(chan event.Event, 4)
 	c := New(Options{
-		Runner: runner, Sink: event.Discard, Jobs: jm,
+		Runner: runner, Jobs: jm,
+		Sink: event.FuncSink(func(e event.Event) {
+			if e.Kind == event.TurnDone {
+				turnDone <- e
+			}
+		}),
 		SessionDir: dir, SessionPath: filepath.Join(dir, "session.jsonl"),
 	})
 	t.Cleanup(func() { c.Close(); c.autosaveWG.Wait() })
+	published := make(chan error, 1)
+	jm.SetCompletionObserver(publishedObserver{c, published})
 
 	j := jm.StartForSession(c.parentSessionID(), "task", "backend sweep",
 		func(context.Context, io.Writer) (string, error) { return "done", nil })
 
-	got := waitForInboxDispatch(t, runner)
+	// Each step below ends in an event the product always emits, so none of them
+	// races a clock against the fsyncs that queueing and opening a turn cost.
+	if err := <-published; err != nil {
+		t.Fatalf("the completion never reached the durable queue: %v", err)
+	}
+	var got string
+	select {
+	case got = <-runner.inputs:
+	case e := <-turnDone:
+		t.Fatalf("the woken turn ended before it reached the runner: %+v", e)
+	}
 	if !strings.Contains(got, j.ID) {
 		t.Fatalf("dispatched turn = %q, want it to mention %s", got, j.ID)
 	}
 	if note := jm.DrainCompletedNoteForSession(c.parentSessionID()); note != "" {
 		t.Errorf("note still queued after the wake-up: %q", note)
 	}
+}
+
+// publishedObserver hands each completion to the controller and reports the
+// result, which is the moment the job's own goroutine is done with it.
+type publishedObserver struct {
+	c    *Controller
+	done chan<- error
+}
+
+func (o publishedObserver) OnJobCompletion(ctx context.Context, ev jobs.CompletionEvent) error {
+	err := o.c.OnJobCompletion(ctx, ev)
+	o.done <- err
+	return err
 }
 
 // The same terminal event delivered twice is one continuation. Redelivery is
@@ -205,7 +236,7 @@ func TestJobCompletionSteersLiveTurnAsHost(t *testing.T) {
 	c.Submit("start something long")
 	select {
 	case <-prov.started:
-	case <-time.After(2 * time.Second):
+	case <-time.After(testenv.Budget(t)):
 		t.Fatal("the first provider round never started")
 	}
 
@@ -222,7 +253,7 @@ func TestJobCompletionSteersLiveTurnAsHost(t *testing.T) {
 
 	// Release the turn so the steer is consumed at the next round boundary.
 	release()
-	deadline := time.After(3 * time.Second)
+	deadline := time.After(testenv.Budget(t))
 	for {
 		if hostSteerInHistory(c.History(), "task-6") {
 			return
@@ -308,7 +339,7 @@ func TestJobBurstFoldsIntoOneContinuation(t *testing.T) {
 	}
 	select {
 	case <-held:
-	case <-time.After(2 * time.Second):
+	case <-time.After(testenv.Budget(t)):
 		t.Fatal("the first continuation never reached dispatch")
 	}
 	// An error is the contract with the manager: it keeps its own note, so the

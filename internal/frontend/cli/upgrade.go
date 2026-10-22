@@ -269,6 +269,16 @@ func upgradeCommand(args []string, version string) int {
 		return 0
 	}
 
+	return applyCLIRelease(c, rel, cur, latest)
+}
+
+func applyCLIRelease(c *http.Client, rel *ghRelease, cur, latest string) int {
+	var managed *managedInstallError
+	if errors.As(checkSelfReplaceable(), &managed) {
+		fmt.Fprintf(os.Stderr, "%s "+i18n.M.UpgradeManagedFmt+"\n", i18n.M.ErrorPrefix, managed.command)
+		return 1
+	}
+
 	// 5. Find the asset for the current platform.
 	base := fmt.Sprintf("reasonix-%s-%s", runtime.GOOS, runtime.GOARCH)
 	asset := findCLIPlatformAsset(rel, runtime.GOOS, runtime.GOARCH)
@@ -316,10 +326,21 @@ func upgradeCommand(args []string, version string) int {
 		fmt.Fprintf(os.Stderr, "%s "+i18n.M.UpgradeExtractFailed+"\n", i18n.M.ErrorPrefix, err)
 		return 1
 	}
+	// An install that has a page beside it keeps it in step with the kernel; the
+	// whole page is validated here, before anything on disk changes.
+	var page *pageTree
+	if pageDirIsLink() {
+		fmt.Println(i18n.M.UpgradePageLinked)
+	} else if installedPageDir() != "" {
+		if page, err = extractPage(archiveData, asset.Name); err != nil {
+			fmt.Fprintf(os.Stderr, "%s "+i18n.M.UpgradeExtractFailed+"\n", i18n.M.ErrorPrefix, err)
+			return 1
+		}
+	}
 
 	// 10. Replace the running binary.
 	fmt.Println(i18n.M.UpgradeApplying)
-	if err := replaceBinary(binary); err != nil {
+	if err := applyUpgrade(binary, page); err != nil {
 		fmt.Fprintf(os.Stderr, "%s "+i18n.M.UpgradeApplyFailed+"\n", i18n.M.ErrorPrefix, err)
 		return 1
 	}
@@ -674,7 +695,7 @@ func extractFromZip(data []byte, name string) ([]byte, error) {
 // The .old file is cleaned up best-effort (Windows may still hold a lock
 // on it; we hide it in that case).
 func replaceBinary(newBin []byte) error {
-	exe, err := os.Executable()
+	exe, err := upgradeExecutable()
 	if err != nil {
 		return fmt.Errorf("locate executable: %w", err)
 	}

@@ -33,7 +33,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"reasonix/internal/base/netclient"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/model/openai"
 )
@@ -43,7 +42,7 @@ import (
 // mid-stream) sends no RST, so scanner.Scan() would block forever. Generous on
 // purpose; live streams emit far more often. Stored per-client (client.idleTimeout)
 // so a test can shorten it without a shared global that races other watchdogs.
-const defaultStreamIdleTimeout = 120 * time.Second
+const defaultStreamIdleTimeout = provider.StreamIdleTimeout
 
 const (
 	// anthropicVersion is the required API version header value.
@@ -91,7 +90,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	}
 	requestURL, _ := cfg.Extra["request_url"].(string)
 	requestURL = strings.TrimSpace(requestURL)
-	if requestURL == "" {
+	if requestURL == "" || provider.EndpointOverrideRepeatsBase(requestURL, root, root+"/v1") {
 		requestURL = root + "/v1/messages"
 	}
 	officialDeepSeek := openai.IsDeepSeek(root)
@@ -144,17 +143,12 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		vision:           vision,
 		mimo:             provider.IsMiMoEndpoint(root),
 		webSearch:        webSearch,
-		headers:          cleanCustomHeaders(headers),
+		headers:          requestHeaders{custom: cleanCustomHeaders(headers), openCodeSession: provider.NewOpenCodeSessionID()},
 		authHeader:       authHeader,
 		defaultMaxTokens: maxOutputTokens,
 		http:             httpClient, // no overall timeout; lifecycle is ctx-driven
-		idleTimeout:      defaultStreamIdleTimeout,
+		idleTimeout:      provider.IdleTimeoutFromExtra(cfg.Extra),
 	}, nil
-}
-
-func newHTTPClient(cfg provider.Config) (*http.Client, error) {
-	spec, _ := cfg.Extra["proxy_spec"].(netclient.ProxySpec)
-	return netclient.NewHTTPClient(spec, netclient.TransportOptions{})
 }
 
 type client struct {
@@ -172,11 +166,11 @@ type client struct {
 	vision           bool   // model accepts image input — embed attached images as base64 image blocks
 	mimo             bool   // true for MiMo — upgrades legacy tuple schemas to Draft 2020-12
 	webSearch        bool   // enable server-side web_search tool (DeepSeek Anthropic API)
-	headers          map[string]string
+	headers          requestHeaders
 	authHeader       bool // send Authorization: Bearer instead of Anthropic's x-api-key header
 	defaultMaxTokens int
 	http             *http.Client
-	idleTimeout      time.Duration // SSE stall watchdog window; defaultStreamIdleTimeout unless a test overrides
+	idleTimeout      time.Duration // SSE stall watchdog window; per-provider idle_timeout_seconds, else defaultStreamIdleTimeout
 	authed           atomic.Bool   // a request has succeeded — gate transient-401 retry
 }
 
@@ -233,14 +227,13 @@ func (c *client) MissingToolCallReasoningWarningIdentity() string {
 	}, "\x00")
 }
 
-func (c *client) sendOpts(hint provider.RequestHint) provider.SendOptions {
+func (c *client) sendOpts() provider.SendOptions {
 	return provider.SendOptions{
-		BadRequestHint: hint,
-		Provider:       c.name,
-		KeyEnv:         c.keyEnv,
-		KeySource:      c.keySource,
-		KeyPresent:     c.apiKey() != "",
-		RetryAuth:      c.authed.Load(),
+		Provider:   c.name,
+		KeyEnv:     c.keyEnv,
+		KeySource:  c.keySource,
+		KeyPresent: c.apiKey() != "",
+		RetryAuth:  c.authed.Load(), HeaderTimeout: c.idleTimeout,
 	}
 }
 
@@ -269,6 +262,19 @@ func reservedCustomHeader(name string) bool {
 	default:
 		return false
 	}
+}
+
+// requestHeaders is what a client adds to every request beyond auth and
+// content negotiation, fixed for the client's lifetime.
+type requestHeaders struct {
+	custom          map[string]string
+	openCodeSession string
+}
+
+func (h requestHeaders) apply(req *http.Request) {
+	applyCustomHeaders(req.Header, h.custom)
+	provider.ApplyOpenCodeGoIdentity(req, h.openCodeSession)
+	provider.ApplyClientIdentity(req)
 }
 
 func applyCustomHeaders(h http.Header, headers map[string]string) {
@@ -309,10 +315,10 @@ func (c *client) Stream(ctx context.Context, req provider.Request) (<-chan provi
 			httpReq.Header.Set("x-api-key", c.apiKey())
 		}
 		httpReq.Header.Set("anthropic-version", anthropicVersion)
-		applyCustomHeaders(httpReq.Header, c.headers)
+		c.headers.apply(httpReq)
 		return httpReq, nil
 	}
-	resp, err := provider.SendWithRetry(requestCtx, c.http, c.sendOpts(wireReq.reasoningHint), newReq)
+	resp, err := provider.SendWithRetry(requestCtx, c.http, c.sendOpts(), newReq)
 	if err != nil {
 		return nil, provider.AnnotateToolSchemaError(err, req.Tools)
 	}
@@ -331,7 +337,6 @@ func (c *client) Stream(ctx context.Context, req provider.Request) (<-chan provi
 func (c *client) buildRequest(_ context.Context, req provider.Request) anthRequest {
 	var system []textBlock
 	var msgs []anthMessage
-	var reasoningHint provider.RequestHint
 
 	// appendBlocks adds blocks under role, merging into the previous message when
 	// it shares the role (keeps user/assistant strictly alternating).
@@ -346,7 +351,7 @@ func (c *client) buildRequest(_ context.Context, req provider.Request) anthReque
 		msgs = append(msgs, anthMessage{Role: role, Content: blocks})
 	}
 
-	for _, m := range provider.SanitizeToolPairing(req.Messages) {
+	for _, m := range provider.SanitizeToolPairing(provider.WithoutVideosAll(req.Messages, provider.VideoNotSentNote)) {
 		switch m.Role {
 		case provider.RoleSystem:
 			if m.Content != "" {
@@ -377,10 +382,8 @@ func (c *client) buildRequest(_ context.Context, req provider.Request) anthReque
 			appendBlocks("user", block)
 		case provider.RoleAssistant:
 			var blocks []contentBlock
-			if block, dropped := c.replayThinking(m); block != nil {
+			if block := c.replayThinking(m); block != nil {
 				blocks = append(blocks, *block)
-			} else if dropped {
-				reasoningHint = provider.HintDroppedToolCallReasoning
 			}
 			if m.Content != "" {
 				blocks = append(blocks, contentBlock{Type: "text", Text: m.Content})
@@ -442,13 +445,12 @@ func (c *client) buildRequest(_ context.Context, req provider.Request) anthReque
 		}
 	}
 	r := anthRequest{
-		Model:         c.model,
-		MaxTokens:     maxTokens,
-		System:        system,
-		Messages:      msgs,
-		Tools:         tools,
-		Stream:        true,
-		reasoningHint: reasoningHint,
+		Model:     c.model,
+		MaxTokens: maxTokens,
+		System:    system,
+		Messages:  msgs,
+		Tools:     tools,
+		Stream:    true,
 	}
 	// Extended thinking is provider-specific. DeepSeek defaults to enabled and
 	// accepts output_config.effort alongside its binary toggle. Adaptive reaches
@@ -486,7 +488,7 @@ func (c *client) buildRequest(_ context.Context, req provider.Request) anthReque
 			r.Thinking = &thinkingConfig{Type: t}
 		}
 	}
-	return r
+	return r.forSummary(req.Summary)
 }
 
 // readStream parses the Messages API SSE stream into Chunks. Text deltas emit live;
@@ -536,9 +538,8 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 		}
 	}()
 
-	send := func(chunk provider.Chunk) bool {
-		return sendChunk(ctx, out, chunk)
-	}
+	sink := &chunkSink{ctx: ctx, out: out}
+	send := sink.send
 
 	tools := map[int]*provider.ToolCall{} // tool_use blocks, keyed by content index
 	argBuckets := map[int]int{}           // last emitted 2KB progress bucket per block
@@ -602,10 +603,8 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 					if !send(provider.Chunk{Type: provider.ChunkToolCallStart, ToolCall: &provider.ToolCall{ID: tc.ID, Name: tc.Name}}) {
 						return
 					}
-				case "server_tool_use":
-					server = serverBlock{call: provider.ToolCall{ID: ev.ContentBlock.ID, Name: ev.ContentBlock.Name}, index: ev.Index}
-				case "web_search_tool_result":
-					if chunk, ok := webSearchChunk(server.call, ev.ContentBlock.ToolUseID, ev.Index, ev.ContentBlock.Content); ok && !send(chunk) {
+				default:
+					if !server.begin(ev.Index, ev.ContentBlock, send) {
 						return
 					}
 				}
@@ -633,9 +632,12 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 						return
 					}
 				}
+			case "web_search_tool_result_delta":
+				if !server.resultDelta(ev.Index, ev.Delta.WebSearchResults, send) {
+					return
+				}
 			case "input_json_delta":
-				if ev.Index == server.index { // no progress ticks: nothing is waiting on us
-					server.call.Arguments += ev.Delta.PartialJSON
+				if server.args(ev.Index, ev.Delta.PartialJSON) { // no progress ticks: nothing is waiting on us
 					continue
 				}
 				if tc := tools[ev.Index]; tc != nil {
@@ -669,7 +671,7 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 			// reclassify a complete response as interrupted.
 			goto finalize
 		case "error":
-			send(provider.Chunk{Type: provider.ChunkError, Err: anthropicStreamError(c.name, ev.Error)})
+			send(provider.Chunk{Type: provider.ChunkError, Err: anthropicStreamError(c.name, ev.Error, sink.emitted)})
 			return
 		}
 	}
@@ -678,7 +680,7 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 		return
 	}
 	if stalled.Load() {
-		err := fmt.Errorf("%s: stream stalled — no data for %s, connection likely dropped", c.name, idleTimeout)
+		err := fmt.Errorf("%s: stream stalled — no data for %s, connection likely dropped; raise idle_timeout_seconds to allow a longer silence", c.name, idleTimeout)
 		send(provider.Chunk{Type: provider.ChunkError, Err: provider.StreamInterrupt(err, provider.StreamInterruptIdleTimeout)})
 		return
 	}
@@ -719,20 +721,6 @@ finalize:
 	send(provider.Chunk{Type: provider.ChunkDone})
 }
 
-func sendChunk(ctx context.Context, out chan<- provider.Chunk, chunk provider.Chunk) bool {
-	select {
-	case out <- chunk:
-		return true
-	default:
-	}
-	select {
-	case <-ctx.Done():
-		return false
-	case out <- chunk:
-		return true
-	}
-}
-
 // mapStopReason translates Anthropic stop reasons to the OpenAI-style finish
 // reasons the agent already recognises (it surfaces abnormal ones like "length").
 func mapStopReason(s string) string {
@@ -759,16 +747,16 @@ type cacheControl struct {
 }
 
 type anthRequest struct {
-	Model         string               `json:"model"`
-	MaxTokens     int                  `json:"max_tokens"`
-	System        []textBlock          `json:"system,omitempty"`
-	Messages      []anthMessage        `json:"messages"`
-	Tools         []anthTool           `json:"tools,omitempty"`
-	Temperature   *float64             `json:"temperature,omitempty"`
-	Thinking      *thinkingConfig      `json:"thinking,omitempty"`
-	OutputConfig  *outputConfig        `json:"output_config,omitempty"`
-	Stream        bool                 `json:"stream"`
-	reasoningHint provider.RequestHint // host-side, never serialized: what this body left out
+	Model        string          `json:"model"`
+	MaxTokens    int             `json:"max_tokens"`
+	System       []textBlock     `json:"system,omitempty"`
+	Messages     []anthMessage   `json:"messages"`
+	Tools        []anthTool      `json:"tools,omitempty"`
+	ToolChoice   *toolChoice     `json:"tool_choice,omitempty"`
+	Temperature  *float64        `json:"temperature,omitempty"`
+	Thinking     *thinkingConfig `json:"thinking,omitempty"`
+	OutputConfig *outputConfig   `json:"output_config,omitempty"`
+	Stream       bool            `json:"stream"`
 }
 
 type thinkingConfig struct {
@@ -846,14 +834,8 @@ type streamEvent struct {
 	Message *struct {
 		Usage *wireUsage `json:"usage"`
 	} `json:"message"`
-	ContentBlock *struct {
-		Type      string          `json:"type"`
-		ID        string          `json:"id"`
-		Name      string          `json:"name"`
-		ToolUseID string          `json:"tool_use_id"` // web_search_tool_result
-		Content   json.RawMessage `json:"content"`     // web_search_tool_result: array of result objects
-	} `json:"content_block"`
-	Delta *struct {
+	ContentBlock *blockStart `json:"content_block"`
+	Delta        *struct {
 		Type             string          `json:"type"`         // text_delta | thinking_delta | signature_delta | input_json_delta | web_search_tool_result_delta
 		Text             string          `json:"text"`         // text_delta
 		Thinking         string          `json:"thinking"`     // thinking_delta

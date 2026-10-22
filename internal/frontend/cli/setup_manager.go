@@ -12,6 +12,7 @@ import (
 
 	"reasonix/internal/base/i18n"
 	"reasonix/internal/contract/config"
+	"reasonix/internal/frontend/termrender"
 )
 
 type providerSetupSession struct {
@@ -220,11 +221,10 @@ func (s *providerSetupSession) remove(name string) error {
 		return fmt.Errorf("remove provider: no provider %q", name)
 	}
 	before := providerSetupEntryPtr(*current)
-	if err := s.cfg.RemoveProvider(name); err != nil {
+	if _, err := s.cfg.RemoveProvider(name); err != nil {
 		return err
 	}
 	s.recordProviderMutation(name, before, nil)
-	s.removeProviderAccess(name)
 	if _, existed := s.originalProviders[name]; existed {
 		s.removed[name] = true
 	}
@@ -274,22 +274,6 @@ func (s *providerSetupSession) addProviderAccess(entries []config.ProviderEntry)
 		seen[name] = true
 	}
 	s.accessDeclared = true
-	s.recordAccessTransition(before)
-}
-
-func (s *providerSetupSession) removeProviderAccess(name string) {
-	name = strings.TrimSpace(name)
-	if name == "" || len(s.cfg.Desktop.ProviderAccess) == 0 {
-		return
-	}
-	before := append([]string(nil), s.cfg.Desktop.ProviderAccess...)
-	out := s.cfg.Desktop.ProviderAccess[:0]
-	for _, current := range s.cfg.Desktop.ProviderAccess {
-		if strings.TrimSpace(current) != name {
-			out = append(out, current)
-		}
-	}
-	s.cfg.Desktop.ProviderAccess = out
 	s.recordAccessTransition(before)
 }
 
@@ -473,7 +457,7 @@ func runProviderSetupManager(s *providerSetupSession, configPath, envPath string
 		s.recordProviderMutation(repaired[i].Name, before, providerSetupEntryPtr(repaired[i]))
 	}
 	for _, repair := range repairs {
-		fmt.Fprintf(os.Stderr, "  %s\n", dim(fmt.Sprintf(i18n.M.RepairedAPIKeyEnvFmt, repair.provider, repair.old, repair.new)))
+		fmt.Fprintf(os.Stderr, "  %s\n", termrender.Dim(fmt.Sprintf(i18n.M.RepairedAPIKeyEnvFmt, repair.provider, repair.old, repair.new)))
 	}
 	for {
 		items := providerManagerItems(s)
@@ -703,7 +687,7 @@ func (s *providerSetupSession) replayOperations(cfg *config.Config, accessDeclar
 				return &providerSetupConflictError{field: fmt.Sprintf("provider %q", operation.providerName)}
 			}
 			if operation.afterProvider == nil {
-				if err := cfg.RemoveProvider(operation.providerName); err != nil {
+				if _, err := cfg.RemoveProvider(operation.providerName); err != nil {
 					return fmt.Errorf("replay remove provider %q: %w", operation.providerName, err)
 				}
 			} else if err := cfg.UpsertProviderPreservingRuntime(*operation.afterProvider); err != nil {
@@ -818,8 +802,7 @@ func saveProviderSetupSession(s *providerSetupSession, configPath, envPath strin
 	for _, line := range s.summary() {
 		fmt.Println("  " + line)
 	}
-	in := bufio.NewScanner(os.Stdin)
-	answer := ask(in, os.Stdout, i18n.M.SetupConfirmSave, "Y/n")
+	answer := ask(bufio.NewScanner(os.Stdin), os.Stdout, i18n.M.SetupConfirmSave, "Y/n")
 	if answer == "n" || answer == "N" {
 		return setupManagerContinue
 	}
@@ -834,7 +817,7 @@ func saveProviderSetupSession(s *providerSetupSession, configPath, envPath strin
 		return 1
 	}
 	if configWritten {
-		fmt.Printf("\n%s %s\n", green("✓"), fmt.Sprintf(i18n.M.WroteFileFmt, displayPath(configPath)))
+		fmt.Printf("\n%s %s\n", termrender.Green("✓"), fmt.Sprintf(i18n.M.WroteFileFmt, displayPath(configPath)))
 	}
 	if lines := s.credentialLines(); len(lines) > 0 {
 		target, err := config.StoreCredentialLines(lines)
@@ -845,8 +828,8 @@ func saveProviderSetupSession(s *providerSetupSession, configPath, envPath strin
 		if target == "" {
 			target = envPath
 		}
-		fmt.Printf("%s %s\n", green("✓"), fmt.Sprintf(i18n.M.WroteFileFmt, displayPath(target)))
+		fmt.Printf("%s %s\n", termrender.Green("✓"), fmt.Sprintf(i18n.M.WroteFileFmt, displayPath(target)))
 	}
-	fmt.Printf("\n%s %s\n", accent("◆"), i18n.M.SetupComplete)
+	fmt.Printf("\n%s %s\n", termrender.Accent("◆"), i18n.M.SetupComplete)
 	return 0
 }

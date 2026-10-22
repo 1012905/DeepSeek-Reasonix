@@ -50,8 +50,23 @@ type reconnectingTransport struct {
 	mu       sync.Mutex
 	active   transport
 	progress map[string]*progressRegistration
+	notices  notificationRegistrations
 	dialing  chan struct{} // non-nil while a dial runs; closed when it settles
 	closed   bool
+}
+
+// notificationRegistrations are the connection-scoped notification handlers a
+// consumer registered. A replacement connection knows none of them, so they are
+// kept here and rebound onto it.
+type notificationRegistrations struct {
+	nextID uint64
+	byID   map[uint64]*notificationRegistration
+}
+
+type notificationRegistration struct {
+	method     string
+	handler    notificationFunc
+	unregister func()
 }
 
 // progressRegistration is one live progress token: the sink to re-attach to a
@@ -176,6 +191,7 @@ func (t *reconnectingTransport) renew(ctx context.Context, stale transport) (tra
 		}
 		t.active = next
 		t.rebindProgressLocked(next)
+		t.rebindNotificationsLocked(next)
 		t.mu.Unlock()
 		close(done)
 		if stale != nil {
@@ -183,6 +199,62 @@ func (t *reconnectingTransport) renew(ctx context.Context, stale transport) (tra
 		}
 		return next, nil
 	}
+}
+
+// restart replaces the connection with a fresh child that has not been
+// handshaken, for a caller that opens the session itself. The old child is shut
+// down first, so a server that holds a port or a file lock never meets its own
+// predecessor, and the dial is bounded by ctx as well as the startup budget.
+func (t *reconnectingTransport) restart(ctx context.Context) error {
+	for {
+		t.mu.Lock()
+		if t.closed {
+			t.mu.Unlock()
+			return errors.New("mcp connection is closed")
+		}
+		wait := t.dialing
+		if wait == nil {
+			break
+		}
+		t.mu.Unlock()
+		select {
+		case <-wait:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	stale := t.active
+	t.active = nil
+	done := make(chan struct{})
+	t.dialing = done
+	t.mu.Unlock()
+	if stale != nil {
+		stale.close()
+	}
+
+	budget := t.budget
+	if budget <= 0 {
+		budget = defaultStartTimeout
+	}
+	dialCtx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+	next, err := t.dial(t.lifeCtx, dialCtx)
+
+	t.mu.Lock()
+	t.dialing = nil
+	if err == nil && t.closed {
+		err = errors.New("mcp connection is closed")
+	}
+	if err == nil {
+		t.active = next
+		t.rebindProgressLocked(next)
+	}
+	t.mu.Unlock()
+	close(done)
+	if err != nil && next != nil {
+		next.close()
+	}
+	return err
 }
 
 // dialOne opens and hands over one replacement. It runs on the caller's
@@ -217,6 +289,18 @@ func (t *reconnectingTransport) setProtocolVersion(version string) {
 	}
 }
 
+// registerElicitCall reaches the connection live when the call starts; a call
+// that outlives its connection has lost the server that would ask.
+func (t *reconnectingTransport) registerElicitCall(ctx context.Context) func() {
+	t.mu.Lock()
+	router, ok := t.active.(elicitTransport)
+	t.mu.Unlock()
+	if !ok {
+		return func() {}
+	}
+	return router.registerElicitCall(ctx)
+}
+
 func (t *reconnectingTransport) registerProgress(token string, sink tool.ProgressFunc) func() {
 	if token == "" || sink == nil {
 		return func() {}
@@ -242,6 +326,48 @@ func (t *reconnectingTransport) registerProgress(token string, sink tool.Progres
 	}
 }
 
+// registerNotification outlives one connection: the handler is recorded here and
+// bound to whichever connection is active, so a server that reconnects and then
+// announces a change is still heard.
+func (t *reconnectingTransport) registerNotification(method string, handler notificationFunc) func() {
+	if method == "" || handler == nil {
+		return func() {}
+	}
+	registration := &notificationRegistration{method: method, handler: handler}
+	t.mu.Lock()
+	if t.notices.byID == nil {
+		t.notices.byID = map[uint64]*notificationRegistration{}
+	}
+	t.notices.nextID++
+	id := t.notices.nextID
+	t.notices.byID[id] = registration
+	if router, ok := t.active.(notificationTransport); ok {
+		registration.unregister = router.registerNotification(method, handler)
+	}
+	t.mu.Unlock()
+	return func() {
+		t.mu.Lock()
+		registration, ok := t.notices.byID[id]
+		delete(t.notices.byID, id)
+		t.mu.Unlock()
+		if ok && registration.unregister != nil {
+			registration.unregister()
+		}
+	}
+}
+
+// rebindNotificationsLocked moves live handlers onto a replacement connection.
+// Caller holds t.mu.
+func (t *reconnectingTransport) rebindNotificationsLocked(next transport) {
+	router, ok := next.(notificationTransport)
+	if !ok {
+		return
+	}
+	for _, registration := range t.notices.byID {
+		registration.unregister = router.registerNotification(registration.method, registration.handler)
+	}
+}
+
 // rebindProgressLocked moves live tokens onto a replacement so a call that
 // survives a reconnect keeps streaming. Caller holds t.mu.
 func (t *reconnectingTransport) rebindProgressLocked(next transport) {
@@ -254,13 +380,13 @@ func (t *reconnectingTransport) rebindProgressLocked(next transport) {
 	}
 }
 
-func (t *reconnectingTransport) startupStderr() string {
+func (t *reconnectingTransport) startupStderr() int {
 	active, err := t.current()
 	if err != nil {
-		return ""
+		return 0
 	}
 	if diagnostic, ok := active.(startupDiagnosticTransport); ok {
 		return diagnostic.startupStderr()
 	}
-	return ""
+	return 0
 }

@@ -18,6 +18,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"reasonix/internal/contract/provider"
 )
 
 // DefaultBaseURL is the identity provider every Reasonix service consumes.
@@ -199,6 +201,29 @@ func (c *Client) Me(ctx context.Context, token string) (*User, error) {
 	return out.User, nil
 }
 
+// FeedbackAssertion asks for a short-lived proof that the signed-in account is
+// this caller, in the form the feedback service verifies. It is minted per
+// action and never stored.
+func (c *Client) FeedbackAssertion(ctx context.Context, token string) (string, error) {
+	if strings.TrimSpace(token) == "" {
+		return "", ErrUnauthorized
+	}
+	var out struct {
+		Assertion string `json:"assertion"`
+	}
+	if err := c.do(ctx, http.MethodPost, "/me/feedback-assertion", token, struct{}{}, &out); err != nil {
+		var apiErr *Error
+		if errors.As(err, &apiErr) && (apiErr.Status == http.StatusUnauthorized || apiErr.Status == http.StatusForbidden) {
+			return "", ErrUnauthorized
+		}
+		return "", err
+	}
+	if out.Assertion == "" {
+		return "", errors.New("account: identity service returned no assertion")
+	}
+	return out.Assertion, nil
+}
+
 // Logout revokes the session server-side. A token the server already forgot is
 // not an error: the caller's goal is for it to stop working.
 func (c *Client) Logout(ctx context.Context, token string) error {
@@ -214,6 +239,18 @@ func (c *Client) Logout(ctx context.Context, token string) error {
 }
 
 func (c *Client) do(ctx context.Context, method, path, token string, body, out any) error {
+	return c.doLimit(ctx, method, path, token, body, out, 1<<20)
+}
+
+func (c *Client) doLimit(ctx context.Context, method, path, token string, body, out any, limit int64) error {
+	headers := map[string]string{}
+	if token != "" {
+		headers["Authorization"] = "Bearer " + token
+	}
+	return c.doHeaders(ctx, method, path, headers, body, out, limit)
+}
+
+func (c *Client) doHeaders(ctx context.Context, method, path string, headers map[string]string, body, out any, limit int64) error {
 	var reader io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)
@@ -229,18 +266,20 @@ func (c *Client) do(ctx context.Context, method, path, token string, body, out a
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+	for name, value := range headers {
+		req.Header.Set(name, value)
 	}
 	if c.UserAgent != "" {
 		req.Header.Set("User-Agent", c.UserAgent)
+	} else {
+		provider.ApplyClientIdentity(req)
 	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	payload, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	payload, err := io.ReadAll(io.LimitReader(resp.Body, limit))
 	if err != nil {
 		return err
 	}

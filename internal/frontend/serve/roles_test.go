@@ -7,9 +7,10 @@ import (
 	"testing"
 
 	"reasonix/internal/contract/config"
+	"reasonix/internal/session/control"
 )
 
-func readRoles(t *testing.T, base string) map[string]string {
+func readRoles(t *testing.T, base string) rolesResponse {
 	t.Helper()
 	resp, err := http.Get(base + "/roles")
 	if err != nil {
@@ -19,7 +20,7 @@ func readRoles(t *testing.T, base string) map[string]string {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET /roles = %d", resp.StatusCode)
 	}
-	var out map[string]string
+	var out rolesResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatal(err)
 	}
@@ -30,12 +31,12 @@ func readRoles(t *testing.T, base string) map[string]string {
 // model" rather than a missing answer.
 func TestRolesDefaultToTheMainModel(t *testing.T) {
 	s := newProviderEditServer(t)
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	roles := readRoles(t, srv.URL)
-	for _, name := range []string{"planner", "subagent", "guardian", "vision"} {
-		if got, ok := roles[name]; !ok || got != "" {
+	for _, name := range []string{"planner", "subagent", "guardian", "vision", "title"} {
+		if got, ok := roles.Roles[name]; !ok || got != "" {
 			t.Fatalf("role %q = %q (present %v), want an empty default", name, got, ok)
 		}
 	}
@@ -46,11 +47,14 @@ func TestRolesDefaultToTheMainModel(t *testing.T) {
 // hand-rolled TOML and the renderer had no line for it. A test that exercised
 // only subagent could not see that.
 func TestEveryRoleTheUIOffersSurvivesARoundTrip(t *testing.T) {
-	for _, role := range []string{"planner", "subagent", "guardian", "vision"} {
+	for _, role := range []string{"planner", "subagent", "guardian", "vision", "title"} {
 		t.Run(role, func(t *testing.T) {
 			s := newProviderEditServer(t)
+			if _, err := config.SetCredential("EXISTING_API_KEY", "test-key"); err != nil {
+				t.Fatal(err)
+			}
 			s.AllowProviderEdit()
-			srv := httptest.NewServer(s.Handler())
+			srv := httptest.NewServer(operatorHandler(s))
 			defer srv.Close()
 
 			resp := postProvider(t, srv.URL, "/roles", `{"role":"`+role+`","ref":"existing/model-a"}`)
@@ -59,7 +63,7 @@ func TestEveryRoleTheUIOffersSurvivesARoundTrip(t *testing.T) {
 				b, _ := readAllString(resp)
 				t.Fatalf("POST /roles %s = %d: %s", role, resp.StatusCode, b)
 			}
-			if got := readRoles(t, srv.URL)[role]; got != "existing/model-a" {
+			if got := readRoles(t, srv.URL).Roles[role]; got != "existing/model-a" {
 				t.Fatalf("%s = %q after assigning it", role, got)
 			}
 		})
@@ -69,7 +73,7 @@ func TestEveryRoleTheUIOffersSurvivesARoundTrip(t *testing.T) {
 func TestSetRoleWritesTheAssignmentAndReadsBack(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp := postProvider(t, srv.URL, "/roles", `{"role":"subagent","ref":"existing/model-a"}`)
@@ -79,7 +83,7 @@ func TestSetRoleWritesTheAssignmentAndReadsBack(t *testing.T) {
 		t.Fatalf("POST /roles = %d: %s", resp.StatusCode, b)
 	}
 
-	if got := readRoles(t, srv.URL)["subagent"]; got != "existing/model-a" {
+	if got := readRoles(t, srv.URL).Roles["subagent"]; got != "existing/model-a" {
 		t.Fatalf("subagent role = %q after assigning it", got)
 	}
 	cfg, err := config.Load()
@@ -96,7 +100,7 @@ func TestSetRoleWritesTheAssignmentAndReadsBack(t *testing.T) {
 	if clear.StatusCode != http.StatusNoContent {
 		t.Fatalf("clearing the role = %d", clear.StatusCode)
 	}
-	if got := readRoles(t, srv.URL)["subagent"]; got != "" {
+	if got := readRoles(t, srv.URL).Roles["subagent"]; got != "" {
 		t.Fatalf("subagent role = %q after clearing it", got)
 	}
 }
@@ -106,7 +110,7 @@ func TestSetRoleWritesTheAssignmentAndReadsBack(t *testing.T) {
 func TestSetRoleRejectsWhatItCannotResolve(t *testing.T) {
 	s := newProviderEditServer(t)
 	s.AllowProviderEdit()
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	for name, body := range map[string]string{
@@ -125,12 +129,36 @@ func TestSetRoleRejectsWhatItCannotResolve(t *testing.T) {
 // wait on the same grant provider edits do.
 func TestSetRoleIsRefusedUntilTheHostGrantsIt(t *testing.T) {
 	s := newProviderEditServer(t)
-	srv := httptest.NewServer(s.Handler())
+	srv := httptest.NewServer(operatorHandler(s))
 	defer srv.Close()
 
 	resp := postProvider(t, srv.URL, "/roles", `{"role":"planner","ref":"existing/model-a"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("POST /roles without the grant = %d, want 403", resp.StatusCode)
+	}
+}
+
+// Mid-turn the assignment is written and only the rebuild waits; the answer has
+// to say so by code, and the file has to hold what the answer claims.
+func TestSetRoleMidTurnIsSavedAndSaysSo(t *testing.T) {
+	srv := newRichProviderServerAs(t, func(c control.SessionAPI) control.SessionAPI { return midTurn{c} })
+
+	resp := postProvider(t, srv.URL, "/roles", `{"role":"subagent","ref":"rich/beta"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("POST /roles mid-turn = %d, want 409", resp.StatusCode)
+	}
+	var got struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Code != "runtime.saved_while_running" {
+		t.Fatalf("code = %q, want runtime.saved_while_running", got.Code)
+	}
+	if v := readRoles(t, srv.URL).Roles["subagent"]; v != "rich/beta" {
+		t.Fatalf("GET /roles subagent = %q, want the saved rich/beta", v)
 	}
 }

@@ -2,7 +2,23 @@ package update
 
 import (
 	"context"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// Why a download did not produce a verified cache, told apart because each asks
+// for something different: a retry, a report, or room on the disk.
+var (
+	ErrFetch  = errors.New("update: the release could not be downloaded")
+	ErrVerify = errors.New("update: the release failed its signature check")
+	ErrStore  = errors.New("update: the verified release could not be saved")
+	// ErrWithdrawn is a release the publisher pulled; naming it in a catalog row
+	// does not make it installable.
+	ErrWithdrawn = errors.New("update: the release was withdrawn")
 )
 
 // MaxSignatureSize caps a detached .minisig. A signature is a few hundred bytes;
@@ -23,6 +39,8 @@ const (
 type Report struct {
 	Bytes ProgressFunc       // fires as the artifact arrives
 	Phase func(phase string) // fires when the download moves between steps
+	// Stalled fires each time a connection that went quiet is dropped.
+	Stalled func()
 }
 
 func (r Report) phase(name string) {
@@ -35,15 +53,18 @@ func (r Report) phase(name string) {
 // catalog is the only way in: an entry names that release's <tag>/latest.json,
 // which never moves, so an older version resolves exactly as the newest does.
 func (u *Updater) ManifestFor(ctx context.Context, version string) (*Manifest, error) {
-	idx, err := FetchIndex(ctx, u.opts.HTTP, u.opts.IndexURL)
+	idx, err := FetchIndex(ctx, u.opts.HTTP, u.opts.IndexURL, u.opts.UserAgent)
 	if err != nil {
 		return nil, err
+	}
+	if w, gone := idx.WithdrawnVersion(version); gone {
+		return nil, fmt.Errorf("%w: %s", ErrWithdrawn, w.Version)
 	}
 	for _, e := range idx.Versions {
 		if !SameVersion(e.Version, version) {
 			continue
 		}
-		m, err := FetchManifestAt(ctx, u.opts.HTTP, e.Manifest)
+		m, err := FetchManifestAt(ctx, u.opts.HTTP, e.Manifest, u.opts.UserAgent)
 		if err != nil {
 			return nil, err
 		}
@@ -87,24 +108,25 @@ func (u *Updater) DownloadManifest(ctx context.Context, m *Manifest, r Report) (
 		}
 	}
 	t := u.transport()
+	t.OnStall = r.Stalled
 	r.phase(PhaseDownloading)
-	data, err := t.Download(ctx, asset.URL, asset.Size, r.Bytes)
+	data, err := u.fetchArtifact(ctx, t, asset, r.Bytes)
 	if err != nil {
-		return Cached{}, err
+		return Cached{}, fmt.Errorf("%w: %w", ErrFetch, err)
 	}
 	r.phase(PhaseVerifying)
-	sig, err := t.Fetch(ctx, asset.Sig, MaxSignatureSize)
+	sig, err := t.FetchFrom(ctx, asset.SigSources(), MaxSignatureSize)
 	if err != nil {
-		return Cached{}, err
+		return Cached{}, fmt.Errorf("%w: %w", ErrFetch, err)
 	}
 	// Signature first: the digest is only the manifest's claim about the bytes,
 	// and the manifest is only trustworthy once its artifact has been verified.
 	if err := verifyArtifact(data, sig); err != nil {
-		return Cached{}, err
+		return Cached{}, fmt.Errorf("%w: %w", ErrVerify, err)
 	}
 	c, err := cache.Save(m.Version, asset, data, kind, sig)
 	if err != nil {
-		return Cached{}, err
+		return Cached{}, fmt.Errorf("%w: %w", ErrStore, err)
 	}
 	r.phase(PhaseCached)
 	return c, nil
@@ -138,5 +160,60 @@ func (u *Updater) transport() Transport {
 		Fallback:       u.opts.Fallback,
 		UserAgent:      u.opts.UserAgent,
 		AttemptTimeout: u.opts.AttemptTimeout,
+		StallTimeout:   u.opts.StallTimeout,
 	}
+}
+
+// fetchArtifact downloads through a partial file in the cache, so an attempt
+// that times out, or a process that restarts, resumes rather than starting
+// over. The partial is named by the digest it must end with, so one left by
+// another release is never resumed into this one, and it is removed once
+// complete: from then on the cache, not the partial, holds the release.
+func (u *Updater) fetchArtifact(ctx context.Context, t Transport, asset Asset, onProgress ProgressFunc) ([]byte, error) {
+	if u.opts.CacheDir == "" || !isSHA256Hex(asset.SHA256) {
+		return t.DownloadFrom(ctx, asset.Sources(), asset.Size, onProgress)
+	}
+	if err := os.MkdirAll(u.opts.CacheDir, 0o700); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrStore, err)
+	}
+	name := partialPrefix + strings.ToLower(asset.SHA256) + partialSuffix
+	clearPartials(u.opts.CacheDir, name)
+	partial := filepath.Join(u.opts.CacheDir, name)
+	if err := t.DownloadFile(ctx, asset.Sources(), asset.Size, partial, onProgress); err != nil {
+		return nil, err
+	}
+	defer os.Remove(partial)
+	data, err := os.ReadFile(partial)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrStore, err)
+	}
+	return data, nil
+}
+
+const (
+	partialPrefix = "partial-"
+	partialSuffix = ".download"
+)
+
+// clearPartials removes every partial download but keep: only one release is
+// ever being fetched, and an abandoned one is dead weight on the disk.
+func clearPartials(dir, keep string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		n := e.Name()
+		if n != keep && strings.HasPrefix(n, partialPrefix) && strings.HasSuffix(n, partialSuffix) {
+			_ = os.Remove(filepath.Join(dir, n))
+		}
+	}
+}
+
+func isSHA256Hex(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(s)
+	return err == nil
 }

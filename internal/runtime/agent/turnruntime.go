@@ -3,6 +3,7 @@ package agent
 import (
 	"reasonix/internal/runtime/completion"
 	"reasonix/internal/runtime/taskpolicy"
+	"reasonix/internal/runtime/verdict"
 
 	"reasonix/internal/safety/evidence"
 )
@@ -26,6 +27,8 @@ type turnRuntime struct {
 	executorHandoff bool
 	input           string
 	workDurationMs  func() int64
+	// answeredMs is the run time at the last answer that asked for no tool.
+	answeredMs int64
 
 	// budget is the turn's spend axis: tokens, money, wall clock.
 	budget runBudget
@@ -62,8 +65,27 @@ type turnRuntime struct {
 	policy    taskpolicy.TaskPolicy
 	policySet bool
 
+	// jobSession scopes which background jobs count as this turn's writers.
+	jobSession string
+
 	// reviewWarnings are warn-level findings to surface in the final summary.
 	reviewWarnings []string
+	// lastReadiness is the verdict the turn last asked to stop under.
+	lastReadiness *finalReadinessCheck
+	// snapshot is the workspace as this turn found it; nil when unobserved.
+	snapshot *turnSnapshot
+	// outcome is the host-evidence verdict sealed for this turn; nil when no
+	// contract revision was in force to answer from.
+	outcome *verdict.Result
+	// uncountedCheckNoted marks that the model was told this turn why a command
+	// it ran was not a check; once a turn is enough to be learned.
+	uncountedCheckNoted bool
+	// watch counts rounds since this run last did something observable.
+	watch progressRun
+	// perseverationStrikes counts the cut-and-retry attempts this Run has spent
+	// on a detected generation loop. It lives here, not on the session, so the
+	// next user message starts fresh.
+	perseverationStrikes int
 }
 
 // pendingTurn is what someone outside the Run arms for the next one: a

@@ -37,11 +37,13 @@ type claudeMarketplaceURLSource struct {
 	Source string `json:"source"`
 	URL    string `json:"url"`
 	SHA    string `json:"sha"`
+	Path   string `json:"path"`
+	Ref    string `json:"ref"`
 }
 
 var fullGitSHA = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
 
-func (t *installSourceTool) localPluginPackageAction(req request, root string) (action, []string, error) {
+func (t *Tool) localPluginPackageAction(req request, root string) (action, []string, error) {
 	pkg, warnings, err := pluginpkg.ParseDir(root)
 	if err != nil {
 		return action{}, warnings, newErr(ErrManifestMissing, "%v", err)
@@ -50,7 +52,7 @@ func (t *installSourceTool) localPluginPackageAction(req request, root string) (
 	return act, warnings, err
 }
 
-func (t *installSourceTool) planGitHubPluginPackage(ctx context.Context, req request) ([]action, []string, error) {
+func (t *Tool) planGitHubPluginPackage(ctx context.Context, req request) ([]action, []string, error) {
 	src, ok := parseGitHubRepoSource(req.Source)
 	if !ok {
 		return nil, nil, newErr(ErrUnsupportedKind, "plugin URL %q is not a GitHub repository", req.Source)
@@ -82,7 +84,7 @@ func (t *installSourceTool) planGitHubPluginPackage(ctx context.Context, req req
 	warnings = append(warnings, marketplaceWarnings...)
 	if marketplaceErr != nil {
 		cleanup()
-		if errors.Is(marketplaceErr, ErrNoCompatibleCapabilities) {
+		if errors.Is(marketplaceErr, ErrNoCompatibleCapabilities) || errors.Is(marketplaceErr, ErrBinaryMissing) {
 			return nil, warnings, marketplaceErr
 		}
 		return nil, warnings, newErr(ErrManifestMissing, "no plugin manifest or supported Claude marketplace found in GitHub repository %s/%s: plugin: %v; marketplace: %v", src.Owner, src.Repo, err, marketplaceErr)
@@ -104,9 +106,9 @@ func (t *installSourceTool) planGitHubPluginPackage(ctx context.Context, req req
 	return actions, warnings, nil
 }
 
-func (t *installSourceTool) planClaudeMarketplace(ctx context.Context, req request, src githubRepoSource, root, commit string) ([]action, []string, error) {
+func (t *Tool) planClaudeMarketplace(ctx context.Context, req request, src githubRepoSource, root, commit string) ([]action, []string, error) {
 	manifestPath := filepath.Join(root, filepath.FromSlash(claudeMarketplaceManifest))
-	body, err := os.ReadFile(manifestPath)
+	body, err := readBounded(manifestPath)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -187,33 +189,15 @@ func (t *installSourceTool) planClaudeMarketplace(ctx context.Context, req reque
 			pluginSource = fmt.Sprintf("https://github.com/%s/%s/tree/%s/%s", src.Owner, src.Repo, branch, repoPath)
 			actionCommit = commit
 		} else {
-			var pinned claudeMarketplaceURLSource
-			if objectErr := json.Unmarshal(entry.Source, &pinned); objectErr != nil || pinned.Source != "url" || !fullGitSHA.MatchString(strings.TrimSpace(pinned.SHA)) {
-				if selected != "" {
-					return nil, warnings, fmt.Errorf("marketplace plugin %q: object source requires source=url, a GitHub URL, and a full 40-character SHA", entryName)
-				}
-				warnings = append(warnings, fmt.Sprintf("skipped Claude marketplace plugin %q: object source is not a pinned GitHub URL", entryName))
-				continue
-			}
-			if _, ok := parseGitHubRepoSource(strings.TrimSpace(pinned.URL)); !ok {
-				if selected != "" {
-					return nil, warnings, fmt.Errorf("marketplace plugin %q: pinned URL %q is not a GitHub repository", entryName, pinned.URL)
-				}
-				warnings = append(warnings, fmt.Sprintf("skipped Claude marketplace plugin %q: pinned URL is not a GitHub repository", entryName))
-				continue
-			}
-			var resolvedCommit string
-			pluginRoot, resolvedCommit, entryCleanup, err = t.pluginSource(ctx, pinned.URL, "copy")
+			pluginRoot, pluginSource, actionCommit, entryCleanup, err = t.marketplaceObjectSource(ctx, entry.Source)
 			if err != nil {
+				var unsupported *unsupportedMarketplaceObject
+				if selected == "" && errors.As(err, &unsupported) {
+					warnings = append(warnings, skippedMarketplaceWarning(entryName, unsupported.warning))
+					continue
+				}
 				return nil, warnings, fmt.Errorf("marketplace plugin %q: %w", entryName, err)
 			}
-			if !strings.EqualFold(resolvedCommit, pinned.SHA) {
-				if err := checkoutPluginCommit(ctx, pluginRoot, pinned.SHA); err != nil {
-					entryCleanup()
-					return nil, warnings, fmt.Errorf("marketplace plugin %q: %w", entryName, err)
-				}
-			}
-			pluginSource, actionCommit = strings.TrimSpace(pinned.URL), strings.ToLower(strings.TrimSpace(pinned.SHA))
 		}
 		pkg, pkgWarnings, err := pluginpkg.ParseDir(pluginRoot)
 		warnings = append(warnings, pkgWarnings...)
@@ -322,14 +306,23 @@ func currentPluginGitBranch(ctx context.Context, root string) string {
 // apply phases go through this single function so their views can never
 // diverge (the approval-contract guarantee); for git sources it also reports
 // the resolved commit SHA ("" for local directories).
-func (t *installSourceTool) pluginSource(ctx context.Context, source, mode string) (string, string, func(), error) {
+func (t *Tool) pluginSource(ctx context.Context, source, mode string) (string, string, func(), error) {
 	if t.preparePlugin != nil {
 		return t.preparePlugin(ctx, source, mode)
 	}
 	return t.preparePluginSource(ctx, source, mode)
 }
 
-func (t *installSourceTool) pluginPackageAction(req request, pkg pluginpkg.Package, source string) (action, error) {
+func (t *Tool) pluginPackageAction(req request, pkg pluginpkg.Package, source string) (action, error) {
+	var digest string
+	if modeForPlugin(req.Mode) == "copy" {
+		snapshot, hash, cleanup, err := snapshotPlugin(pkg)
+		if err != nil {
+			return action{}, err
+		}
+		defer cleanup()
+		pkg, digest = snapshot, hash
+	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		name = pkg.Manifest.Name
@@ -340,7 +333,7 @@ func (t *installSourceTool) pluginPackageAction(req request, pkg pluginpkg.Packa
 	}
 	skills, commands, hooks, mcp := pkg.CapabilityCounts()
 	agents := pkg.Inventory().Agents
-	if pkg.ManifestKind != "reasonix" && skills+commands+hooks+mcp+len(agents) == 0 {
+	if pkg.ManifestKind != "reasonix" && skills+commands+hooks+mcp+len(agents)+len(pkg.Manifest.Mods) == 0 {
 		return action{}, newErr(ErrNoCompatibleCapabilities, "plugin %q has no Reasonix-compatible capabilities; skipped: %v", name, pkg.Compatibility.Skipped)
 	}
 	agentNames := make([]string, 0, len(agents))
@@ -348,6 +341,7 @@ func (t *installSourceTool) pluginPackageAction(req request, pkg pluginpkg.Packa
 		agentNames = append(agentNames, agent.Name)
 	}
 	a := action{
+		treeDigest:          digest,
 		Kind:                "plugin",
 		Action:              "install_plugin_package",
 		Name:                name,
@@ -388,7 +382,12 @@ func (t *installSourceTool) pluginPackageAction(req request, pkg pluginpkg.Packa
 	}
 	if a.Runtime != nil {
 		a.RiskLevel = RiskHigh
-		a.RiskReasons = append(a.RiskReasons, "FULL TRUST: declares a runtime process ("+pluginpkg.RuntimeCommandLine(pkg.Manifest.Runtime)+") that runs inside Reasonix — it can read the full session and environment, bypass permissions, and operate this machine directly")
+		a.RiskReasons = append(a.RiskReasons, "FULL TRUST: declares a runtime process that runs inside Reasonix — it can read the full session and environment, bypass permissions, and operate this machine directly. Command: "+hostLiteral(pluginpkg.RuntimeCommandLine(pkg.Manifest.Runtime)))
+	}
+	if len(pkg.Manifest.Mods) > 0 {
+		a.RiskLevel = RiskHigh
+		a.RiskReasons = append(a.RiskReasons, "FULL TRUST: a Claude Code mod — its hooks module runs on this machine as you, with no sandbox, when \"Run Claude Code mods\" is on; the listing below is read from the module's syntax tree and is not a guarantee of what it does")
+		a.Mod = modPreview(pkg)
 	}
 	slices.Sort(a.Skills)
 	slices.Sort(a.Agents)
@@ -419,7 +418,7 @@ func modeForPlugin(mode string) string {
 	return "copy"
 }
 
-func (t *installSourceTool) applyInstallPluginPackage(ctx context.Context, req request, act *action) error {
+func (t *Tool) applyInstallPluginPackage(ctx context.Context, req request, act *action) error {
 	if t.reasonixHome == "" {
 		return newErr(ErrSourceUnreadable, "plugin install requires a Reasonix home directory")
 	}
@@ -427,6 +426,17 @@ func (t *installSourceTool) applyInstallPluginPackage(ctx context.Context, req r
 		return newErr(ErrInvalidManifest, "invalid plugin name %q", act.Name)
 	}
 	target := pluginpkg.InstallRoot(t.reasonixHome, act.Name)
+	if _, found, err := pluginpkg.FindInstalled(t.reasonixHome, act.Name); err != nil {
+		return err
+	} else if found && !req.Replace {
+		return newErr(ErrAlreadyExists, "plugin package already exists: %s; use replace=true to update it", act.Name)
+	}
+	var discardCopy func()
+	defer func() {
+		if discardCopy != nil {
+			discardCopy()
+		}
+	}()
 	sourceRoot, commit, cleanup := act.preparedRoot, act.Commit, func() {}
 	if sourceRoot == "" {
 		var err error
@@ -444,13 +454,27 @@ func (t *installSourceTool) applyInstallPluginPackage(ctx context.Context, req r
 			return newErr(ErrApprovalDenied, "plugin source changed since the approved plan (approved commit %s, found %s) and the approved snapshot could not be restored: %v; re-run without apply to review the new plan", act.Commit, commit, err)
 		}
 	}
+	if act.Mode == "copy" {
+		var err error
+		sourceRoot, err = act.copySource(sourceRoot)
+		if err != nil {
+			return err
+		}
+	}
+	if act.Mode == "link" {
+		resolved, err := filepath.EvalSymlinks(sourceRoot)
+		if err != nil {
+			return newErr(ErrSourceUnreadable, "%v", err)
+		}
+		sourceRoot = resolved
+	}
 	pkg, warnings, err := pluginpkg.ParseDir(sourceRoot)
 	if err != nil {
 		return newErr(ErrInvalidManifest, "%v", err)
 	}
 	if pkg.ManifestKind != "reasonix" {
 		skills, commands, hooks, mcp := pkg.CapabilityCounts()
-		if skills+commands+hooks+mcp+pkg.AgentCount() == 0 {
+		if skills+commands+hooks+mcp+pkg.AgentCount()+len(pkg.Manifest.Mods) == 0 {
 			return newErr(ErrInvalidManifest, "plugin %q no longer has any Reasonix-compatible capabilities", act.Name)
 		}
 	}
@@ -466,7 +490,11 @@ func (t *installSourceTool) applyInstallPluginPackage(ctx context.Context, req r
 			return err
 		}
 	} else {
-		if err := installCopiedPlugin(pkg, sourceRoot, target, req.Replace); err != nil {
+		if act.treeDigest == "" {
+			return newErr(ErrApprovalDenied, "copy installation requires an approved content snapshot")
+		}
+		target, discardCopy, err = installPluginCopy(pkg, sourceRoot, target, req.Replace, act.resolvedSource, act.treeDigest)
+		if err != nil {
 			return err
 		}
 	}
@@ -483,9 +511,18 @@ func (t *installSourceTool) applyInstallPluginPackage(ctx context.Context, req r
 	if act.Mode == "link" {
 		installed.Root = sourceRoot
 	}
-	if err := pluginpkg.Upsert(t.reasonixHome, installed); err != nil {
-		return err
+	var publishErr error
+	if act.Mode == "link" {
+		publishErr = pluginpkg.Upsert(t.reasonixHome, installed)
+	} else {
+		publishErr = pluginpkg.UpsertValidated(t.reasonixHome, installed, func() error {
+			return verifyPluginDigest(target, act.treeDigest)
+		})
 	}
+	if publishErr != nil {
+		return publishErr
+	}
+	discardCopy = nil
 	act.Target = target
 	act.ManifestKind = pkg.ManifestKind
 	act.Version = pkg.Manifest.Version
@@ -499,7 +536,7 @@ func (t *installSourceTool) applyInstallPluginPackage(ctx context.Context, req r
 	return nil
 }
 
-func (t *installSourceTool) preparePluginSource(ctx context.Context, source, mode string) (string, string, func(), error) {
+func (t *Tool) preparePluginSource(ctx context.Context, source, mode string) (string, string, func(), error) {
 	source = strings.TrimSpace(source)
 	if after, ok := strings.CutPrefix(source, "git:github.com/"); ok {
 		source = "https://github.com/" + after
@@ -521,6 +558,9 @@ func (t *installSourceTool) preparePluginSource(ctx context.Context, source, mod
 				_ = os.RemoveAll(tmp)
 				return "", "", func() {}, err
 			}
+			if commit == "" && fullGitSHA.MatchString(src.Branch) {
+				commit = strings.ToLower(src.Branch)
+			}
 			root, err := pluginRootFromClone(tmp, src.Path)
 			if err != nil {
 				_ = os.RemoveAll(tmp)
@@ -529,8 +569,11 @@ func (t *installSourceTool) preparePluginSource(ctx context.Context, source, mod
 			return root, commit, func() { _ = os.RemoveAll(tmp) }, nil
 		}
 		cloneURL := fmt.Sprintf("https://github.com/%s/%s.git", src.Owner, src.Repo)
+		// --branch takes a ref name, never an object id, so a commit-pinned
+		// source clones the default branch and then fetches its own commit.
+		pinned := fullGitSHA.MatchString(src.Branch)
 		args := []string{"clone", "--depth=1"}
-		if src.Branch != "" {
+		if src.Branch != "" && !pinned {
 			args = append(args, "--branch", src.Branch)
 		}
 		args = append(args, cloneURL, tmp)
@@ -538,6 +581,12 @@ func (t *installSourceTool) preparePluginSource(ctx context.Context, source, mod
 		if out, err := cmd.CombinedOutput(); err != nil {
 			_ = os.RemoveAll(tmp)
 			return "", "", func() {}, newErr(ErrSourceUnreadable, "git clone failed: %v: %s", err, strings.TrimSpace(string(out)))
+		}
+		if pinned {
+			if err := checkoutPluginCommit(ctx, tmp, src.Branch); err != nil {
+				_ = os.RemoveAll(tmp)
+				return "", "", func() {}, newErr(ErrSourceUnreadable, "%v", err)
+			}
 		}
 		commit := ""
 		rev := pluginGitCommand(ctx, "-C", tmp, "rev-parse", "HEAD")
@@ -600,9 +649,9 @@ func verifyCopiedCapabilities(src pluginpkg.Package, target string) error {
 	is, ic, ih, im := installed.CapabilityCounts()
 	sa, ia := src.AgentCount(), installed.AgentCount()
 	if ss != is || sc != ic || sh != ih || sm != im || sa != ia {
-		return newErr(ErrInvalidManifest,
+		return &hostFactError{sentinel: ErrInvalidManifest, facts: fmt.Sprintf(
 			"installed copy resolves to %d skills / %d agents / %d commands / %d hooks / %d MCP servers but the approved plan counted %d/%d/%d/%d/%d — the package likely uses symlinks copy mode cannot materialize safely; retry with mode=link or fix the package layout",
-			is, ia, ic, ih, im, ss, sa, sc, sh, sm)
+			is, ia, ic, ih, im, ss, sa, sc, sh, sm)}
 	}
 	return nil
 }
@@ -633,40 +682,22 @@ func pluginGitCommand(ctx context.Context, args ...string) *exec.Cmd {
 // installCopiedPlugin copies sourceRoot into a staging directory next to
 // target, verifies the staged tree resolves to the capability set the plan
 // approved, and only then swaps it into place with a backup-protected rename.
-// Any failure before the swap — copy error, capability mismatch — leaves an
-// existing installation completely intact, so a bad update can never destroy
-// the working version it was meant to replace.
-func installCopiedPlugin(pkg pluginpkg.Package, sourceRoot, target string, replace bool) error {
+// Any failure before the swap leaves an existing installation completely
+// intact, so a bad update can never destroy the working version it was meant
+// to replace.
+func installCopiedPlugin(pkg pluginpkg.Package, sourceRoot, target string, replace bool, approvedRoot string, expected ...string) error {
 	if _, err := os.Lstat(target); err == nil && !replace {
 		return newErr(ErrAlreadyExists, "plugin package already exists at %s; retry with replace=true to update it", target)
 	}
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return err
-	}
-	staging, err := os.MkdirTemp(filepath.Dir(target), "."+filepath.Base(target)+".staging-")
+	staging, err := stagePluginCopy(pkg, sourceRoot, target, approvedRoot, expected...)
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(staging)
-	if err := copyDir(sourceRoot, staging); err != nil {
-		return err
-	}
-	// Fail closed when the copied tree resolves to a different capability set
-	// than the plan the user approved — e.g. a symlink copyDir could not
-	// materialize safely. A silent gap here would install less than reviewed.
-	if err := verifyCopiedCapabilities(pkg, staging); err != nil {
-		return err
-	}
-	if err := os.Chmod(staging, 0o755); err != nil { // MkdirTemp creates 0700
-		return err
-	}
-	// Swap staged tree into place. The backup rename keeps the previous
-	// install restorable until the new tree has landed; both renames stay on
-	// one filesystem (same parent dir), so each is atomic. The backup name
-	// derives from the staging dir: dot-prefixed and randomized, it can never
-	// pass IsValidName, so it cannot collide with a sibling plugin's install
-	// dir (plugin names may legally contain dots, e.g. "foo.pre-replace") and
-	// needs no pre-cleanup that could delete such a neighbor.
+	// The backup name derives from the staging dir: dot-prefixed and randomized,
+	// it can never pass IsValidName, so it cannot collide with a sibling
+	// plugin's install dir (plugin names may legally contain dots) and needs no
+	// pre-cleanup that could delete such a neighbor.
 	backup := staging + ".old"
 	hadOld := false
 	if _, err := os.Lstat(target); err == nil {
@@ -702,7 +733,7 @@ func replaceSymlink(target, sourceRoot string, replace bool) error {
 	return os.Symlink(sourceRoot, target)
 }
 
-func (t *installSourceTool) applyRemovePluginPackage(_ request, act *action) error {
+func (t *Tool) applyRemovePluginPackage(_ request, act *action) error {
 	installed, ok, err := pluginpkg.Remove(t.reasonixHome, act.Name)
 	if err != nil || !ok {
 		return err
@@ -720,11 +751,42 @@ func (t *installSourceTool) applyRemovePluginPackage(_ request, act *action) err
 			}
 		}
 	}
+	if filepath.IsAbs(installed.Root) {
+		return removePluginSymlink(pluginpkg.InstallRoot(t.reasonixHome, installed.Name), root)
+	}
 	pluginsDir := pluginpkg.PluginsDir(t.reasonixHome)
 	if rel, err := filepath.Rel(pluginsDir, root); err == nil && rel != "." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." {
 		if err := os.RemoveAll(root); err != nil {
 			return err
 		}
 	}
+	removeSupersededPluginCopies(t.reasonixHome, pluginsDir, installed.Name)
 	return nil
+}
+
+func removePluginSymlink(target, source string) error {
+	info, err := os.Lstat(target)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		return nil
+	}
+	linked, err := os.Readlink(target)
+	if err != nil {
+		return err
+	}
+	if filepath.Clean(linked) != filepath.Clean(source) {
+		return nil
+	}
+	return os.Remove(target)
+}
+
+// skippedMarketplaceWarning keeps the sentence whole and shows the reason as a
+// literal: it can carry text from the marketplace's own source.
+func skippedMarketplaceWarning(entry, reason string) string {
+	return fmt.Sprintf("skipped Claude marketplace plugin %q: %s", entry, hostLiteral(reason))
 }

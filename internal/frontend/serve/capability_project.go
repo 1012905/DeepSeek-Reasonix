@@ -42,15 +42,20 @@ func (s *Server) mcpForProject(w http.ResponseWriter, root string) {
 func (s *Server) skillsForProject(w http.ResponseWriter, root string) {
 	view := control.InspectProject(root)
 	entries := make([]skillEntry, 0, len(view.Skills))
+	sources := loadSkillSources()
 	for _, row := range view.Skills {
 		switchScope := ""
 		if row.HasOverride {
 			switchScope = string(row.SwitchScope)
 		}
+		slashName := row.Skill.SlashName()
+		if row.Skill.DisableUserInvocation {
+			slashName = ""
+		}
 		entries = append(entries, skillEntry{
 			SwitchScope: switchScope,
 			Name:        row.Skill.Name,
-			SlashName:   row.Skill.SlashName(),
+			SlashName:   slashName,
 			Description: row.Skill.Description,
 			Scope:       string(row.Skill.Scope),
 			Plugin:      row.Skill.Plugin,
@@ -60,8 +65,10 @@ func (s *Server) skillsForProject(w http.ResponseWriter, root string) {
 			Model:       row.Skill.Model,
 			Effort:      row.Skill.Effort,
 			AllowedURI:  row.Skill.AllowedTools,
-			Manual:      strings.EqualFold(strings.TrimSpace(row.Skill.Invocation), "manual"),
-			Enabled:     row.Enabled,
+			License:     row.Skill.License, Compatibility: row.Skill.Compatibility, Metadata: row.Skill.Metadata,
+			Manual:  row.Skill.DisableModelInvocation || strings.EqualFold(strings.TrimSpace(row.Skill.Invocation), "manual"),
+			Enabled: row.Enabled,
+			Source:  sources.of(row.Skill.Name, string(row.Skill.Scope), row.Skill.Path),
 		})
 	}
 	writeJSON(w, map[string]any{

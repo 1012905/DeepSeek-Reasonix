@@ -80,6 +80,7 @@ type e2eFactory struct {
 	tool       tool.Tool
 	policy     permission.Policy
 	sessionDir string
+	window     int
 }
 
 func (f *e2eFactory) SessionDir() string { return f.sessionDir }
@@ -88,7 +89,7 @@ func (f *e2eFactory) NewSession(_ context.Context, p SessionParams) (*control.Co
 	reg := tool.NewRegistry()
 	reg.Add(f.tool)
 	executor := agent.New(f.prov, reg, sessionstore.NewSession("you are a test agent"),
-		agent.Options{MaxSteps: 5}, p.Sink)
+		agent.Options{MaxSteps: 5, ContextWindow: f.window}, p.Sink)
 	return control.New(control.Options{
 		Runner:     executor,
 		Executor:   executor,
@@ -193,13 +194,11 @@ func TestE2EToolTurnAndPersistence(t *testing.T) {
 	}
 
 	// Persistence: a transcript path was returned and the turn is on disk.
-	if pr.TranscriptPath == nil {
-		t.Fatal("no transcriptPath returned")
+	transcript := promptTranscript(t, resp.Result)
+	if !strings.HasPrefix(transcript, dir) {
+		t.Errorf("transcriptPath %q not under session dir %q", transcript, dir)
 	}
-	if !strings.HasPrefix(*pr.TranscriptPath, dir) {
-		t.Errorf("transcriptPath %q not under session dir %q", *pr.TranscriptPath, dir)
-	}
-	data, err := os.ReadFile(*pr.TranscriptPath)
+	data, err := os.ReadFile(transcript)
 	if err != nil {
 		t.Fatalf("read transcript: %v", err)
 	}
@@ -298,7 +297,7 @@ func TestE2ESessionListResumeAndDelete(t *testing.T) {
 	}
 
 	client1, stop1 := startServer(t, mkFactory())
-	client1.call(t, "initialize", InitializeParams{ProtocolVersion: 1})
+	client1.call(t, "initialize", InitializeParams{ProtocolVersion: 1, ClientCapabilities: statusUpdatesCaps})
 	newResp := client1.call(t, "session/new", SessionNewParams{Cwd: cwd})
 	var nr SessionNewResult
 	if err := json.Unmarshal(newResp.Result, &nr); err != nil || nr.SessionID == "" {
@@ -313,15 +312,12 @@ func TestE2ESessionListResumeAndDelete(t *testing.T) {
 	if err := json.Unmarshal(promptResp.Result, &pr); err != nil {
 		t.Fatalf("prompt result: %v", err)
 	}
-	if pr.TranscriptPath == nil {
-		t.Fatal("prompt did not return a transcript path")
-	}
-	transcript := *pr.TranscriptPath
+	transcript := promptTranscript(t, promptResp.Result)
 	stop1()
 
 	client2, stop2 := startServer(t, mkFactory())
 	defer stop2()
-	client2.call(t, "initialize", InitializeParams{ProtocolVersion: 1})
+	client2.call(t, "initialize", InitializeParams{ProtocolVersion: 1, ClientCapabilities: statusUpdatesCaps})
 	listResp := client2.call(t, "session/list", SessionListParams{Cwd: cwd})
 	var lr SessionListResult
 	if err := json.Unmarshal(listResp.Result, &lr); err != nil {
@@ -345,11 +341,7 @@ func TestE2ESessionListResumeAndDelete(t *testing.T) {
 	if resumeResp.Error != nil {
 		t.Fatalf("session/resume errored: %+v", resumeResp.Error)
 	}
-	select {
-	case n := <-client2.notifs:
-		t.Fatalf("session/resume replayed an unexpected notification: %+v", n)
-	default:
-	}
+	assertResumeReplaysNoTranscript(t, client2, nr.SessionID, cwd)
 
 	deleteResp := client2.call(t, "session/delete", SessionDeleteParams{SessionID: nr.SessionID})
 	if deleteResp.Error != nil {
@@ -525,6 +517,9 @@ func TestE2EApprovalRoundTrip(t *testing.T) {
 		if pr.ToolCall.Kind != "edit" {
 			t.Errorf("permission kind = %q, want edit", pr.ToolCall.Kind)
 		}
+		if pr.ToolCall.Name != "writeit" {
+			t.Errorf("permission tool name = %q, want the tool's own name beside its title", pr.ToolCall.Name)
+		}
 		if !strings.Contains(pr.ToolCall.Title, "writeit") {
 			t.Errorf("permission title = %q, want it to mention writeit", pr.ToolCall.Title)
 		}
@@ -636,4 +631,74 @@ func (t blockingTool) Execute(ctx context.Context, _ json.RawMessage) (string, e
 	case <-t.release:
 		return "released", nil
 	}
+}
+
+// assertResumeReplaysNoTranscript holds the resume invariant: session metadata
+// may be published after the response, but no history notification may be.
+func assertResumeReplaysNoTranscript(t *testing.T, c *rpcClient, sessionID, cwd string) {
+	t.Helper()
+	metadataKinds := map[string]bool{"available_commands_update": true, "usage_update": true}
+	var sawStatus bool
+	check := func(n frame) {
+		switch n.Method {
+		case sessionMCPStatusUpdateMethod:
+			var status ReasonixMCPStatus
+			if err := json.Unmarshal(n.Params, &status); err != nil {
+				t.Fatalf("resume MCP status: %v", err)
+			}
+			if status.SchemaVersion != mcpStatusSchemaVersion || status.SessionID != sessionID || status.Servers == nil {
+				t.Fatalf("resume MCP status = %+v, want schema %d for %s with a servers list", status, mcpStatusSchemaVersion, sessionID)
+			}
+			sawStatus = true
+		case "session/update":
+			if kind := updateKind(t, n); !metadataKinds[kind] {
+				t.Fatalf("session/resume replayed transcript update %q: %s", kind, n.Params)
+			}
+		default:
+			t.Fatalf("session/resume sent unexpected notification %q", n.Method)
+		}
+	}
+	deadline := time.After(testenv.Budget(t))
+	for !sawStatus {
+		select {
+		case n := <-c.notifs:
+			check(n)
+		case <-deadline:
+			t.Fatal("session/resume did not publish its MCP status")
+		}
+	}
+	if resp := c.call(t, "session/list", SessionListParams{Cwd: cwd}); resp.Error != nil {
+		t.Fatalf("session/list barrier: %+v", resp.Error)
+	}
+	for {
+		select {
+		case n := <-c.notifs:
+			check(n)
+		default:
+			return
+		}
+	}
+}
+
+// promptTranscript reads the transcript path a session/prompt result carries
+// under _meta["reasonix.io"], and fails if it also appears at the top level,
+// where the ACP schema allows no such member.
+func promptTranscript(t *testing.T, result json.RawMessage) string {
+	t.Helper()
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(result, &raw); err != nil {
+		t.Fatalf("prompt result: %v", err)
+	}
+	if _, ok := raw["transcriptPath"]; ok {
+		t.Errorf("transcriptPath at the top level of %s", result)
+	}
+	var meta struct {
+		Reasonix struct {
+			TranscriptPath string `json:"transcriptPath"`
+		} `json:"reasonix.io"`
+	}
+	if err := json.Unmarshal(raw["_meta"], &meta); err != nil || meta.Reasonix.TranscriptPath == "" {
+		t.Fatalf("no _meta transcriptPath in %s (%v)", result, err)
+	}
+	return meta.Reasonix.TranscriptPath
 }

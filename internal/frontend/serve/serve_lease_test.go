@@ -55,7 +55,7 @@ func TestResumeReadsASessionAnotherRuntimeHolds(t *testing.T) {
 		t.Fatalf("seed lease on active: %v", err)
 	}
 	server.SetSessionLeases(leases)
-	srv := httptest.NewServer(server.Handler())
+	srv := httptest.NewServer(operatorHandler(server))
 	defer srv.Close()
 
 	body, err := json.Marshal(map[string]string{"path": held})
@@ -105,7 +105,7 @@ func TestResumeMovesSessionLease(t *testing.T) {
 		t.Fatalf("seed lease on active: %v", err)
 	}
 	server.SetSessionLeases(leases)
-	srv := httptest.NewServer(server.Handler())
+	srv := httptest.NewServer(operatorHandler(server))
 	defer srv.Close()
 
 	body, err := json.Marshal(map[string]string{"path": next})
@@ -204,7 +204,7 @@ func TestConcurrentResumesKeepControllerAndLeaseAligned(t *testing.T) {
 		t.Fatalf("seed lease on active: %v", err)
 	}
 	server.SetSessionLeases(leases)
-	srv := httptest.NewServer(server.Handler())
+	srv := httptest.NewServer(operatorHandler(server))
 	defer srv.Close()
 	client := &http.Client{Timeout: 10 * time.Second}
 
@@ -254,10 +254,10 @@ func TestConcurrentResumesKeepControllerAndLeaseAligned(t *testing.T) {
 	}
 }
 
-// TestConcurrentResumeAndForkKeepAlignment interleaves /resume with /fork —
-// the two handlers rotate the active path through different code paths — and
+// TestConcurrentResumeAndNewKeepAlignment interleaves /resume with /new — the
+// two handlers rotate the active path through different code paths — and
 // asserts the same controller/lease alignment invariant.
-func TestConcurrentResumeAndForkKeepAlignment(t *testing.T) {
+func TestConcurrentResumeAndNewKeepAlignment(t *testing.T) {
 	dir := testenv.TempDir(t)
 	active := filepath.Join(dir, "active.jsonl")
 	target := filepath.Join(dir, "target.jsonl")
@@ -274,7 +274,7 @@ func TestConcurrentResumeAndForkKeepAlignment(t *testing.T) {
 		t.Fatalf("seed lease on active: %v", err)
 	}
 	server.SetSessionLeases(leases)
-	srv := httptest.NewServer(server.Handler())
+	srv := httptest.NewServer(operatorHandler(server))
 	defer srv.Close()
 	client := &http.Client{Timeout: 10 * time.Second}
 
@@ -293,8 +293,7 @@ func TestConcurrentResumeAndForkKeepAlignment(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for range 15 {
-			payload, _ := json.Marshal(map[string]any{"turn": 0, "name": ""})
-			resp, err := client.Post(srv.URL+"/fork", "application/json", strings.NewReader(string(payload)))
+			resp, err := client.Post(srv.URL+"/new", "application/json", strings.NewReader("{}"))
 			if err != nil {
 				errs <- err
 				return
@@ -312,7 +311,7 @@ func TestConcurrentResumeAndForkKeepAlignment(t *testing.T) {
 		close(done)
 		close(errs)
 	}()
-	waitServeLeaseDone(t, done, "concurrent resume/fork posts", 20*time.Second)
+	waitServeLeaseDone(t, done, "concurrent resume/new posts", 20*time.Second)
 	for err := range errs {
 		if err != nil {
 			t.Fatal(err)
@@ -351,7 +350,7 @@ func TestInterleavedResumesForcedThroughBindWindow(t *testing.T) {
 		t.Fatalf("seed lease on active: %v", err)
 	}
 	server.SetSessionLeases(leases)
-	srv := httptest.NewServer(server.Handler())
+	srv := httptest.NewServer(operatorHandler(server))
 	defer srv.Close()
 	client := &http.Client{Timeout: 10 * time.Second}
 

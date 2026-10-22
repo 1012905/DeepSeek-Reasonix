@@ -40,6 +40,14 @@ func (r Roots) userConfigPath() string {
 
 func (r Roots) userConfigDir() string { return r.Home() }
 
+// UserConfigPath is this binding's user config.toml.
+func (r Roots) UserConfigPath() string { return r.userConfigPath() }
+
+// UserConfigLoadPath is the user file a load actually reads: the primary path
+// when it exists, else the legacy one. A reader of one table of it must use this
+// so it and the full loader agree which file is authoritative.
+func (r Roots) UserConfigLoadPath() string { return r.userConfigLoadPath() }
+
 // Home is the Reasonix home this binding resolves to.
 func (r Roots) Home() string { return r.Dir(RootHome) }
 
@@ -293,8 +301,44 @@ func ReasonixHomeDir() string { return processRoots().Home() }
 // RemoteStateDir is local state for the remote-SSH module (the managed
 // known_hosts file, cached host metadata): <Reasonix home>/remote. Routed
 // through the home resolver so REASONIX_HOME isolation holds.
-func RemoteStateDir() string {
-	home := processRoots().Home()
+func RemoteStateDir() string { return processRoots().RemoteStateDir() }
+
+// ScheduleDir is where the scheduled-runs store lives: machine-wide, under the
+// state root, and never inside a project.
+func (r Roots) ScheduleDir() string {
+	dir := r.userSupportDir()
+	if strings.TrimSpace(dir) == "" {
+		return ""
+	}
+	return filepath.Join(dir, "schedules")
+}
+
+// SandboxDir holds the Windows sandbox's record of the folders it has granted. It
+// is the user's, under the state root, and never inside a project.
+func (r Roots) SandboxDir() string {
+	dir := r.userSupportDir()
+	if strings.TrimSpace(dir) == "" {
+		return ""
+	}
+	return filepath.Join(dir, "sandbox")
+}
+
+// PeersDir is where sessions on this machine leave messages for one another:
+// machine-wide, under the state root beside the sessions, and never inside a
+// project. Runtime sandboxes deny reading it, because its files are other
+// sessions' words.
+func (r Roots) PeersDir() string {
+	dir := r.userSupportDir()
+	if strings.TrimSpace(dir) == "" {
+		return ""
+	}
+	return filepath.Join(dir, "peers")
+}
+
+// RemoteStateDir is <home>/remote under these roots. A serve launched over SSH
+// keeps its launch token there, so runtime sandboxes deny reading it.
+func (r Roots) RemoteStateDir() string {
+	home := r.Home()
 	if strings.TrimSpace(home) == "" {
 		return ""
 	}
@@ -316,8 +360,12 @@ func RemoteKnownHostsPath() string {
 // missing tool-call thinking recovery gate (#7059): <Reasonix home>/state. The
 // legacy name preserves callers and the existing state-file contract. Routed
 // through the home resolver so REASONIX_HOME isolation holds.
-func MissingReasoningWarnStateDir() string {
-	home := processRoots().Home()
+func MissingReasoningWarnStateDir() string { return processRoots().MissingReasoningWarnStateDir() }
+
+// MissingReasoningWarnStateDir is the recovery gate's state directory under
+// this binding's home.
+func (r Roots) MissingReasoningWarnStateDir() string {
+	home := r.Home()
 	if strings.TrimSpace(home) == "" {
 		return ""
 	}
@@ -338,11 +386,21 @@ func RepairMutationLockDir() string {
 	return joinRoot(storageRootDir(RootLocks), "repair-mutation-locks")
 }
 
+// MemoryLockDir stores one mutation lock per memory store directory, keyed by
+// that directory's absolute path. It follows the locks root for the same reason
+// the repair locks do: two instances sharing a memory directory must converge.
+func MemoryLockDir() string {
+	return joinRoot(storageRootDir(RootLocks), "memory-store-locks")
+}
+
 // DeliveryWorktreeDir is durable storage for user-visible isolated Delivery
 // workspaces. Explicit state/home overrides remain authoritative. Windows uses
 // LocalAppData by default so large Git worktrees do not roam with the user's
 // profile; other platforms keep using Reasonix state storage.
-func DeliveryWorktreeDir() string { return processRoots().Dir(RootWorktrees) }
+func DeliveryWorktreeDir() string { return processRoots().DeliveryWorktreeDir() }
+
+// DeliveryWorktreeDir is the worktree root this binding resolves to.
+func (r Roots) DeliveryWorktreeDir() string { return r.Dir(RootWorktrees) }
 
 // UserCredentialsPath is the reasonix-owned global .env file under Reasonix
 // home. It is the single source for provider credentials saved by Reasonix, so
@@ -427,7 +485,11 @@ func ProjectSessionDir(workspaceRoot string) string {
 	if abs, err := filepath.Abs(root); err == nil {
 		root = abs
 	}
-	return filepath.Join(base, "projects", WorkspaceSlug(root), "sessions")
+	slug := WorkspaceSlug(root)
+	if !filepath.IsLocal(slug) {
+		return ""
+	}
+	return filepath.Join(base, "projects", slug, "sessions")
 }
 
 // WorkspaceSlug flattens an absolute workspace path into the directory name
@@ -593,10 +655,7 @@ func SourcePathForRoot(root string) string { return processRoots().SourcePathFor
 // binding.
 func (r Roots) SourcePathForRoot(root string) string {
 	root = resolveRoot(root)
-	projectTOML := "reasonix.toml"
-	if root != "." {
-		projectTOML = filepath.Join(root, "reasonix.toml")
-	}
+	projectTOML := ProjectConfigPath(root)
 	if _, err := os.Stat(projectTOML); err == nil {
 		return projectTOML
 	}
@@ -606,4 +665,33 @@ func (r Roots) SourcePathForRoot(root string) string {
 		}
 	}
 	return ""
+}
+
+// projectConfigFile is the project config filename, resolved against the
+// project root.
+const projectConfigFile = "reasonix.toml"
+
+// ProjectConfigPaths returns project config candidates in precedence order.
+func ProjectConfigPaths(root string) []string {
+	root = resolveRoot(root)
+	return []string{filepath.Join(root, projectConfigFile), filepath.Join(root, ".reasonix", projectConfigFile)}
+}
+
+// ProjectConfigPath selects an existing project config, or the root-level
+// creation target. Only absence permits fallback; broken links and access
+// errors remain attached to the higher-priority path. Probes are confined to
+// the workspace even when .reasonix is a symlink.
+func ProjectConfigPath(root string) string {
+	paths := ProjectConfigPaths(root)
+	dir, err := os.OpenRoot(resolveRoot(root))
+	if err != nil {
+		return paths[0]
+	}
+	defer dir.Close()
+	for i, name := range []string{projectConfigFile, filepath.Join(".reasonix", projectConfigFile)} {
+		if _, err := dir.Lstat(name); !os.IsNotExist(err) {
+			return paths[i]
+		}
+	}
+	return paths[0]
 }

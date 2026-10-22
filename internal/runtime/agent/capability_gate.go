@@ -52,7 +52,7 @@ func (a *Agent) CapabilityAudit() *capability.Audit {
 	return a.capabilityAudit
 }
 
-func (a *Agent) noteCapabilityInvocation(toolName string, args json.RawMessage, callErr error) {
+func (a *Agent) noteCapabilityInvocation(toolName string, args json.RawMessage, target tool.Tool, callErr error) {
 	if a == nil || a.capabilityLedger == nil {
 		return
 	}
@@ -70,6 +70,11 @@ func (a *Agent) noteCapabilityInvocation(toolName string, args json.RawMessage, 
 		}
 	}
 	id := capabilityIDFromToolCall(toolName, args)
+	if id == "" {
+		if binding, ok := tool.MCPBindingFor(target); ok {
+			id = binding.CapabilityID
+		}
+	}
 	if id == "" {
 		return
 	}
@@ -114,25 +119,8 @@ func capabilityIDFromToolCall(toolName string, args json.RawMessage) string {
 		}
 		_ = json.Unmarshal(args, &p)
 		return strings.TrimSpace(p.CapabilityID)
-	default:
-		if server, raw, ok := splitMCP(toolName); ok {
-			return "mcp-tool:" + server + "/" + raw
-		}
 	}
 	return ""
-}
-
-func splitMCP(name string) (server, raw string, ok bool) {
-	const prefix = "mcp__"
-	if !strings.HasPrefix(name, prefix) {
-		return "", "", false
-	}
-	rest := name[len(prefix):]
-	parts := strings.SplitN(rest, "__", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", false
-	}
-	return parts[0], parts[1], true
 }
 
 // capabilityGateFailure is checked during final readiness for Delivery.
@@ -214,6 +202,9 @@ func (a *Agent) reviewGateFailure() string {
 		// file or run git diff/status) still applies via finalReadinessCheck.
 		return ""
 	}
+	if msg := a.carriedReviewFailure(); msg != "" {
+		return msg
+	}
 	baseline, ok := a.task.ledger.UnreviewedMutationBaseline()
 	if !ok {
 		return ""
@@ -275,15 +266,8 @@ func (a *Agent) reviewObligationFailure(baseline, freshness int, paths []string)
 		if !hasReviewTool && !hasSecurityTool {
 			return "high-risk changes require review and security_review tools after the latest mutation"
 		}
-		okR, blockR, _ := a.task.ledger.HasStructuredReviewAfter(evidence.ReviewKindReview, freshness, paths)
-		if !okR || blockR {
-			return "high-risk changes require review with review_report after the latest mutation" +
-				a.reviewProofHint(evidence.ReviewKindReview) + reviewCoverageHint(paths)
-		}
-		okS, blockS, _ := a.task.ledger.HasStructuredReviewAfter(evidence.ReviewKindSecurity, freshness, paths)
-		if !okS || blockS {
-			return "high-risk changes require security_review with review_report after the latest mutation" +
-				a.reviewProofHint(evidence.ReviewKindSecurity) + reviewCoverageHint(paths)
+		if owed := a.unmetReviewKinds(freshness, paths); len(owed) > 0 {
+			return a.reviewDemand(owed[0], paths)
 		}
 	}
 	return ""

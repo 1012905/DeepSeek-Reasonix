@@ -1,14 +1,9 @@
 import { useRef, useState } from "react";
 import { t } from "../i18n";
+import { reason } from "../i18n/kernel";
 import type { AccountState, AgentPort } from "../port/port";
 
-// Nothing here gates the agent, so the panel says what an account is for before
-// it offers one: a local tool asking to log in reads as "it wants to upload my
-// code" unless you answer that first.
-//
-// state is App's, not this panel's. Fetching its own opened on null and drew
-// the signed-out branch for a round trip, which is how a click aimed at 登录
-// landed on 退出 when the answer arrived mid-reach.
+// App owns the account read so the panel and sidebar show the same state.
 export function Account({ port, state, unread, reload }: { port: AgentPort; state: AccountState | null; unread?: string; reload: () => void }) {
   const [code, setCode] = useState<{ userCode: string; uri: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -22,10 +17,11 @@ export function Account({ port, state, unread, reload }: { port: AgentPort; stat
     cancelled.current = false;
     try {
       const grant = await port.accountLogin();
-      setCode({ userCode: grant.userCode, uri: grant.verificationUriComplete || grant.verificationUri });
+      const uri = grant.verificationUriComplete || grant.verificationUri;
+      setCode({ userCode: grant.userCode, uri });
       // The approval page opens in the real browser: a window with no address
       // bar cannot be checked, and the password manager lives there anyway.
-      window.open(grant.verificationUriComplete || grant.verificationUri, "_blank", "noopener");
+      await port.openExternal(uri);
       const deadline = Date.now() + grant.expiresIn * 1000;
       let wait = Math.max(grant.interval, 1) * 1000;
       while (!cancelled.current && Date.now() < deadline) {
@@ -39,9 +35,9 @@ export function Account({ port, state, unread, reload }: { port: AgentPort; stat
         }
         if (res.slowDown) wait += 5000;
       }
-      if (!cancelled.current) setError("这次登录请求已过期，再试一次。");
+      if (!cancelled.current) setError(t("这次登录请求已过期，再试一次。"));
     } catch (e) {
-      setError(String(e));
+      setError(reason(e));
     } finally {
       setBusy(false);
       setCode(null);
@@ -49,8 +45,7 @@ export function Account({ port, state, unread, reload }: { port: AgentPort; stat
   };
 
   const signOut = async () => {
-    // Two steps on purpose: this button appears where 登录 was, and signing out
-    // of an account you just signed into is pure loss.
+    // Confirmation protects a click aimed at sign-in before state refreshes.
     if (!confirm) {
       setConfirm(true);
       return;
@@ -61,7 +56,7 @@ export function Account({ port, state, unread, reload }: { port: AgentPort; stat
       await port.accountLogout();
       reload();
     } catch (e) {
-      setError(String(e));
+      setError(reason(e));
     } finally {
       setBusy(false);
     }
@@ -88,20 +83,28 @@ export function Account({ port, state, unread, reload }: { port: AgentPort; stat
     return <p className="acct-note">{t("正在检查登录状态…")}</p>;
   }
 
-  if (state.signedIn && state.user) {
+  if (state.signedIn) {
     return (
       <div className="acct">
         <div className="acct-who">
-          <span className="nm">{state.user.label}</span>
-          <span className="em">{state.user.email}</span>
+          <span className="nm">{state.user?.label || state.user?.handle || state.user?.email || t("已登录")}</span>
+          {state.user?.email && <span className="em">{state.user.email}</span>}
         </div>
-        {state.error && <p className="acct-note">{t("无法连接身份服务")}：{state.error}</p>}
+        {state.error && (
+          <p className="acct-note" role="alert">
+            {t("无法连接身份服务")}：{state.error}{" "}
+            <button className="lnk" data-action="account.reload" onClick={reload} disabled={busy}>
+              {t("重试")}
+            </button>
+          </p>
+        )}
         <div className="acct-act">
           <button className="btn" data-action="account.sign-out" onClick={signOut} disabled={busy} onMouseLeave={() => setConfirm(false)}>
             {t(confirm ? "确认退出" : "退出登录")}
           </button>
           <span className="acct-note">{t("只清除本地登录凭证，不影响会话、记忆和配置")}</span>
         </div>
+        {error && <p className="acct-note" data-err="">{error}</p>}
       </div>
     );
   }

@@ -11,7 +11,7 @@ import (
 
 // CatalogEntry is one official list price for a model in a billing currency.
 type CatalogEntry struct {
-	Provider      string // deepseek | longcat | mimo
+	Provider      string // deepseek | longcat | mimo | google
 	Model         string
 	Currency      string // ISO billing currency for this row
 	CacheHit      float64
@@ -34,11 +34,35 @@ type CatalogEntry struct {
 }
 
 // deepseekPeak is the schedule DeepSeek publishes: peak on weekday mornings and
-// afternoons, and — since 2026-08-23 — never at a weekend.
+// afternoons, and — since 2026-08-23 — never at a weekend. Chinese public
+// holidays bill off-peak in full, per the same page.
 var deepseekPeak = &PeakWindow{
 	OffsetSeconds:  beijing,
 	Hours:          [][2]int{{9, 12}, {14, 18}},
 	WeekendOffPeak: "2026-08-23",
+	HolidayOffPeak: chineseStatutoryHolidays,
+}
+
+// chineseStatutoryHolidays are the State Council's 2026 public holidays, which
+// DeepSeek bills off-peak in full; extend it when the next notice is out. Make-up
+// workdays are absent: they fall on weekends, which are off-peak anyway.
+var chineseStatutoryHolidays = []string{
+	// New Year's Day: Jan 1-3.
+	"2026-01-01", "2026-01-02", "2026-01-03",
+	// Spring Festival: Feb 15-23.
+	"2026-02-15", "2026-02-16", "2026-02-17", "2026-02-18", "2026-02-19",
+	"2026-02-20", "2026-02-21", "2026-02-22", "2026-02-23",
+	// Qingming Festival: Apr 4-6.
+	"2026-04-04", "2026-04-05", "2026-04-06",
+	// Labor Day: May 1-5.
+	"2026-05-01", "2026-05-02", "2026-05-03", "2026-05-04", "2026-05-05",
+	// Dragon Boat Festival: Jun 19-21.
+	"2026-06-19", "2026-06-20", "2026-06-21",
+	// Mid-Autumn Festival: Sep 25-27.
+	"2026-09-25", "2026-09-26", "2026-09-27",
+	// National Day: Oct 1-7.
+	"2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04",
+	"2026-10-05", "2026-10-06", "2026-10-07",
 }
 
 // checkedOn is when the tables below were last read off the vendors' pages.
@@ -49,13 +73,21 @@ const checkedOn = "2026-08-22"
 // nothing about another's and a shared date would claim that it did.
 const deepseekCheckedOn = "2026-09-13"
 
+// mimoCheckedOn is when the V2.6 rows were read off the vendor's own docs.
+const mimoCheckedOn = "2026-10-06"
+
+// googleCheckedOn is when the Gemini rows were read off Google's pricing page.
+const googleCheckedOn = "2026-10-17"
+
 // CatalogSourceURLs document public pricing pages.
 const (
-	DocDeepSeekPricing   = "https://api-docs.deepseek.com/quick_start/pricing"
-	DocLongCatPricingUSD = "https://longcat.chat/platform/docs/Pricing/LongCat-2.0.html"
-	DocLongCatPricingCNY = "https://longcat.chat/platform/docs/zh/pricing/long-cat-2.0"
-	DocMiMoPAYG          = "https://mimo.mi.com/docs/price/pay-as-you-go"
-	DocMiMoTokenPlan     = "https://platform.xiaomimimo.com/token-plan"
+	DocDeepSeekPricing    = "https://api-docs.deepseek.com/quick_start/pricing"
+	DocDeepSeekPricingCNY = "https://api-docs.deepseek.com/zh-cn/quick_start/pricing"
+	DocLongCatPricingUSD  = "https://longcat.chat/platform/docs/Pricing/LongCat-2.0.html"
+	DocLongCatPricingCNY  = "https://longcat.chat/platform/docs/zh/pricing/long-cat-2.0"
+	DocMiMoPAYG           = "https://mimo.mi.com/docs/price/pay-as-you-go"
+	DocMiMoTokenPlan      = "https://platform.xiaomimimo.com/token-plan"
+	DocGeminiPricing      = "https://ai.google.dev/gemini-api/docs/pricing"
 )
 
 // officialEndpointHosts maps a vendor's own API hostnames to the catalog
@@ -63,12 +95,13 @@ const (
 // or proxy bills on its own terms even when it serves the same model, and an
 // entry merely named after a vendor is not evidence of the vendor's endpoint.
 var officialEndpointHosts = map[string]string{
-	"api.deepseek.com":              "deepseek",
-	"api.longcat.chat":              "longcat",
-	"api.xiaomimimo.com":            "mimo",
-	"token-plan-cn.xiaomimimo.com":  "mimo",
-	"token-plan-sgp.xiaomimimo.com": "mimo",
-	"token-plan-ams.xiaomimimo.com": "mimo",
+	"api.deepseek.com":                  "deepseek",
+	"api.longcat.chat":                  "longcat",
+	"api.xiaomimimo.com":                "mimo",
+	"generativelanguage.googleapis.com": "google",
+	"token-plan-cn.xiaomimimo.com":      "mimo",
+	"token-plan-sgp.xiaomimimo.com":     "mimo",
+	"token-plan-ams.xiaomimimo.com":     "mimo",
 }
 
 // OfficialProviderForEndpoint returns the catalog provider whose official

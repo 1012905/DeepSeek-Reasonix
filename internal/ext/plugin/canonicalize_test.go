@@ -46,7 +46,7 @@ func TestCanonicalizeSchemaSortsKeys(t *testing.T) {
 	result := canonicalizeSchema(schema)
 	// json.Marshal sorts map keys, so verify the JSON string directly.
 	s := string(result)
-	if s != `{"a":2,"m":3,"properties":{},"type":"object","z":1}` {
+	if s != `{"a":2,"m":3,"properties":{},"required":[],"type":"object","z":1}` {
 		t.Errorf("keys not sorted, got: %s", s)
 	}
 }
@@ -124,7 +124,7 @@ func TestNormalizeNameAvoidsSanitizedCollisions(t *testing.T) {
 
 func TestSummarizeFailureErrorSingleLine(t *testing.T) {
 	got := summarizeFailureError(errors.New("npm error code ENOTEMPTY\nnpm error path /tmp/x"))
-	if strings.Contains(got, "\n") || !strings.Contains(got, "ENOTEMPTY") {
+	if strings.Contains(got, "\n") || strings.Contains(got, "ENOTEMPTY") || !strings.Contains(got, "dependency failure") {
 		t.Fatalf("summary = %q", got)
 	}
 }

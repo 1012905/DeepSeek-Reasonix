@@ -1,5 +1,7 @@
 import { MockNetwork } from "./mock_network";
 import type { ThemeImport, ThemePack } from "./port";
+import clearBlue from "../../../../internal/ext/theme/builtin/official-clear-blue.json";
+import teaGreen from "../../../../internal/ext/theme/builtin/official-tea-green.json";
 
 // Theme packs, and where an extension's view was told to sit.
 export class MockTheme extends MockNetwork {
@@ -9,12 +11,14 @@ export class MockTheme extends MockNetwork {
 
   private slots: Record<string, string> = {};
 
-  // Two packs so the picker has something to switch between; the fixture is
-  // where the mapping gets exercised without a Go process.
+  private removed = new Set<string>();
+
+  // Production foundations plus legacy fixtures exercise both token generations.
   async themes(): Promise<ThemePack[]> {
-    return [
+    const packs: ThemePack[] = [
+      ...[clearBlue, teaGreen].map((pack) => ({ ...pack, active: this.activeTheme === pack.id })),
       {
-        id: "dusk", name: "Dusk", author: "fixture", active: this.activeTheme === "dusk",
+        id: "dusk", name: "Dusk", author: "fixture", removable: true, active: this.activeTheme === "dusk",
         tokens: {
           light: { bg: "#F6F3EE", bgSoft: "#FBF9F5", panel: "#FFFFFF", border: "#DDD5C8", fg: "#1B1814", fgDim: "#5F564A", accent: "#8A5A2B" },
           dark: { bg: "#0F0D0B", bgSoft: "#141110", panel: "#1B1715", border: "#332C26", fg: "#EFE9E1", fgDim: "#9A8F82", accent: "#D89B5A" },
@@ -32,10 +36,16 @@ export class MockTheme extends MockNetwork {
         },
       },
     ];
+    return packs.filter((p) => !this.removed.has(p.id));
   }
 
   async activateTheme(id: string) {
     this.activeTheme = id;
+  }
+
+  async removeTheme(id: string) {
+    if (this.activeTheme === id) this.activeTheme = "";
+    this.removed.add(id);
   }
 
   async importTheme(files: File[]): Promise<ThemeImport> {

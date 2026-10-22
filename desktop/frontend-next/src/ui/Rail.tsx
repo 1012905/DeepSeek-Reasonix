@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { t } from "../i18n";
 
 export interface RailMark {
@@ -37,6 +37,10 @@ interface Props {
 // the full height makes two messages look like unrelated controls.
 const STEP = 9;
 const PAD = 26;
+
+// Marks closer than this are not told apart by eye or by pointer, so only one of
+// them is drawn; the rest stay addressable through their positions.
+const MIN_GAP = 2;
 
 // Length and weight fall away from whichever mark the pointer has picked out,
 // and every mark is the same until one is picked. A cosine rather than a line:
@@ -180,6 +184,19 @@ export function Rail({ marks, total, scroll, flow, onJump, bound }: Props) {
     setAt(dist <= 40 ? best : -1);
   };
 
+  const drawn = useMemo(() => {
+    if (tops.length !== marks.length) return marks.map((_m, i) => i);
+    const out: number[] = [];
+    let last = -Infinity;
+    tops.forEach((top, i) => {
+      if (top - last >= MIN_GAP || i === tops.length - 1) {
+        out.push(i);
+        last = top;
+      }
+    });
+    return out;
+  }, [tops, marks]);
+
   if (marks.length === 0) return null;
   const shown = at >= 0 ? marks[at] : null;
 
@@ -199,7 +216,8 @@ export function Rail({ marks, total, scroll, flow, onJump, bound }: Props) {
           if (i >= 0) onJump(marks[i]);
         }}
       >
-        {marks.map((m, i) => {
+        {drawn.map((i) => {
+          const m = marks[i];
           const lit = pull(i, at);
           return (
             <button

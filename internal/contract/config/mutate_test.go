@@ -3,9 +3,11 @@ package config
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	osuser "os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -544,5 +546,162 @@ func TestLoadForEditMalformedConfigCannotBeSaved(t *testing.T) {
 	}
 	if string(got) != malformed {
 		t.Fatalf("malformed config was overwritten: %q", got)
+	}
+}
+
+// TestAcquireConfigEditLockPathRefusesLockDirOwnedBySomeoneElse: the lock directory
+// may be owned by another identity (for example the /tmp fallback); chmod then fails with
+// a bare EPERM, and the caller must get ErrLockDirWrongOwner instead.
+func TestAcquireConfigEditLockPathRefusesLockDirOwnedBySomeoneElse(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory ownership is not checked on Windows")
+	}
+	dir := filepath.Join(t.TempDir(), "locks")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	previous := lockDirCurrentUID
+	lockDirCurrentUID = func() int { return os.Getuid() + 1 }
+	t.Cleanup(func() { lockDirCurrentUID = previous })
+
+	release, err := acquireConfigEditLockPath(context.Background(), filepath.Join(dir, "x.lock"))
+	if err == nil {
+		release()
+		t.Fatal("acquire succeeded on a lock directory owned by another user")
+	}
+	if !errors.Is(err, ErrLockDirWrongOwner) {
+		t.Fatalf("err = %v, want ErrLockDirWrongOwner", err)
+	}
+	if !strings.Contains(err.Error(), dir) {
+		t.Fatalf("err = %v, want it to name %s", err, dir)
+	}
+	info, statErr := os.Stat(dir)
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	if got := info.Mode().Perm(); got != 0o755 {
+		t.Fatalf("mode of a directory we do not own = %o, want it left at 755", got)
+	}
+}
+
+// TestAcquireConfigEditLockPathTightensOwnLockDir keeps the existing behaviour for a
+// directory this process owns: a looser mode is corrected to 0700.
+func TestAcquireConfigEditLockPathTightensOwnLockDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX modes are not enforced on Windows")
+	}
+	dir := filepath.Join(t.TempDir(), "locks")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	release, err := acquireConfigEditLockPath(context.Background(), filepath.Join(dir, "x.lock"))
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	release()
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o700 {
+		t.Fatalf("mode = %o, want 700", got)
+	}
+}
+
+// TestConfigEditLockRegistryDirIsUnderUserHome: the lock directory must not be a
+// shared, predictable /tmp path another identity could create first.
+func TestConfigEditLockRegistryDirIsUnderUserHome(t *testing.T) {
+	current, err := osuser.Current()
+	if err != nil || strings.TrimSpace(current.HomeDir) == "" {
+		t.Skip("OS user home unavailable")
+	}
+	dir, err := configEditLockRegistryDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Clean(current.HomeDir)
+	if !strings.HasPrefix(dir, home+string(filepath.Separator)) {
+		t.Fatalf("lock dir = %q, want it under the OS user home %q", dir, home)
+	}
+	if strings.HasPrefix(dir, string(filepath.Separator)+"tmp"+string(filepath.Separator)) {
+		t.Fatalf("lock dir %q is in shared /tmp", dir)
+	}
+}
+
+// A self-contained runtime writes nothing outside its home: the lock for a
+// config file inside an isolated Reasonix home lives in that home.
+func TestIsolatedHomeKeepsItsConfigEditLocksInsideIt(t *testing.T) {
+	home := testenv.TempDir(t)
+	t.Setenv("REASONIX_HOME", home)
+	lock, err := configFileEditLockPath(UserConfigPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolvedHome, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !pathWithin(filepath.Join(home, "locks"), lock) && !pathWithin(filepath.Join(resolvedHome, "locks"), lock) {
+		t.Fatalf("lock = %q, want it under %q", lock, filepath.Join(home, "locks"))
+	}
+	osLocks, err := configEditLockRegistryDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pathWithin(osLocks, lock) {
+		t.Fatalf("an isolated home still locked under the OS account home: %q", lock)
+	}
+}
+
+// Only what the isolated home holds moves: a file elsewhere (a project's
+// reasonix.toml) keeps its lock where every other launch will look for it.
+func TestIsolatedHomeLeavesOtherFilesLockedUnderTheAccountHome(t *testing.T) {
+	t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+	elsewhere := filepath.Join(testenv.TempDir(t), "reasonix.toml")
+	lock, err := configFileEditLockPath(elsewhere)
+	if err != nil {
+		t.Fatal(err)
+	}
+	osLocks, err := configEditLockRegistryDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !pathWithin(osLocks, lock) {
+		t.Fatalf("lock = %q, want it under %q", lock, osLocks)
+	}
+}
+
+func TestLockUserConfigEditsInAnIsolatedHomeCreatesItsLockDirThere(t *testing.T) {
+	home := testenv.TempDir(t)
+	t.Setenv("REASONIX_HOME", home)
+	unlock := LockUserConfigEdits()
+	defer unlock()
+	if err := currentUserConfigEditLockError(); err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	entries, err := os.ReadDir(filepath.Join(home, "locks"))
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("no lock directory under the isolated home: %v %v", entries, err)
+	}
+}
+
+func TestPathWithin(t *testing.T) {
+	base := filepath.Join(string(filepath.Separator), "a", "b")
+	for path, want := range map[string]bool{
+		filepath.Join(base, "c", "d"): true,
+		base:                          true,
+		filepath.Join(string(filepath.Separator), "a", "x"): false,
+		filepath.Join(base + "x"):                           false,
+		filepath.Join(base, "..", "b2"):                     false,
+	} {
+		if got := pathWithin(base, path); got != want {
+			t.Errorf("pathWithin(%q, %q) = %v, want %v", base, path, got, want)
+		}
 	}
 }

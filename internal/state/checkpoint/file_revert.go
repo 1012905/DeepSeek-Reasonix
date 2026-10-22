@@ -108,6 +108,9 @@ func (s *Store) CommitFileRevert(planID string, resolution ConflictResolution) (
 			Conflicts: []RewindConflict{{Path: pp.plan.Path, Reason: ConflictBusyWriter}}}, err
 	}
 	defer s.barrier.ExitExclusive()
+	if err := s.requireUndoRecoveryComplete(); err != nil {
+		return RewindResult{OK: false, Error: err.Error()}, err
+	}
 	if res, err := s.verifyWorkspaceUnchanged(pp); res != nil {
 		return *res, err
 	}
@@ -257,7 +260,9 @@ func (s *Store) stageRestore(t *TransactionTarget, rev FileRevision, abs string)
 		if rev.Content == nil {
 			return err
 		}
-		data = fileenc.Encode(*rev.Content, s.revisionEncoding(rev, abs))
+		if data, err = fileenc.Encode(*rev.Content, s.revisionEncoding(rev, abs)); err != nil {
+			return err
+		}
 	}
 	mode := os.FileMode(0o644)
 	if rev.Mode != 0 {

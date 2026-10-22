@@ -110,6 +110,11 @@ type CompletionReportAudit struct {
 	// ClaimsUnbacked is how many of them the ledger did not support.
 	ClaimsVerified int
 	ClaimsUnbacked int
+	// OriginRecorded counts the external results the host kept the text of this
+	// turn, and OriginMatched the calls (not read-only) whose arguments carried
+	// that text verbatim. Counts only: they measure a signal, nothing acts on it.
+	OriginRecorded int
+	OriginMatched  int
 }
 
 // CompletionReportAuditSink is an optional sink capability; implementations
@@ -129,13 +134,61 @@ func RecordCompletionReport(s Sink, a CompletionReportAudit) {
 	}
 }
 
+// EvidenceBundleAudit is the end-of-turn shadow bundle's seal: its record
+// identity in Trusted Host State, never the bundle's content. FailureCode is
+// the store's typed cause when nothing was sealed.
+type EvidenceBundleAudit struct {
+	Sealed      bool
+	Record      string
+	Generation  uint64
+	Integrity   string
+	Receipts    int
+	FailureCode string
+	// SnapshotComplete says the turn-end workspace snapshot saw the whole tree.
+	SnapshotComplete bool
+	// UnobservedChanges counts paths that changed between the previous sealed
+	// turn and this one, when UnobservedCompared says that was established.
+	UnobservedCompared bool
+	UnobservedChanges  int
+	// Outcome is the host-evidence outcome; DivergenceClass and its reason
+	// codes say how it differs from the completion report's verdict.
+	Outcome           string
+	DivergenceClass   string
+	DivergenceReasons []string
+	// ContractRevision is the accepted contract revision in force, and
+	// ContractDecision what host policy did with this turn's derivation.
+	ContractRevision int
+	ContractDecision string
+	ContractFailure  string
+}
+
+// EvidenceBundleAuditSink is an optional sink capability; implementations must
+// keep it content-free, like every other audit channel.
+type EvidenceBundleAuditSink interface {
+	RecordEvidenceBundle(EvidenceBundleAudit)
+}
+
+// RecordEvidenceBundle forwards the seal only to sinks that opt in.
+func RecordEvidenceBundle(s Sink, a EvidenceBundleAudit) {
+	if nilutil.IsNil(s) {
+		return
+	}
+	if es, ok := s.(EvidenceBundleAuditSink); ok {
+		es.RecordEvidenceBundle(a)
+	}
+}
+
 // MemoryRecallAudit summarizes one automatic-recall decision: identifiers,
 // scores, and budget numbers only — never the query or fact text.
 type MemoryRecallAudit struct {
-	Hits       []MemoryRecallHit
-	UsedChars  int
-	Omitted    int
-	Suppressed string // reason recall stayed silent; "" when hits were injected
+	Hits            []MemoryRecallHit
+	CharBudget      int
+	UsedChars       int
+	Omitted         int
+	OmittedByLimit  int
+	OmittedByBudget int
+	Suppressed      string // why recall stayed silent, as "<code>: <sentence>"; "" when hits were injected
+	SuppressionCode string // the typed code Suppressed begins with; consumers match this, never the prose
 	// Shadow is the Retrieval V2 ranking (telemetry only, never served).
 	Shadow []MemoryRecallHit
 }

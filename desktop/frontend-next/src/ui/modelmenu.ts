@@ -4,29 +4,38 @@ import type { MenuItem } from "./Menu";
 import { groupVendors } from "./Models";
 import { t } from "../i18n";
 import { KIND_LABEL } from "./vendors";
+import { orderAccounts } from "../state/providerorder";
 
-// One flat list said "deepseek" four times: the provider name is the config's
-// word for an entry, not the user's for an endpoint, and two doors onto one
-// account share it. Every row keeps its source and wire format underneath the
-// model name, so the second line is useful even when there is only one account.
-export function modelMenu(models: ModelEntry[]): MenuItem[] {
-  const accounts = groupVendors(models);
+// Every account gets a heading with its endpoint: the provider name is the
+// config's word for an entry, not the user's for an endpoint, and two doors onto
+// one account share it. Rows carry the wire format beside the model name.
+export function modelMenu(models: ModelEntry[], order: readonly string[] = [], current?: string): MenuItem[] {
+  const accounts = orderAccounts(groupVendors(models), order);
   const out: MenuItem[] = [];
   for (const [i, a] of accounts.entries()) {
-    const manyDoors = a.kinds.length > 1;
-    const label = accounts.length > 1 || manyDoors;
-    if (label) {
-      out.push({ value: `__account:${a.key}`, label: a.label, right: a.host, header: true, divide: i > 0 });
-    }
+    const mono = monogram(a.label, a.key);
+    out.push({ value: `__account:${a.key}`, label: a.label, right: a.host, header: true, divide: i > 0, mono });
     for (const kind of a.kinds) {
       for (const m of a.byKind[kind]) {
         out.push({
           value: m.ref,
-          label: m.model,
-          desc: `${a.label} · ${t(KIND_LABEL[kind] ?? kind)}`,
+          label: m.modelAlias?.trim() || m.model,
+          desc: m.modelAlias?.trim() ? m.model : undefined,
+          meta: t(KIND_LABEL[kind] ?? kind),
+          badge: m.vision ? t("读图") : undefined,
+          mono,
         });
       }
     }
+  }
+  const held = out.find((item) => item.value === current);
+  if (held) {
+    out.splice(out.indexOf(held), 1);
+    for (let i = out.length - 1; i >= 0; i--) {
+      if (out[i].header && (!out[i + 1] || out[i + 1].header)) out.splice(i, 1);
+    }
+    for (const item of out) if (item.header) item.divide = true;
+    out.unshift(held);
   }
   out.push({
     value: "__manage-models",
@@ -36,4 +45,44 @@ export function modelMenu(models: ModelEntry[]): MenuItem[] {
     divide: out.length > 0,
   });
   return out;
+}
+
+const TONES = 5;
+
+// A letter chip stands in for a vendor mark: the same provider always draws the
+// same letter and tone, and no vendor artwork is bundled.
+export function monogram(label: string, key: string): { letter: string; tone: number } {
+  const letter = [...label.trim()].find((c) => /[\p{L}\p{N}]/u.test(c))?.toUpperCase() ?? "?";
+  let h = 0;
+  for (const c of key) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return { letter, tone: h % TONES };
+}
+
+/** The headings a menu offers to narrow by, in the order they appear. */
+export function groupHeadings(items: MenuItem[]): MenuItem[] {
+  return items.filter((it) => it.header);
+}
+
+/** The remembered choices that are still on offer. A choice for an account no
+ *  longer listed must not empty the menu, so it simply stops counting. */
+export function chosenGroups(items: MenuItem[], selected: readonly string[]): string[] {
+  const offered = new Set(groupHeadings(items).map((h) => h.value));
+  return selected.filter((key) => offered.has(key));
+}
+
+/** The rows of the chosen groups. What belongs to no group (the current model,
+ *  pinned before the first heading) and every action stay. */
+export function narrowToGroups(items: MenuItem[], chosen: readonly string[]): MenuItem[] {
+  if (chosen.length === 0) return items;
+  let inGroup = false;
+  let keep = true;
+  return items.filter((it) => {
+    if (it.header) {
+      inGroup = true;
+      keep = chosen.includes(it.value);
+      return keep;
+    }
+    if (it.plain) return true;
+    return inGroup ? keep : true;
+  });
 }

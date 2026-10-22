@@ -521,7 +521,7 @@ func TestCancelSlashSubagentStopsChildAndKeepsParentSessionUsable(t *testing.T) 
 	c.Submit("/helper inspect auth")
 	select {
 	case <-started:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testenv.Budget(t)):
 		t.Fatal("slash subagent did not start")
 	}
 	c.Cancel()
@@ -543,7 +543,7 @@ func TestCancelSlashSubagentStopsChildAndKeepsParentSessionUsable(t *testing.T) 
 
 func waitForTurnEvents(t *testing.T, events <-chan event.Event) []event.Event {
 	t.Helper()
-	deadline := time.After(10 * time.Second)
+	deadline := time.After(testenv.Budget(t))
 	var got []event.Event
 	for {
 		select {
@@ -1139,6 +1139,33 @@ func TestSubmitUnknownSlashCommandStillReportsNotice(t *testing.T) {
 	waitForTurnDone(t, events)
 	if len(runner.inputs) != 1 || !strings.Contains(runner.inputs[0], "/definitely-not-a-command") {
 		t.Fatalf("unknown slash command should start a model turn with the raw line, inputs=%q", runner.inputs)
+	}
+}
+
+func TestSubmitRefusingUnknownSlashStartsNoTurn(t *testing.T) {
+	runner := &fakeTurnRunner{}
+	events := make(chan event.Event, 16)
+	c := New(Options{Runner: runner, Sink: event.FuncSink(func(e event.Event) { events <- e })})
+
+	c.SubmitHTTPOptions("/definitely-not-a-command now", SubmitOptions{RefuseUnknownSlash: true})
+
+	select {
+	case e := <-events:
+		if e.Kind != event.Notice || e.Code != event.NoticeCodeUnknownCommand || !strings.Contains(e.Text, "/definitely-not-a-command") {
+			t.Fatalf("first event = %+v, want the unknown-command notice", e)
+		}
+	case <-time.After(testenv.Budget(t)):
+		t.Fatal("no notice")
+	}
+	if c.Running() || len(runner.inputs) != 0 {
+		t.Fatalf("refused slash started a turn: running=%v inputs=%q", c.Running(), runner.inputs)
+	}
+
+	// A path is prose however it starts, and still goes to the model.
+	c.SubmitHTTPOptions("/etc/hosts looks wrong", SubmitOptions{RefuseUnknownSlash: true})
+	waitForTurnDone(t, events)
+	if len(runner.inputs) != 1 {
+		t.Fatalf("path line should start a turn, inputs=%q", runner.inputs)
 	}
 }
 

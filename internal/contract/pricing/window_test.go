@@ -37,6 +37,34 @@ func TestPeakWindowReadsTheVendorsClock(t *testing.T) {
 	}
 }
 
+// Public holidays bill off-peak even on weekdays (Mid-Autumn Fri 2026-09-25,
+// Spring Festival Tue 2026-02-17, National Day Thu 2026-10-01), and a make-up
+// workday (Sat 2026-10-10) is still a weekend.
+func TestPeakWindowReadsTheHolidayTable(t *testing.T) {
+	cases := []struct {
+		name string
+		at   time.Time
+		peak bool
+	}{
+		{"mid-autumn friday morning window", beijingAt(2026, 9, 25, 10), false},
+		{"mid-autumn friday afternoon window", beijingAt(2026, 9, 25, 15), false},
+		{"thursday before mid-autumn", beijingAt(2026, 9, 24, 10), true},
+		{"monday after mid-autumn", beijingAt(2026, 9, 28, 10), true},
+		{"spring festival new year's day", beijingAt(2026, 2, 17, 9), false},
+		{"friday before spring festival", beijingAt(2026, 2, 13, 10), true},
+		{"national day morning window", beijingAt(2026, 10, 1, 10), false},
+		{"first workday after national day", beijingAt(2026, 10, 8, 10), true},
+		{"make-up workday saturday", beijingAt(2026, 10, 10, 10), false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := deepseekPeak.IsPeak(c.at); got != c.peak {
+				t.Fatalf("IsPeak(%s) = %v, want %v", c.at.Format(time.RFC3339), got, c.peak)
+			}
+		})
+	}
+}
+
 // The instant is what decides, not the clock of whoever reads it: the same
 // moment expressed in UTC has to land on the same side of the window.
 func TestPeakWindowIsAboutTheInstantNotTheReader(t *testing.T) {
@@ -93,5 +121,46 @@ func TestCustomPriceIsNeverRescheduled(t *testing.T) {
 	}
 	if got := BuildQuote(in).Original.Amount; got != "2" {
 		t.Fatalf("custom price original = %q, want 2", got)
+	}
+}
+
+// The band a call was billed in reaches the quote, and an aggregate says which
+// side its calls fell on: one band, mixed, or none when any call has no schedule.
+func TestQuoteNamesTheRateBandItWasBilledIn(t *testing.T) {
+	base := QuoteInput{
+		Usage:        UsageTokens{PromptTokens: 1000, CompletionTokens: 1000},
+		Rates:        RateCard{CacheHit: 0.15, Input: 4.5, Output: 13.5, Currency: "CNY"},
+		ProviderKind: "deepseek",
+		ModelID:      "deepseek-v4-pro",
+		ModelRef:     "deepseek-v4-pro",
+	}
+	at := func(hour int) CostQuote {
+		in := base
+		in.OccurredAt = beijingAt(2026, 8, 19, hour)
+		return BuildQuote(in)
+	}
+	peak, off := at(10), at(23)
+	if peak.RateBand != RateBandPeak || off.RateBand != RateBandOffPeak {
+		t.Fatalf("bands = %q / %q", peak.RateBand, off.RateBand)
+	}
+	if got := AggregateQuotes([]CostQuote{peak, peak}, "").RateBand; got != RateBandPeak {
+		t.Fatalf("two peak calls = %q", got)
+	}
+	mixed := AggregateQuotes([]CostQuote{peak, off}, "")
+	if mixed.RateBand != RateBandMixed {
+		t.Fatalf("peak + off-peak = %q", mixed.RateBand)
+	}
+	if got := AggregateQuotes([]CostQuote{mixed, off}, "").RateBand; got != RateBandMixed {
+		t.Fatalf("a mixed total lost its band on re-aggregation: %q", got)
+	}
+	custom := base
+	custom.Rates.Input = 1
+	custom.OccurredAt = beijingAt(2026, 8, 19, 10)
+	cq := BuildQuote(custom)
+	if cq.RateBand != "" {
+		t.Fatalf("a custom price carries band %q", cq.RateBand)
+	}
+	if got := AggregateQuotes([]CostQuote{peak, cq}, "").RateBand; got != "" {
+		t.Fatalf("an aggregate with an unscheduled call claims band %q", got)
 	}
 }

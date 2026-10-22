@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"reasonix/internal/runtime/taskcontract"
 	"reasonix/internal/safety/evidence"
@@ -75,6 +76,12 @@ const (
 	GapInconclusiveVerification
 	GapUnverifiedChange
 	GapUnreviewedChange
+	// GapModEffectsUnobserved: a Claude Code mod was live, and nothing the host
+	// watches bounds what it wrote.
+	GapModEffectsUnobserved
+	// GapWorkspaceClaimYielded: the session gave up its write claim to wait on a
+	// person, and another session was granted an overlapping one meanwhile.
+	GapWorkspaceClaimYielded
 )
 
 func (k GapKind) String() string {
@@ -95,6 +102,10 @@ func (k GapKind) String() string {
 		return "unverified_change"
 	case GapUnreviewedChange:
 		return "unreviewed_change"
+	case GapModEffectsUnobserved:
+		return "mod_effects_unobserved"
+	case GapWorkspaceClaimYielded:
+		return "workspace_claim_yielded"
 	default:
 		return "unknown"
 	}
@@ -191,7 +202,7 @@ func changesOf(ledger *evidence.Ledger, receipts []evidence.Receipt, inWorkspace
 			authored[p] = true
 		}
 		for _, p := range r.Paths {
-			if p == "" || (inWorkspace != nil && !inWorkspace(p)) {
+			if p == "" || slices.Contains(r.HostOwned, p) || (inWorkspace != nil && !inWorkspace(p)) {
 				continue
 			}
 			if _, seen := at[p]; !seen {
@@ -223,7 +234,7 @@ func changesOf(ledger *evidence.Ledger, receipts []evidence.Receipt, inWorkspace
 func mutationsOf(receipts []evidence.Receipt, inWorkspace func(string) bool) int {
 	count := 0
 	for _, r := range receipts {
-		if r.Success && (r.Mutation || r.Write) && keptAnyPath(r.Paths, inWorkspace) {
+		if r.Success && (r.Mutation || r.Write) && keptAnyPath(r, inWorkspace) {
 			count++
 		}
 	}
@@ -233,11 +244,13 @@ func mutationsOf(receipts []evidence.Receipt, inWorkspace func(string) bool) int
 // keptAnyPath reports whether a receipt touched the work product. A receipt
 // that named no path counts either way: `sed -i` and `rm` name nothing and
 // must not escape the gap by staying silent about where they landed.
-func keptAnyPath(paths []string, inWorkspace func(string) bool) bool {
-	if inWorkspace == nil || len(paths) == 0 {
+func keptAnyPath(r evidence.Receipt, inWorkspace func(string) bool) bool {
+	if len(r.Paths) == 0 {
 		return true
 	}
-	return slices.ContainsFunc(paths, inWorkspace)
+	return slices.ContainsFunc(r.Paths, func(p string) bool {
+		return !slices.Contains(r.HostOwned, p) && (inWorkspace == nil || inWorkspace(p))
+	})
 }
 
 // browserCheckTool is the browser call the host can classify as a check.
@@ -341,9 +354,8 @@ func gapsOf(rep Report, c *taskcontract.Contract) []Gap {
 	// Only report the blanket gap when no declared check already said it: a
 	// contract with checks states the same absence in more specific words.
 	if rep.Mutations > 0 && !proven && !missingCheck {
-		// The kind's own phrase already says the absence in the reader's
-		// language; the detail says what was there instead, which is the part
-		// a turn that just ran a command of its own cannot get from the phrase.
+		// The kind's own phrase says the absence in the reader's language; the
+		// detail is only the command the host declined, never a sentence.
 		gaps = append(gaps, Gap{Kind: GapUnverifiedChange, Detail: unreadCheckDetail(rep.UnreadCheck)})
 	}
 	for _, ch := range rep.Changes {
@@ -370,7 +382,7 @@ func checkLabel(check taskcontract.Check) string {
 }
 
 func verdictOf(rep Report, c *taskcontract.Contract) Verdict {
-	declared := c != nil && (len(c.Requirements) > 0 || len(c.Checks) > 0)
+	declared := c != nil && (slices.ContainsFunc(c.Requirements, func(r taskcontract.Requirement) bool { return r.Required }) || len(c.Checks) > 0)
 	switch {
 	// Nothing declared, nothing changed, nothing claimed. Checks may well have
 	// run, but a check reports on the tree, not on what this turn delivered,
@@ -443,7 +455,11 @@ func unreadCheckDetail(command string) string {
 		return ""
 	}
 	if len(command) > unreadCheckLimit {
-		command = command[:unreadCheckLimit] + "…"
+		cut := unreadCheckLimit
+		for cut > 0 && !utf8.RuneStart(command[cut]) {
+			cut--
+		}
+		command = command[:cut] + "…"
 	}
-	return "`" + command + "` ran, but the host does not read it as a check"
+	return command
 }

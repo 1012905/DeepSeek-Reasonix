@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"reasonix/internal/base/testenv"
@@ -59,7 +60,7 @@ func modelsByRef(t *testing.T, cfgBody string) map[string]modelEntry {
 	ctrl := control.New(control.Options{
 		Sink: bc, Label: "text-only", ModelRef: "mixed/text-only", SessionDir: testenv.TempDir(t),
 	})
-	srv := httptest.NewServer(New(ctrl, bc, config.ServeConfig{}).Handler())
+	srv := httptest.NewServer(operatorHandler(New(ctrl, bc, config.ServeConfig{})))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/models")
@@ -208,5 +209,46 @@ func TestPersistingAnUnknownModelLeavesTheDefaultAlone(t *testing.T) {
 	}
 	if cfg.DefaultModel != "mixed/text-only" {
 		t.Fatalf("default_model = %q, want the original left intact", cfg.DefaultModel)
+	}
+}
+
+func TestModelsReportGlmForcedThinking(t *testing.T) {
+	got := modelsByRef(t, `default_model = "glm/glm-5.3"
+
+[[providers]]
+name = "glm"
+kind = "openai"
+base_url = "https://api.z.ai/api/coding/paas/v4"
+models = ["glm-5.3", "glm-5.3-flash", "glm-5.2"]
+api_key_env = "MIXED_API_KEY"
+`)
+	for _, model := range []string{"glm-5.3", "glm-5.3-flash", "glm-5.2"} {
+		row, ok := got["glm/"+model]
+		if !ok {
+			t.Fatalf("%s missing from /models", model)
+		}
+		forced := model != "glm-5.2"
+		if row.ForcesThinking != forced {
+			t.Errorf("%s forcesThinking = %v, want %v", model, row.ForcesThinking, forced)
+		}
+		if forced && !slices.Equal(row.Efforts, []string{"auto", "low", "high", "max"}) {
+			t.Errorf("%s efforts = %v", model, row.Efforts)
+		}
+	}
+}
+
+func TestModelListSaysWhichConnectionsAreNotAdded(t *testing.T) {
+	got := modelsByRef(t, mixedVendorConfig+"\n[desktop]\nprovider_access = [\"mixed\"]\n")
+	if got["mixed/text-only"].NotAdded {
+		t.Fatal("a connection in provider_access is added")
+	}
+	if !got["mixed-anthropic/text-only"].NotAdded {
+		t.Fatal("a connection outside provider_access must be marked not added")
+	}
+	open := modelsByRef(t, mixedVendorConfig)
+	for ref, m := range open {
+		if m.NotAdded {
+			t.Fatalf("%s: without a declared access list every connection is added", ref)
+		}
 	}
 }

@@ -48,7 +48,15 @@ func (r Roots) defaultConfig() *Config {
 // LoadForRoot reads root's configuration out of this binding's home, so one
 // process can serve two homes without either seeing the other's config.
 func (r Roots) LoadForRoot(root string) (*Config, error) {
-	return r.loadForRoot(root, true)
+	return r.loadForRoot(root, true, true)
+}
+
+// LoadUserScopeForRoot is LoadForRoot for a run that takes nothing from the
+// workspace: no reasonix.toml, no .mcp.json, no project .env, and none of the
+// folder grants the user gave this workspace. Only the user's own configuration
+// and installed packages contribute, and nothing is written.
+func (r Roots) LoadUserScopeForRoot(root string) (*Config, error) {
+	return r.loadForRoot(root, false, false)
 }
 
 // LoadForRootReadOnly is like LoadForRoot but never writes config files: it skips
@@ -59,27 +67,31 @@ func LoadForRootReadOnly(root string) (*Config, error) {
 }
 
 func (r Roots) LoadForRootReadOnly(root string) (*Config, error) {
-	return r.loadForRoot(root, false)
+	return r.loadForRoot(root, false, true)
 }
 
-func (r Roots) loadForRoot(root string, migrateOnDisk bool) (*Config, error) {
+func (r Roots) loadForRoot(root string, migrateOnDisk, withProject bool) (*Config, error) {
 	root = resolveRoot(root)
-	expansionEnv := r.loadDotEnvForRoot(root)
+	var expansionEnv map[string]string
+	if withProject {
+		expansionEnv = r.loadDotEnvForRoot(root)
+	} else {
+		r.loadCredentialStoreForScope(root, false)
+	}
 	cfg := r.defaultConfig()
 	cfg.setExpansionEnv(expansionEnv)
 	cfg.CredentialsStore = r.credentialsStoreMode()
 
-	projectTOML := "reasonix.toml"
-	if root != "." {
-		projectTOML = filepath.Join(root, "reasonix.toml")
-	}
+	projectTOML := ProjectConfigPath(root)
 	if primary := r.userConfigPath(); primary != "" {
 		if _, err := resolveConfigAccessPath(primary, true); err != nil {
 			return nil, err
 		}
 	}
-	if _, err := resolveConfigAccessPath(projectTOML, false); err != nil {
-		return nil, err
+	if withProject {
+		if _, err := resolveConfigAccessPath(projectTOML, false); err != nil {
+			return nil, err
+		}
 	}
 
 	mergeTOML := mergeFileSnapshot
@@ -124,52 +136,18 @@ func (r Roots) loadForRoot(root string, migrateOnDisk bool) (*Config, error) {
 		cfg.systemPromptFileSource = promptFileSourceUser
 	}
 	userDefaultModel := cfg.DefaultModel
-	globalCLI := cfg.CLI
-	globalSecrets := cfg.Secrets
-	globalHostAuthorities := cfg.Sandbox.HostAuthorities
-	globalRemote, globalStorage := cfg.Remote.Clone(), maps.Clone(cfg.Storage)
-	globalDesktopLanguage := cfg.Desktop.Language
-	globalPricingCurrency := cfg.Desktop.Currency
-	globalBillingDisplayCurrency := cfg.Billing.DisplayCurrency
-	globalTelemetry := cfg.Telemetry
-
-	tomlSources = append(tomlSources, projectTOML)
-	projectMeta, err := mergeTOML(cfg, projectTOML)
-	if err != nil {
-		// Project config damage is isolated to this workspace: continue with
-		// user/global config so other tabs stay available.
-		cfg.addLoadWarning(fmt.Sprintf(
-			"project config %s is invalid (%v); ignored for this workspace",
-			projectTOML, err,
-		))
-		// Drop the project path from later multi-file merges so a broken TOML
-		// cannot fail plugin/provider re-merges.
-		tomlSources = tomlSources[:len(tomlSources)-1]
-	} else if projectMeta.IsDefined("agent", "system_prompt_file") {
-		cfg.systemPromptFileSource = promptFileSourceProject
+	held := holdUserScope(cfg)
+	var projectMeta toml.MetaData
+	if withProject {
+		var mergeErr error
+		projectMeta, tomlSources, mergeErr = mergeProjectTOML(cfg, mergeTOML, projectTOML, tomlSources)
+		if mergeErr != nil {
+			cfg.addLoadWarning(fmt.Sprintf(
+				"project config %s is invalid (%v); ignored for this workspace",
+				projectTOML, mergeErr,
+			))
+		}
 	}
-	// The native CLI update channel controls the one user-installed binary.
-	// A repository-local reasonix.toml must never switch that global choice.
-	cfg.CLI = globalCLI
-	// Secret protection is a user-global security control: a cloned repo's
-	// reasonix.toml must not be able to flip on the workflow-breaking env/path
-	// protections.
-	cfg.Secrets = globalSecrets
-	// Host-authority grants are the same kind of control: a cloned repo must not
-	// be able to hand itself the container daemon socket.
-	cfg.Sandbox.HostAuthorities = globalHostAuthorities
-	// Remote SSH hosts and storage locations are equally user-global: a cloned
-	// repo must not inject hosts, jump chains, or port forwards, nor redirect
-	// where this machine keeps its transcripts, catalogs, and checkouts.
-	cfg.Remote, cfg.Storage = globalRemote, globalStorage
-	// Desktop language and pricing currency are user-level regional preferences.
-	// A repository must not be able to alter how the user's spend is shown.
-	cfg.Desktop.Language = globalDesktopLanguage
-	cfg.Desktop.Currency = globalPricingCurrency
-	cfg.Billing.DisplayCurrency = globalBillingDisplayCurrency
-	// CLI telemetry is an explicit user-global privacy choice. Project config
-	// cannot opt a user in or out, including when the global value is absent.
-	cfg.Telemetry = globalTelemetry
 	// TOML decoding replaces [[plugins]] wholesale, so cfg.Plugins now holds
 	// only the last file's. Re-merge by name across all sources (later wins) so a
 	// project reasonix.toml doesn't drop the global config's MCP servers.
@@ -192,21 +170,27 @@ func (r Roots) loadForRoot(root string, migrateOnDisk bool) (*Config, error) {
 	} else if ok {
 		cfg.Desktop.ProviderAccess = access
 	}
+	// Sandbox, permission, shell env and program grants only narrow (see heldScope).
+	if withProject {
+		held.narrow(cfg, r, root, projectMeta)
+	}
 
 	// Claude Code's .mcp.json (project root) is read last and merged into
 	// [[plugins]], so a server configured for Claude works here unchanged.
 	// Project reasonix.toml wins on a name collision; project .mcp.json wins
 	// over a same-name user-global entry (see mergeMCPJSON).
-	mcpFile := mcpJSONFile
-	if root != "." {
-		mcpFile = filepath.Join(root, mcpJSONFile)
+	if withProject {
+		mcpFile := mcpJSONFile
+		if root != "." {
+			mcpFile = filepath.Join(root, mcpJSONFile)
+		}
+		entries, err := loadMCPJSON(mcpFile)
+		if err != nil { // a malformed file yields no entries, so the append below is still correct
+			cfg.addLoadWarning(fmt.Sprintf("project .mcp.json is invalid (%v); MCP servers from that file are ignored", err))
+		}
+		// Claude's scopes go last, so a name the project file claims keeps it.
+		cfg.mergeMCPJSON(append(entries, loadClaudeMCP(r.claudeConfigPath(), root)...))
 	}
-	entries, err := loadMCPJSON(mcpFile)
-	if err != nil { // a malformed file yields no entries, so the append below is still correct
-		cfg.addLoadWarning(fmt.Sprintf("project .mcp.json is invalid (%v); MCP servers from that file are ignored", err))
-	}
-	// Claude's scopes go last, so a name the project file claims keeps it.
-	cfg.mergeMCPJSON(append(entries, loadClaudeMCP(r.claudeConfigPath(), root)...))
 
 	// Lowest priority before the one-time v1.9.1 MCP migration: the v0.x
 	// ~/.reasonix/config.json's mcpServers. Once the migration marker exists, the
@@ -437,6 +421,7 @@ func mergeTOMLPlugins(paths []string) ([]PluginEntry, error) {
 				p.Source = MCPSourceProjectConfig
 			}
 			if i, ok := index[p.Name]; ok {
+				p.DisabledTools = mergeDisabledToolPolicies(merged[i].DisabledTools, p.DisabledTools)
 				merged[i] = p
 				continue
 			}
@@ -680,8 +665,8 @@ func loadForEditStrict(path string, loadCredentials, persistMigrations bool) (*C
 	if err != nil {
 		return nil, err
 	}
-	markExplicitDefaultProjectSkillKeys(cfg, path, meta)
-	changed := normalizeConfigForEdit(cfg)
+	markProjectEditProvenance(cfg, path, meta)
+	changed := normalizeConfigForEditWithProjectBaseline(cfg, path)
 	if persistMigrations && changed && strings.TrimSpace(path) != "" {
 		if _, err := os.Stat(path); err == nil {
 			if err := cfg.SaveTo(path); err != nil {
@@ -871,7 +856,7 @@ func normalizeLegacyAgentStepLimits(c *Config) bool {
 }
 
 func migrateLegacyMCPTiersFile(path string) error {
-	_, err := migrateRetiredConfigKeysFile(path, stripLegacyMCPTierLines)
+	_, err := migrateRetiredKeysFile(path, fileencoding.ReadFileUTF8, []retiredKey{{"deprecated plugin tiers", stripLegacyMCPTierLines}})
 	return err
 }
 
@@ -1063,11 +1048,11 @@ func normalizeLegacyMimoProviderCatalogs(c *Config) bool {
 		}
 		switch officialProviderHost(p.BaseURL) {
 		case "api.xiaomimimo.com":
-			if applyLegacyMimoCatalog(p, legacyMimoAPIModels(), []string{"mimo-v2.5", "mimo-v2-omni"}, "mimo-v2.5-pro") {
+			if applyLegacyMimoCatalog(p, legacyMimoAPIModels(), []string{"mimo-v2.5", "mimo-v2-omni"}, mimoModels[0]) {
 				changed = true
 			}
 		case "token-plan-cn.xiaomimimo.com":
-			if applyLegacyMimoCatalog(p, legacyMimoTokenPlanModels(), []string{"mimo-v2.5"}, "mimo-v2.5-pro") {
+			if applyLegacyMimoCatalog(p, legacyMimoTokenPlanModels(), []string{"mimo-v2.5"}, mimoModels[0]) {
 				changed = true
 			}
 		}
@@ -1092,7 +1077,9 @@ func applyLegacyMimoCatalog(p *ProviderEntry, models, visionModels []string, fal
 		currentDefault = strings.TrimSpace(p.Model)
 	}
 	p.Models = mergeModelLists(models, p.ModelList())
-	p.Model = p.Models[0]
+	if strings.TrimSpace(p.Model) == "" {
+		p.Model = p.Models[0]
+	}
 	p.Default = firstKnownModel(currentDefault, p.Models, fallbackDefault)
 	p.VisionModels = mergeModelLists(visionModels, p.VisionModels)
 	backfillOfficialContextWindow(p, 1_048_576)
@@ -1207,9 +1194,9 @@ func legacyOfficialProviderModel(name string) string {
 	case "deepseek-pro":
 		return deepSeekProModel
 	case "mimo", "xiaomi-mimo", "xiaomi_mimo", "mimo-api", "mimo-token-plan", "mimo-pro":
-		return "mimo-v2.5-pro"
+		return mimoModels[0]
 	case "mimo-flash":
-		return "mimo-v2.5"
+		return mimoModels[1]
 	default:
 		return ""
 	}
@@ -1299,11 +1286,11 @@ func legacyMimoProviderNameForRef(ref string) string {
 }
 
 func legacyMimoAPIModels() []string {
-	return []string{"mimo-v2.5-pro", "mimo-v2.5", "mimo-v2-omni"}
+	return append(slices.Clone(mimoPAYGModels), "mimo-v2-omni")
 }
 
 func legacyMimoTokenPlanModels() []string {
-	return []string{"mimo-v2.5-pro", "mimo-v2.5"}
+	return slices.Clone(mimoModels)
 }
 
 func legacyMimoCustomProvider(name string) ProviderEntry {
@@ -1316,7 +1303,7 @@ func legacyMimoCustomProvider(name string) ProviderEntry {
 			BaseURL:       "https://api.xiaomimimo.com/v1",
 			Models:        models,
 			VisionModels:  []string{"mimo-v2.5", "mimo-v2-omni"},
-			Default:       "mimo-v2.5-pro",
+			Default:       mimoModels[0],
 			APIKeyEnv:     "MIMO_API_KEY",
 			ContextWindow: 1_048_576,
 			Prices:        mimoDomesticPrices(models),
@@ -1330,7 +1317,7 @@ func legacyMimoCustomProvider(name string) ProviderEntry {
 			BaseURL:       "https://token-plan-cn.xiaomimimo.com/v1",
 			Models:        models,
 			VisionModels:  []string{"mimo-v2.5"},
-			Default:       "mimo-v2.5-pro",
+			Default:       mimoModels[0],
 			APIKeyEnv:     "MIMO_API_KEY",
 			ContextWindow: 1_048_576,
 			Prices:        mimoDomesticPrices(models),

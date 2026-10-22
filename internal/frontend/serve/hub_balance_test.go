@@ -35,6 +35,7 @@ name = "default"
 kind = "openai"
 base_url = "http://127.0.0.1:1/v1"
 balance_url = %q
+balance_format = "deepseek"
 models = ["shared-chat"]
 default = "shared-chat"
 `, walletURL)
@@ -58,7 +59,7 @@ func TestHubPanesShareOneWalletRead(t *testing.T) {
 
 	h := NewHub(HubOptions{})
 	defer h.Shutdown()
-	srv := httptest.NewServer(h.Handler())
+	srv := httptest.NewServer(operatorHandler(h))
 	defer srv.Close()
 
 	// Three panes, the way switching between conversations opens them.

@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"reasonix/internal/contract/config"
+	"reasonix/internal/contract/event"
 	"reasonix/internal/safety/sandbox"
 )
 
@@ -21,6 +23,19 @@ type PermissionLists struct {
 	Allow []string `json:"allow"`
 	Ask   []string `json:"ask"`
 	Deny  []string `json:"deny"`
+	// AskOnExternalOrigin is the user's switch for asking before a call that copies
+	// text an external result gave the task. On a save, nil leaves it as it is.
+	AskOnExternalOrigin *bool `json:"askOnExternalOrigin,omitempty"`
+}
+
+func (l PermissionLists) of(name string) []string {
+	switch name {
+	case "allow":
+		return l.Allow
+	case "ask":
+		return l.Ask
+	}
+	return l.Deny
 }
 
 // PermissionRules is what an editor needs: the lists it may write, the file
@@ -35,6 +50,12 @@ type PermissionRules struct {
 	// than in the file. Nothing wrote it down, so a reader with only the file
 	// in front of them is looking at less than the agent may currently do.
 	Granted []string `json:"granted,omitempty"`
+	// Dormant lists rules in the file that name no tool, so they match nothing.
+	Dormant []event.DormantPermissionRule `json:"dormant,omitempty"`
+	// Remembered rules are stored per workspace outside project configuration.
+	Remembered          []string `json:"remembered,omitempty"`
+	RememberedPath      string   `json:"rememberedPath,omitempty"`
+	RememberedErrorCode string   `json:"rememberedErrorCode,omitempty"`
 }
 
 // SandboxSettings is where an approved write may land, and whether bash runs
@@ -46,6 +67,9 @@ type SandboxSettings struct {
 	Network       bool     `json:"network"`
 	WorkspaceRoot string   `json:"workspaceRoot"`
 	AllowWrite    []string `json:"allowWrite"`
+	// ProtectChangedFiles refuses a whole-file write over a change made since
+	// the agent last read or wrote that file.
+	ProtectChangedFiles bool `json:"protectChangedFiles"`
 
 	EffectiveWriteRoots []string `json:"effectiveWriteRoots"`
 	// EffectiveBash is the mode the confiner will use. Windows forces off, an
@@ -74,6 +98,18 @@ func (c *Controller) PermissionRules() PermissionRules {
 		ShadowedBy:      shadowingConfig(path, c.WorkspaceRoot()),
 		Granted:         c.approval.sessionGrants(),
 	}
+	out.Dormant = DormantRules(c.PermissionVocabulary(), out.PermissionLists)
+	if root := c.WorkspaceRoot(); root != "" {
+		store := config.NewProjectGrantStore(config.Roots{}.Home())
+		out.RememberedPath = store.Path()
+		if grant, err := store.Grant(root); err != nil {
+			if errors.Is(err, config.ErrProjectGrantsUnavailable) {
+				out.RememberedErrorCode = "project_grants.unavailable"
+			}
+		} else {
+			out.Remembered = grant.Allow
+		}
+	}
 	if out.ShadowedBy == "" {
 		return out
 	}
@@ -93,6 +129,27 @@ func (c *Controller) RevokeSessionGrant(rule string) int {
 	return c.approval.revokeSessionGrant(rule)
 }
 
+// RevokeRememberedProjectRule removes one persistent allow rule for this
+// workspace. The store resolves its fingerprint and preserves other grants.
+// The host rebuilds the runtime after this write so the active gate follows it.
+// A successful revoke also drops a matching same-session grant before the
+// rebuild snapshots authorizations for the replacement controller.
+func (c *Controller) RevokeRememberedProjectRule(rule string) error {
+	root := c.WorkspaceRoot()
+	if root == "" || strings.TrimSpace(rule) == "" {
+		return fmt.Errorf("%w: workspace and rule are required", config.ErrProjectGrantsUnavailable)
+	}
+	store := config.NewProjectGrantStore(config.Roots{}.Home())
+	if err := store.Update(root, func(grant config.ProjectGrant) (config.ProjectGrant, error) {
+		grant.Allow = slices.DeleteFunc(grant.Allow, func(saved string) bool { return saved == rule })
+		return grant, nil
+	}); err != nil {
+		return err
+	}
+	c.approval.revokeSessionGrant(rule)
+	return nil
+}
+
 // SavePermissionRules replaces the three lists wholesale after validating every
 // rule with the parser the gate itself uses, so a typo is refused on the screen
 // that made it rather than silently never matching anything.
@@ -104,9 +161,11 @@ func (c *Controller) SavePermissionRules(in PermissionLists) error {
 	if err := cfg.SetPermissionMode(in.Mode); err != nil {
 		return err
 	}
+	saved := listsFrom(cfg)
 	cfg.Permissions.Allow = nil
 	cfg.Permissions.Ask = nil
 	cfg.Permissions.Deny = nil
+	vocab := c.PermissionVocabulary()
 	for _, list := range []struct {
 		name  string
 		rules []string
@@ -115,10 +174,18 @@ func (c *Controller) SavePermissionRules(in PermissionLists) error {
 			if strings.TrimSpace(rule) == "" {
 				continue
 			}
+			if !slices.Contains(saved.of(list.name), rule) {
+				if err := vocab.Check(list.name, rule); err != nil {
+					return err
+				}
+			}
 			if err := cfg.AddPermissionRule(list.name, rule); err != nil {
 				return err
 			}
 		}
+	}
+	if in.AskOnExternalOrigin != nil {
+		cfg.Permissions.AskOnExternalOrigin = *in.AskOnExternalOrigin
 	}
 	return cfg.SaveTo(path)
 }
@@ -132,18 +199,23 @@ var ErrSandboxUnavailable = errors.New("bash sandbox requested but unavailable o
 func (c *Controller) SandboxSettings() SandboxSettings {
 	path := config.UserConfigPath()
 	cfg := config.LoadForEdit(path)
+	bash := strings.TrimSpace(cfg.Sandbox.Bash)
+	if runtime.GOOS == "windows" {
+		bash = cfg.BashMode() // Windows takes windows_integrity, which the mode already reflects
+	}
 	out := SandboxSettings{
-		Bash:          strings.TrimSpace(cfg.Sandbox.Bash),
-		Network:       cfg.Sandbox.Network,
-		WorkspaceRoot: strings.TrimSpace(cfg.Sandbox.WorkspaceRoot),
-		AllowWrite:    append([]string{}, cfg.Sandbox.AllowWrite...),
-		Available:     sandbox.Available(),
-		Platform:      runtime.GOOS,
-		Path:          path,
-		ShadowedBy:    shadowingConfig(path, c.WorkspaceRoot()),
+		Bash:                bash,
+		Network:             cfg.Sandbox.Network,
+		WorkspaceRoot:       strings.TrimSpace(cfg.Sandbox.WorkspaceRoot),
+		AllowWrite:          append([]string{}, cfg.Sandbox.AllowWrite...),
+		ProtectChangedFiles: cfg.Tools.ChangedFilesProtected(),
+		Available:           sandbox.AvailableFor(sandbox.Spec{Network: cfg.Sandbox.Network}),
+		Platform:            runtime.GOOS,
+		Path:                path,
+		ShadowedBy:          shadowingConfig(path, c.WorkspaceRoot()),
 	}
 	if !out.Available {
-		out.Why, out.WhyCode = sandbox.UnavailableMessage(), sandbox.UnavailableCode()
+		out.Why, out.WhyCode = sandbox.UnavailableMessageFor(sandbox.Spec{Network: cfg.Sandbox.Network}), sandbox.UnavailableCodeFor(sandbox.Spec{Network: cfg.Sandbox.Network})
 	}
 	effective := cfg
 	if merged, err := config.LoadForRootReadOnly(c.WorkspaceRoot()); err == nil {
@@ -164,17 +236,36 @@ func (c *Controller) SaveSandboxSettings(in SandboxSettings) error {
 	default:
 		return fmt.Errorf("sandbox bash %q: must be enforce|off", in.Bash)
 	}
-	if bash == "enforce" && !sandbox.Available() {
-		return fmt.Errorf("%w: %s", ErrSandboxUnavailable, sandbox.UnavailableRemediation())
-	}
 	unlock := config.LockUserConfigEdits()
 	defer unlock()
 	path := config.UserConfigPath()
 	cfg := config.LoadForEdit(path)
+	// Only asking for the jail is refused where there is none. A file already
+	// holding enforce, which the rendered template writes, keeps saving its
+	// other fields; bash itself stays refused at run time either way.
+	if bash == "enforce" && strings.TrimSpace(cfg.Sandbox.Bash) != "enforce" && !sandbox.Available() {
+		return fmt.Errorf("%w: %s", ErrSandboxUnavailable, sandbox.UnavailableRemediation())
+	}
 	cfg.Sandbox.Bash = bash
+	if runtime.GOOS == "windows" {
+		cfg.Sandbox.WindowsIntegrity = bash == "enforce"
+	}
 	cfg.Sandbox.Network = in.Network
 	cfg.Sandbox.WorkspaceRoot = strings.TrimSpace(in.WorkspaceRoot)
-	cfg.Sandbox.AllowWrite = trimmedList(in.AllowWrite)
+	allow := trimmedList(in.AllowWrite)
+	for _, entry := range allow {
+		if slices.Contains(cfg.Sandbox.AllowWrite, entry) {
+			continue
+		}
+		if dir := config.ExpandVars(entry); filepath.IsAbs(dir) {
+			if code, refused := cfg.Roots().FolderGrantRefusal(dir); refused {
+				return &WorkspaceRootError{Code: code, Path: entry}
+			}
+		}
+	}
+	cfg.Sandbox.AllowWrite = allow
+	protect := in.ProtectChangedFiles
+	cfg.Tools.ProtectChangedFiles = &protect
 	return cfg.SaveTo(path)
 }
 
@@ -183,11 +274,14 @@ func listsFrom(cfg *config.Config) PermissionLists {
 	if mode == "" {
 		mode = "ask"
 	}
+	on := cfg.Permissions.AskOnExternalOrigin
 	return PermissionLists{
 		Mode:  mode,
 		Allow: append([]string{}, cfg.Permissions.Allow...),
 		Ask:   append([]string{}, cfg.Permissions.Ask...),
 		Deny:  append([]string{}, cfg.Permissions.Deny...),
+
+		AskOnExternalOrigin: &on,
 	}
 }
 

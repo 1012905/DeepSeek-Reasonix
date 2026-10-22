@@ -25,17 +25,17 @@ reasonix --dir /path/to/project
 | --- | --- |
 | `--model NAME` | 选择已配置的 provider 或 `provider/model` 引用。 |
 | `--preset balanced\|delivery` | 选择 Agent 执行设定。默认 `balanced`。 |
-| `--profile economy\|balanced\|delivery` | 已弃用，等同 `--preset`（`economy` → `light`）。 |
+| `--profile economy\|balanced\|delivery` | 已弃用，等同 `--preset`；`economy` 与 `light` 都解析为 `balanced`。 |
 | `--effort LEVEL` | 覆盖当前会话的 reasoning effort。 |
 | `--max-steps N` | 为本次运行设置工具调用轮数上限；`0` 使用自动执行。 |
 | `--dir PATH` | 加载配置和工具前切换 workspace 根目录。 |
 | `--add-dir PATH` | 增加一个允许工具写入的目录；可重复传入。 |
-| `-c`、`--continue` | 恢复最近一次会话。 |
+| `-c`、`--continue` | 恢复最近一次会话；若不存在则改为开启新会话。 |
 | `-r`、`--resume [QUERY]` | 打开会话选择器，或恢复匹配的会话。 |
 | `--copy` | 复制要恢复的会话，并在可写副本中继续。 |
 | `--allowed-tools RULES` | 增加仅当前会话生效的权限 allow 规则；可重复传入，`--allowedTools` 是别名。 |
-| `--permission-mode MODE` | 以指定的权限姿态启动。 |
-| `--yolo` | 以 YOLO 模式启动；是 `--dangerously-skip-permissions` 的别名。 |
+| `--permission-mode MODE` | 以指定的权限姿态启动：`read-only`、`ask`、`auto`、`acceptEdits`、`dontAsk`、`plan` 或 `bypassPermissions`。1.x 的 `workspace-write`、`danger-full-access` 也能用，分别对应 Auto、Yolo。不指定时见[默认姿态](#默认姿态)。 |
+| `--yolo` | 以 YOLO 模式启动；是 `--dangerously-skip-permissions` 的别名。只跳过审批：沙盒、网络策略和 deny 规则照旧生效。交互模式首次使用时确认一次。 |
 
 适用时，参数可以放在 prompt 前面或后面。
 
@@ -59,6 +59,10 @@ reasonix setup                    # 管理用户全局配置
 reasonix setup --local            # 管理 ./reasonix.toml
 reasonix setup /path/to/config.toml
 ```
+
+本地命令优先使用根目录的 `./reasonix.toml`；仅当它不存在时，使用已有的
+`.reasonix/reasonix.toml`。新建项目配置仍写入根目录。此规则适用于 `setup --local`、
+`config compact-ratio --local` 和 `config reasoning-language --local`。
 
 在交互式终端中，`reasonix setup` 是一个暂存式供应商管理器。它会列出已配置的
 provider，并支持：
@@ -108,9 +112,51 @@ reasonix config compact-ratio 75           # 设置用户全局默认值
 reasonix config compact-ratio --local 75   # 写入 ./reasonix.toml 项目覆盖
 ```
 
-可设置范围为 65–85%，内置默认值为 85%。数值越低越早压缩，可能降低 prompt prefix
+可设置范围为大于 0% 且小于 100%（不含端点），内置默认值为 85%。边界由
+`internal/contract/config` 的 `CompactRatioMin` 和 `CompactRatioMax` 定义；TOML 保存对应的小数比例。
+
+数值越低越早压缩，可能降低 prompt prefix
 缓存复用率；数值越高则会在压缩前保留更多上下文。项目 `reasonix.toml` 的优先级高于
 用户全局配置。修改会应用于新启动的 CLI 会话；已经运行的会话继续使用启动时加载的阈值。
+
+## Diff 渲染
+
+`[cli].diff_fences = true` 会把围栏 ` ```diff ` / ` ```patch ` 块交给彩色 diff
+渲染器（增删背景、`+`/`-` 侧栏、行号），而不是普通代码栏。
+
+它**默认关闭**：模型经常写出没有文件头的 diff 围栏，普通代码栏才是无损的默认。
+
+流式输出的围栏会逐 hunk 着色：每个 `@@` 头会将其之前的行确定下来并着色渲染，尚未完成的
+hunk 仍留在普通代码栏上。
+
+没有 `--- `/`+++ ` 文件头的分段会把其中的 diff 内容留在普通代码栏上，不会丢行；
+只含前导（例如 `git show` 的 commit 头）而没有 diff 内容的分段会被省略。与
+`[cli].diff_formatter` 一样，它仅属于用户/全局配置，项目内的 `reasonix.toml`
+无法设置。
+
+`[cli].diff_formatter` 指定一个可选的外部命令，为 CLI/TUI 渲染 diff 时对其格式化：
+既包括回答流中的围栏 ` ```diff ` / ` ```patch ` 块，也包括 transcript 中写文件工具的
+diff 卡片，以及整段输出就是 diff 的 shell 结果（见下方
+`[agent].embedded_diff_detection`）。
+
+它是 argv 形式、不经过 shell，例如 `delta --color-only --paging=never`。
+
+整个 diff 写入该命令的 stdin，其 stdout 在去掉非 SGR 控制序列后回写，因此格式化器的
+颜色得以保留，而光标或剪贴板转义无法生效。
+
+全屏 TUI 中它在渲染路径之外运行：格式化输出尚未就绪的那部分先画在普通代码栏上，就绪后再
+替换；更早的 hunk 已经格式化好的行保持彩色，因此慢格式化器不会卡住界面。
+
+命令失败、超时、输出为空或 diff 超过 1 MiB 时保留内置渲染器。与
+`[cli].update_channel` 一样，它仅属于用户/全局配置，项目内的 `reasonix.toml`
+无法设置。
+
+`[agent].embedded_diff_detection = true` 会把整段输出为 unified diff 的 shell 结果
+（例如 `bash` 运行 `git diff`）标记出来，让 CLI/TUI 与桌面端把它画成彩色 diff 而不是
+平文本。
+
+检测是整段文本的：`git show` / `git log -p` 由 `commit …` 头识别，混合输出与
+`--stat` 仍按普通文本处理。默认值为 `false`。
 
 ## 一次性运行与自动化
 
@@ -129,12 +175,27 @@ echo "解释这段代码" | reasonix run
 `--add-dir`、`--continue`、`--resume QUERY`、`--copy`、`--allowed-tools` 和
 `--permission-mode`，以及作为 `--permission-mode auto` 别名的 `--auto` / `-y`。
 
+`--yolo` / `--dangerously-skip-permissions` 同样可用，是 `--permission-mode bypassPermissions`
+的别名。`run` 命令行里参数的位置：
+
+- 参数可以夹在任务文字之间：`reasonix run fix --yolo bug` 以 bypassPermissions 执行任务 `fix bug`。
+- 写在 `run` 前面的参数，只有终端界面（加上 `-y`、`-p`）和 `run` 都以同样方式接受每一个时，才会移到它后面：`reasonix -y run "task"` 等同于
+  `reasonix run -y "task"`。
+- 其中只要有一个是终端界面专用参数（`-r`、不带值的 `--resume`），整条命令行就交给终端界面。
+- 只有 `run` 接受的前置参数（`--output-format`、`--metrics`）也一样：整条命令行交给终端界面，由它报错。这类参数请写在 `run` 后面。
+- 前置的 `-p` 只在子命令之前才算数；写在 `run` 后面的 `-p` 属于 `run` 自己。
+- 前置参数之后的第一个词就是子命令，和不带参数时一样：`reasonix --yolo run the tests` 会无界面执行
+  `the tests`。想用以 "run" 开头的提示词打开终端界面，请给它加引号。
+
 ### 基准对照组
 
-`--ablate` 用于整体关闭某个子系统，让基准测试能把成功率的变化归因到它身上。取值是
-`evidence`、`planner`、`subagent`、`retrieval`、`compaction` 的逗号分隔组合，另外还接受
-`none`（默认，全部启用）和 `all`。子代理继承父代理的对照组配置，对照组名称会写入
-`--metrics` 文件，因此记录下来的每次运行都能自证跑的是哪一组。
+`--ablate` 用于整体关闭某个子系统，让基准测试能把成功率的变化归因到它身上。
+
+取值是 `evidence`、`planner`、`subagent`、`retrieval`、`compaction`、`upstream`、
+`recall-search` 的逗号分隔组合，另外还接受 `none`（默认，全部启用）和 `all`。
+
+子代理继承父代理的对照组配置，对照组名称会写入 `--metrics` 文件，因此记录下来的
+每次运行都能自证跑的是哪一组。
 
 ```sh
 reasonix run --ablate evidence,planner --metrics run.json "修复失败的测试"
@@ -156,6 +217,9 @@ JSONL 记录，便于离线回放并归因时间去向（工具执行 vs. 两次
 reasonix run --metrics run.json --trajectory run.trajectory.jsonl "修复失败的测试"
 ```
 
+正常的 `run` 或 `-p` 只在标准错误里写需要用户处理的警告。加 `--debug` 会额外输出诊断日志，
+例如组装耗时和续接会话的缓存状态。
+
 ### 输出格式
 
 | 格式 | 行为 |
@@ -169,6 +233,14 @@ reasonix -p "列出有风险的改动" --output-format text
 reasonix -p "总结 diff" --output-format json
 reasonix run "运行测试" --output-format stream-json
 ```
+
+`stream-json` 在结果对象之前的各行遵循 1.x 的约定：
+
+- 每行都带 `sessionId`、`turnId`、`seq`（从 1 开始）和 `status`。
+- 回合以 `turn_status`（`status: "queued"`）和 `user_message` 开始。
+- 通过全部关卡并真正执行的工具调用，在 `tool_result` 之前先报 `tool_started`。
+- 回合以 `turn_done` 结束：`completed`、`failed` 或 `interrupted`。
+- 只输出 1.x 输出过的事件种类，工作区租约之类的宿主内部状态不进入这条流。
 
 最终结构化对象的格式如下：
 
@@ -189,9 +261,27 @@ reasonix run "运行测试" --output-format stream-json
     "output_tokens": 0,
     "cache_read_input_tokens": 0,
     "cache_creation_input_tokens": 0
-  }
+  },
+  "permission_denials": [
+    {"tool_name": "write_file", "tool_use_id": "call_1", "code": "permission.unattended"}
+  ],
+  "permission_mode": "ask"
 }
 ```
+
+`permission_denials` 列出本次运行的权限门拒绝的调用，没有被拒时为空数组；被拒一般不改变退出码；`permission.untrusted_folder` 退出 `4`（指定 `--fail-on-unverified` 时为 `3`）。
+同一个 `code` 也随被拒的工具结果出现：`stream-json` 里是 `refusalCode`，`--events-jsonl`
+里是 `refusal_code`。
+
+`permission_mode` 是本次运行实际采用的档位（指定的或默认的）。
+
+| `code` | 原因 |
+| --- | --- |
+| `permission.unattended` | 需要批准，但无人可以批准。 |
+| `permission.untrusted_folder` | 因工作区文件夹没有信任决定而需要批准，且无人可以批准。该条记录带 `remedy`：`reasonix trust --dir <文件夹>`（先展示该文件夹会运行什么再批准），或为单次运行加 `--permission-mode auto`；结果里的 `unverified_by` 给出该码。 |
+| `permission.read_only` | 会话处于 `read-only`。 |
+| `permission.deny_rule` | 命中 deny 规则。 |
+| `permission.declined` | 有人拒绝了。 |
 
 `total_cost` 仅在形成单一 `selected` 展示金额时存在（ISO 代码见 `currency`）。有
 `cost_quote` 时优先读它：含原币费用、`original_totals`、发生时的官方双区域
@@ -211,6 +301,24 @@ reasonix run "运行测试" --output-format stream-json
 执行失败时使用 `subtype: "error_during_execution"` 和 `is_error: true`。
 结构化模式会把运行时错误保留在 JSON 中，不再额外重复输出一份人类可读错误。
 
+宿主对回答的判定放在回答旁边，不改变退出码：
+
+- `-p` 模式会在标准错误里点名 `permission_denials` 中被拒的调用。
+- 模型已结束、但宿主的最终就绪检查没有满足时（例如最后一次写入后没有运行检查），
+  结果带 `readiness`（`attempts`、`missing`），运行仍算成功。
+- 回合有 `completion_summary` 时，`completion` 字段会复述它。
+- `--events-jsonl` 的 `run_done` 带被拒次数和 `readiness`。
+
+`reasonix run` 的退出码：
+
+| 退出码 | 含义 |
+| --- | --- |
+| `0` | 模型已结束，包括有调用被拒或就绪检查未满足的情况。 |
+| `1` | 运行失败：模型服务、配置、上限或取消。 |
+| `2` | 命令行参数无效。 |
+| `3` | 指定了 `--fail-on-unverified`，且最终就绪检查未满足，或因文件夹未被信任而编辑和命令被拒绝。 |
+| `4` | 文件夹未被信任，编辑和命令被拒绝，任务没有完成。用 `reasonix trust --dir <folder>` 信任它，或明知故犯地传 `--permission-mode`。 |
+
 ### 脱敏机器接口
 
 自动化只需要生命周期遥测、不能接收 prompt、reasoning、工具参数/输出或审批文本时，
@@ -221,7 +329,8 @@ reasonix run --events-jsonl "运行 focused tests"
 ```
 
 每行都包含 `schema_version`、`sequence` 和 `kind`，最后一行为
-`kind: "run_done"`。`--events-jsonl` 与包含更多内容的
+`kind: "run_done"`。生命周期记录与 `stream-json` 相同（`turn_status`、`user_message`、
+`tool_started`、`turn_done`），但不带内容。`--events-jsonl` 与包含更多内容的
 `--output-format stream-json` 是两个独立契约，不能和 `--output-format`
 组合使用。
 
@@ -276,7 +385,8 @@ reasonix --resume <session-id>
 reasonix --resume provider-config --copy
 ```
 
-- `--continue` 立即恢复最新保存的会话。
+- `--continue` 立即恢复最新保存的会话；若不存在已保存的会话，会提示并改为开启
+  新会话，而不是报错退出。
 - 在交互式终端中，单独使用 `--resume` 会打开可搜索选择器。
 - `--resume QUERY` 接受精确 session ID 或路径，也支持唯一匹配标题或预览内容的
   子串。没有匹配或匹配不唯一时会返回明确错误。
@@ -300,21 +410,49 @@ reasonix --allowed-tools "Bash(go test ./...)" --allowed-tools read_file
 
 | 模式 | 行为 |
 | --- | --- |
+| `read-only` | 拒绝一切非读取调用——写文件、不能确认是读取的 shell 命令、未声明只读的工具——allow 规则也放不过；不弹审批。已安装扩展的权限钩子仍可推翻它。 |
 | `manual`、`ask` | 普通权限决策会弹出审批。 |
 | `auto` | 自动批准普通 fallback 操作，同时保留显式 ask 和 deny 规则。 |
 | `acceptEdits` | 允许文件编辑工具；不等同于完整 Auto 模式。 |
 | `dontAsk` | 未预先允许的请求直接拒绝，不弹出审批。 |
 | `plan` | 以只读 Plan 模式启动交互式会话。 |
-| `bypassPermissions` | 跳过审批；等同于 YOLO。 |
+| `bypassPermissions` | 跳过审批；等同于 YOLO。沙盒、网络策略和 deny 规则照旧生效，项目配置不能选它。 |
+
+只读的 shell 命令——`git status`、`ls`、`grep`、`git -C dir log` 之类，按解析后的命令结构判定，
+不看措辞——在任何模式下都不弹审批。
+
+### 默认姿态
+
+不指定模式时，只有下面两条同时成立才以 `auto` 打开：
+
+- 本机的 OS 沙盒确实约束 shell 写入（macOS 为 Seatbelt，Linux 为 bubblewrap），且
+  `[sandbox] bash` 不是 `off`；
+- 你信任了这个工作区文件夹。
+
+否则以 `ask` 打开；Windows 没有 OS 沙盒，始终如此。
+
+此时 `auto` 不经询问放行的范围由沙盒决定，不只是这个文件夹：
+
+- shell 命令还能写你配置的 `allow_write` 与 `--add-dir` 目录、临时目录和工具链缓存（`~/go`、`~/.cargo`、
+  `~/.cache` 等），写进 `~/.cargo/bin`、`~/go/bin` 的东西以后会在沙盒外运行；
+- 能访问网络，除非设置 `[sandbox] network = false`。
+
+- 终端界面对每个文件夹问一次是否信任（家目录和文件系统根目录从不问），答案记在你的 Reasonix 主目录。
+- `reasonix trust` 信任当前文件夹，`reasonix trust --revoke` 撤销；项目自己的文件不能写入信任记录。
+- 信任跟着文件夹路径走，不看内容：以后在同一路径检出的任何东西也被信任。
+- 无头运行从不询问；`ask` 下写入被拒，并列在 `permission_denials` 中。
+
+终端界面里 Shift+Tab 按 只读 → 询问 → 自动 → YOLO → 计划 循环；
+Ctrl+Y 切换 YOLO，再按回到进入前的档位。
 
 无人值守执行需要放行普通 writer fallback 时，使用 `reasonix run --auto ...`
-（或 `-y`）。这个别名不能和显式 `--permission-mode` 同时使用。
+（或 `-y`）。它和 `--yolo` 都不能和显式 `--permission-mode` 同时使用，两者也不能同时使用。
 
 `--allowed-tools` 是会话权限覆盖，不是 provider tool schema 过滤器。规则可以用逗号
 或空格分隔，也可重复传入参数。配置中的 deny 规则始终优先于命令行 allow 规则。
 
 在非交互运行（`reasonix run` / `-p`）下没有可应答的审批，各模式都以非阻塞方式解析。
-默认 `ask` / `manual` 对显式 Ask 决策和普通 writer fallback 失败关闭，只读调用仍会执行；
+`ask` / `manual` 对显式 Ask 决策和普通 writer fallback 失败关闭，只读调用仍会执行；
 `acceptEdits` 放行其列出的文件编辑工具，其他 Ask 决策失败关闭；`auto` 放行普通 writer
 fallback，但仍拒绝显式 ask 规则；`dontAsk` 拒绝未批准的 writer；`bypassPermissions`
 可越过普通 ask 与 writer fallback，但配置的 deny、Sandbox，以及始终需要人工新鲜批准的
@@ -358,7 +496,12 @@ reasonix -p "同时更新两个项目" \
 设定值会跟随 `/language`。
 
 使用 `/theme auto|light|dark` 选择终端背景模式，也可以从 `/theme` 列出的命名配色中选择
-强调色。输入框上下边线、插入光标、选区、滚动条和底栏都会使用当前 CLI 主题。Transcript
+强调色。
+
+- 单独输入 `/theme` 会打开选择器，光标移到哪一行就即时预览。
+- Enter 保留，Esc 还原；`/theme list` 列出名称。
+
+输入框上下边线、插入光标、选区、滚动条和底栏都会使用当前 CLI 主题。Transcript
 导航、多行输入、rewind 和剪贴板操作见[快捷键](./GUIDE.zh-CN.md#快捷键)。
 
 剪贴板操作按内容类型明确分开。本地 transcript 和输入框选区写入系统剪贴板，并且只有写入
@@ -378,10 +521,10 @@ SSH 下远端进程无法读取本机剪贴板，请使用终端粘贴快捷键�
 | --- | --- |
 | `/model` | 搜索已配置模型并切换当前模型。 |
 | `/provider` | 选择 provider，再选择该 provider 下的模型。 |
-| `/resume` | 搜索最近会话并切换。 |
+| `/resume [n]` | 搜索最近会话并切换；`/resume <n>` 直接切换到列表中第 n 个会话。 |
 | `/status` | 显示模型、effort、cache、Git、后台任务，以及执行设定或余额信息。 |
 | `/preset [balanced\|delivery]` | 查看或切换 Agent 执行设定（不重建 Controller）；`/work-mode` 与 `/profile` 为兼容别名，`economy`、`light` 都解析为 `balanced`。 |
-| `/theme [auto\|light\|dark\|style]` | 查看或切换 CLI 背景模式和强调色。 |
+| `/theme [auto\|light\|dark\|style\|list]` | 打开选择器预览并切换 CLI 背景模式和强调色。 |
 | `/currency [auto\|CNY\|USD]` | 查看或切换用户全局费用展示币种，并刷新当前运行时。 |
 | `/paste-image` | 读取剪贴板图片并插入可编辑的附件标记。 |
 | `/mouse` | 切换应用内鼠标选区、滚动条和滚轮处理。 |

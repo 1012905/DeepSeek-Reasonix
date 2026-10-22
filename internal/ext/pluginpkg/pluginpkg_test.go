@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	fileencoding "reasonix/internal/base/fileutil/encoding"
+	"reasonix/internal/base/fileutil/encoding/encodingtest"
 	"reasonix/internal/base/testenv"
 )
 
@@ -52,7 +53,7 @@ func TestParseDirDecodesGB18030Manifest(t *testing.T) {
 	root := testenv.TempDir(t)
 	manifest := `{"apiVersion":"reasonix.io/plugin/v2","name":"cn-plugin","version":"1.0.0","description":"中文插件"}`
 	path := filepath.Join(root, NativeManifest)
-	if err := os.WriteFile(path, fileencoding.Encode(manifest, fileencoding.GB18030), 0o644); err != nil {
+	if err := os.WriteFile(path, encodingtest.MustEncode(manifest, fileencoding.GB18030), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -625,7 +626,7 @@ func TestParseClaudePluginMapsConventionCapabilities(t *testing.T) {
   "hooks": {"SessionStart": [{"hooks": [{"type":"command","command":"bin/start","args":["--hook"],"async":true}]}]}
 }`)
 	writeTestFile(t, filepath.Join(root, ".mcp.json"), `{
-  "mcpServers": {"Google Drive": {"type":"local","command":"uvx","args":["drive-mcp"],"title":"Drive"}}
+  "mcpServers": {"Google Drive": {"type":"local","command":"uvx","args":["drive-mcp"],"title":"Drive","alwaysLoad":true}}
 }`)
 
 	pkg, warnings, err := ParseDir(root)
@@ -650,7 +651,7 @@ func TestParseClaudePluginMapsConventionCapabilities(t *testing.T) {
 		t.Fatalf("MCP servers = %+v", pkg.Manifest.MCPServers)
 	}
 	for name, server := range pkg.Manifest.MCPServers {
-		if !IsValidName(name) || server.Type != "stdio" || server.DisplayName != "Drive" || server.AutoStart == nil || *server.AutoStart {
+		if !IsValidName(name) || server.Type != "stdio" || server.DisplayName != "Drive" || server.AutoStart == nil || *server.AutoStart || server.Load != "always" {
 			t.Fatalf("MCP %q = %+v", name, server)
 		}
 	}

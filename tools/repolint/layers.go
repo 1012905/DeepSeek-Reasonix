@@ -14,7 +14,10 @@ var frontends = []string{
 	"internal/frontend/acp",
 	"internal/assembly/boot",
 	"internal/frontend/cli",
+	"internal/frontend/clisession",
+	"internal/frontend/schedulerun",
 	"internal/frontend/serve",
+	"internal/frontend/tui",
 }
 
 // Utility layer: these packages carry no knowledge of the kernel and must
@@ -22,9 +25,14 @@ var frontends = []string{
 // One may reach another: the layer is closed, so that drags nothing in, and
 // refusing it is what leaves the same judgement copied into several of them.
 var leaves = []string{
+	"internal/base/workspacefile",
+	"internal/contract/delivery",
 	"internal/contract/ablation",
 	"internal/contract/agentgraph",
 	"internal/contract/agentpreset",
+	"internal/contract/chartspec",
+	"internal/contract/surfacespec",
+	"internal/contract/walletformat",
 	"internal/model/billing",
 	"internal/platform/browser",
 	"internal/platform/computer",
@@ -37,19 +45,28 @@ var leaves = []string{
 	"internal/base/fileref",
 	"internal/base/fileutil",
 	"internal/base/fileutil/encoding",
+	"internal/base/flexstr",
 	"internal/base/frontmatter",
 	"internal/base/i18n",
 	"internal/contract/mcpdiag",
 	"internal/base/neterr",
 	"internal/base/nilutil",
+	"internal/platform/openwith",
 	"internal/platform/packagegrant",
 	"internal/contract/planmode",
 	"internal/base/proc",
+	"internal/safety/egress",
 	"internal/safety/redirectguard",
 	"internal/platform/releaseasset",
+	"internal/platform/wsl",
 	"internal/base/retrieval",
+	"internal/base/rulelist",
+	"internal/base/scratch",
 	"internal/base/shellparse",
 	"internal/state/store",
+	"internal/state/observation",
+	"internal/state/peermail",
+	"internal/state/trustedstate",
 	"internal/contract/surface",
 	"internal/base/sysproxy",
 	"internal/base/textutil",
@@ -58,6 +75,7 @@ var leaves = []string{
 	"internal/model/visionimage",
 	"internal/base/workspaceid",
 	"internal/state/workspacelease",
+	"internal/state/workspacelist",
 }
 
 // A host adapter implements a frontend's driven port and is shared by the hosts

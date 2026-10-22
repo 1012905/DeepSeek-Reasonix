@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"reasonix/internal/runtime/usecap"
 	"strings"
 
 	"reasonix/internal/contract/tool"
@@ -32,6 +33,8 @@ var subagentAlwaysHiddenTools = []string{
 	"list_subagents",
 	"install_skill",
 	"install_source",
+	"apply_isolated",
+	"discard_isolated",
 }
 
 var subagentJobTools = []string{
@@ -85,7 +88,7 @@ func SubagentToolRegistryForDepth(parent *tool.Registry, names []string, childDe
 // an optional session MCP runtime used when the parent registry has no
 // use_capability (for example Economy or legacy callers) but sub-agents still
 // need the proxy.
-func SubagentToolRegistryForDepthWithRuntime(parent *tool.Registry, names []string, childDepth, maxDepth int, runtime *MCPCapabilityRuntime) *tool.Registry {
+func SubagentToolRegistryForDepthWithRuntime(parent *tool.Registry, names []string, childDepth, maxDepth int, runtime *usecap.MCPCapabilityRuntime) *tool.Registry {
 	exclude := append([]string(nil), subagentAlwaysHiddenTools...)
 	if childDepth >= NormalizeMaxSubagentDepth(maxDepth) {
 		exclude = append(exclude, subagentRecursiveTools...)
@@ -116,6 +119,7 @@ func FilterRegistry(parent *tool.Registry, names []string, exclude ...string) *t
 	if parent == nil {
 		return sub
 	}
+	sub.CopyDisabledMCPFrom(parent)
 	ex := make(map[string]bool, len(exclude))
 	for _, e := range exclude {
 		ex[e] = true
@@ -217,7 +221,7 @@ func serversFromCapabilityAllowlist(allowed map[string]bool) map[string]bool {
 // state. No allowlist → full proxy. Explicit allowlist with MCP names →
 // restricted proxy. Explicit "use_capability" → full proxy. Explicit allowlist
 // without MCP entries → no proxy.
-func attachSubagentCapabilityProxy(parent, sub *tool.Registry, names []string, runtime *MCPCapabilityRuntime) {
+func attachSubagentCapabilityProxy(parent, sub *tool.Registry, names []string, runtime *usecap.MCPCapabilityRuntime) {
 	if sub == nil {
 		return
 	}
@@ -257,7 +261,7 @@ func attachSubagentCapabilityProxy(parent, sub *tool.Registry, names []string, r
 	})
 }
 
-func newSubagentCapabilityFrontend(parent *tool.Registry, runtime *MCPCapabilityRuntime) tool.Tool {
+func newSubagentCapabilityFrontend(parent *tool.Registry, runtime *usecap.MCPCapabilityRuntime) tool.Tool {
 	if runtime != nil {
 		return runtime.NewFrontend(nil, nil)
 	}
@@ -268,17 +272,17 @@ func newSubagentCapabilityFrontend(parent *tool.Registry, runtime *MCPCapability
 	if !ok {
 		return nil
 	}
-	if uc, ok := inner.(*UseCapabilityTool); ok {
+	if uc, ok := inner.(*usecap.UseCapabilityTool); ok {
 		return uc.CloneForAgent(nil, nil)
 	}
 	return inner
 }
 
 // mcpCapabilityAllowlist converts profile/call tool names into capability IDs
-// for the restricted use_capability proxy. Accepts complete mcp-tool:<s>/<t>,
-// mcp-server:<s>, model-visible mcp__* names, and wildcards expanded against
-// the parent. Incomplete prefixes such as "mcp-server:" or "mcp-tool:foo" are
-// rejected so they cannot install a restricted proxy with an empty server set.
+// for the restricted use_capability proxy. Complete mcp-tool:<s>/<t> and
+// mcp-server:<s> IDs work before connection; callable names and wildcards need
+// parent metadata because normalized names cannot establish raw identity.
+// Incomplete IDs are rejected so a restricted proxy cannot have an empty server set.
 func mcpCapabilityAllowlist(parent *tool.Registry, names []string) map[string]bool {
 	if len(names) == 0 {
 		return nil
@@ -307,18 +311,10 @@ func mcpCapabilityAllowlist(parent *tool.Registry, names []string) map[string]bo
 		default:
 			if parent != nil {
 				if tl, ok := parent.Get(name); ok {
-					if m, ok := tl.(tool.MCPMetadata); ok {
-						server := strings.TrimSpace(m.MCPServerName())
-						raw := strings.TrimSpace(m.MCPRawToolName())
-						if server != "" && raw != "" {
-							allowed["mcp-tool:"+server+"/"+raw] = true
-							continue
-						}
+					if binding, ok := tool.MCPBindingFor(tl); ok {
+						allowed[binding.CapabilityID] = true
 					}
 				}
-			}
-			if server, raw, ok := tool.SplitMCPName(name); ok {
-				allowed["mcp-tool:"+server+"/"+raw] = true
 			}
 		}
 	}
@@ -358,7 +354,7 @@ func ReadOnlySubagentToolRegistryForDepth(parent *tool.Registry, names []string,
 
 // ReadOnlySubagentToolRegistryForDepthWithRuntime is the read-only registry
 // builder with an optional session MCP runtime for proxy injection.
-func ReadOnlySubagentToolRegistryForDepthWithRuntime(parent *tool.Registry, names []string, childDepth, maxDepth int, runtime *MCPCapabilityRuntime) *tool.Registry {
+func ReadOnlySubagentToolRegistryForDepthWithRuntime(parent *tool.Registry, names []string, childDepth, maxDepth int, runtime *usecap.MCPCapabilityRuntime) *tool.Registry {
 	exclude := append([]string(nil), subagentAlwaysHiddenTools...)
 	if childDepth >= NormalizeMaxSubagentDepth(maxDepth) {
 		exclude = append(exclude, subagentRecursiveTools...)
@@ -376,6 +372,7 @@ func ReadOnlySubagentToolRegistryForDepthWithRuntime(parent *tool.Registry, name
 	if parent == nil {
 		return sub
 	}
+	sub.CopyDisabledMCPFrom(parent)
 	src := names
 	if len(src) == 0 {
 		src = parent.Names()
@@ -452,6 +449,7 @@ func FilterReadOnlyRegistry(parent *tool.Registry, exclude ...string) *tool.Regi
 	if parent == nil {
 		return sub
 	}
+	sub.CopyDisabledMCPFrom(parent)
 	for _, name := range parent.Names() {
 		if ex[name] {
 			continue
@@ -460,7 +458,7 @@ func FilterReadOnlyRegistry(parent *tool.Registry, exclude ...string) *tool.Regi
 		if !ok || !tl.ReadOnly() {
 			continue
 		}
-		if isInstalledMCPTool(tl) && (!mcpServerAuthorized(tl) || mcpDestructiveHint(tl)) {
+		if isInstalledMCPTool(tl) && (!tool.IsMCPServerAuthorized(tl) || tool.HasMCPDestructiveHint(tl)) {
 			continue
 		}
 		sub.Add(tl)
@@ -509,7 +507,7 @@ func (t *restrictedCapabilityProxy) check(args json.RawMessage) error {
 		return fmt.Errorf("invalid args: %w", err)
 	}
 	action := strings.ToLower(strings.TrimSpace(p.Action))
-	if action == "list" || action == "search" {
+	if usecap.IsIDlessCatalogAction(action) {
 		return nil
 	}
 	id := strings.TrimSpace(p.CapabilityID)
@@ -535,10 +533,10 @@ func (t *restrictedCapabilityProxy) ResolveCall(ctx context.Context, args json.R
 	}
 	_ = json.Unmarshal(args, &p)
 	action := strings.ToLower(strings.TrimSpace(p.Action))
-	if action == "list" && rc.SkipExecute {
-		rc.Result = filterCapabilityListResult(rc.Result, t.servers)
-	} else if action == "search" && rc.SkipExecute {
-		rc.Result = filterCapabilitySearchResult(rc.Result, t.allowed)
+	if action == usecap.ActionList && rc.SkipExecute {
+		rc.Result = usecap.FilterCapabilityListResult(rc.Result, t.servers)
+	} else if action == usecap.ActionSearch && rc.SkipExecute {
+		rc.Result = usecap.FilterCapabilitySearchResult(rc.Result, t.allowed)
 	}
 	return rc, nil
 }
@@ -557,10 +555,10 @@ func (t *restrictedCapabilityProxy) Execute(ctx context.Context, args json.RawMe
 	_ = json.Unmarshal(args, &p)
 	action := strings.ToLower(strings.TrimSpace(p.Action))
 	switch action {
-	case "list":
-		return filterCapabilityListResult(out, t.servers), nil
-	case "search":
-		return filterCapabilitySearchResult(out, t.allowed), nil
+	case usecap.ActionList:
+		return usecap.FilterCapabilityListResult(out, t.servers), nil
+	case usecap.ActionSearch:
+		return usecap.FilterCapabilitySearchResult(out, t.allowed), nil
 	}
 	return out, nil
 }

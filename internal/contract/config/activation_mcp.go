@@ -1,6 +1,9 @@
 package config
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // mcpIdentity returns the fixed part of a server's override identity: whether
 // its scope is forced, and the disambiguators that keep two packages exposing
@@ -17,6 +20,13 @@ func mcpIdentity(entry PluginEntry) (forcedProject bool, source, owner string) {
 		return true, source, ""
 	}
 	return false, source, ""
+}
+
+// RepositoryDeclared reports an entry whose declaration arrives with the
+// workspace, so an enable on it holds only for the declaration it was given for.
+func RepositoryDeclared(entry PluginEntry) bool {
+	repoDeclared, _, _ := mcpIdentity(entry)
+	return repoDeclared
 }
 
 // ServerOverrideFor builds the override identity for entry at scope. Callers
@@ -38,13 +48,20 @@ func ServerOverrideFor(entry PluginEntry, root string, scope ActivationScope) Ac
 }
 
 // ServerDecision reports what the store holds for entry in root, and whether an
-// undecided one may start anyway. A repository-declared one may not: .mcp.json
-// and a project reasonix.toml both arrive with a clone, so whoever wrote the
-// repo chose the command. Every other source is a file only the user writes.
+// undecided one may start anyway. A repository-declared one may not, since a
+// clone chose its command; and an enable on it holds only for the declaration
+// it was given for, any other reading as ActivationChanged. Every other source
+// is a file only the user writes.
 func (s *ActivationStore) ServerDecision(entry PluginEntry, root string) (ActivationDecision, bool, error) {
 	repoDeclared, _, _ := mcpIdentity(entry)
-	decision, err := s.decide(ServerOverrideFor(entry, root, ActivationGlobal), root, repoDeclared)
-	return decision, DeclaredDefaultOn(entry), err
+	row, found, err := s.decidingRow(ServerOverrideFor(entry, root, ActivationGlobal), root, repoDeclared)
+	switch {
+	case err != nil || !found:
+		return ActivationUndecided, DeclaredDefaultOn(entry), err
+	case repoDeclared && row.Enabled && !slices.Contains(confirmedDeclarations(row), ProjectDeclarationDigest(entry, root)):
+		return ActivationChanged, DeclaredDefaultOn(entry), nil
+	}
+	return decisionOf(row.Enabled), DeclaredDefaultOn(entry), nil
 }
 
 // DeclaredDefaultOn is what a server does when the store cannot be read. Every
@@ -69,6 +86,13 @@ func (s *ActivationStore) IsEnabled(entry PluginEntry, root string) (bool, error
 	return defaultOn, nil
 }
 
+// ServerChanged reports an enable the user gave for another declaration of
+// entry, so a surface can say why the server is waiting again.
+func (s *ActivationStore) ServerChanged(entry PluginEntry, root string) bool {
+	decision, _, err := s.ServerDecision(entry, root)
+	return err == nil && decision == ActivationChanged
+}
+
 // AwaitingDecision reports a repository-declared server nobody has answered for.
 // It is off, but not because the user turned it off — a surface that cannot tell
 // those apart shows a project's MCP as simply missing.
@@ -77,13 +101,18 @@ func (s *ActivationStore) AwaitingDecision(entry PluginEntry, root string) bool 
 	if err != nil {
 		return !DeclaredDefaultOn(entry) // unread store: ask again rather than go quiet
 	}
-	return decision == ActivationUndecided && !defaultOn
+	return decision == ActivationChanged || decision == ActivationUndecided && !defaultOn
 }
 
 // SetServerEnabled records a durable decision for entry at scope.
+// Enabling a repository-declared server records the declaration it was given
+// for, as it reads now.
 func (s *ActivationStore) SetServerEnabled(entry PluginEntry, root string, scope ActivationScope, enabled bool) error {
 	override := ServerOverrideFor(entry, root, scope)
 	override.Enabled = enabled
+	if repoDeclared, _, _ := mcpIdentity(entry); repoDeclared && enabled {
+		return s.confirmDeclaration(override, ProjectDeclarationDigest(entry, root))
+	}
 	return s.SetOverride(override)
 }
 
@@ -115,4 +144,51 @@ func (s *ActivationStore) ServerOverride(entry PluginEntry, root string, scope A
 	}
 	row, ok := findOverride(file.Overrides, overrideKey(ServerOverrideFor(entry, root, scope)))
 	return row, ok, nil
+}
+
+// maxConfirmedDeclarations bounds how many declarations one slot remembers. The
+// slot is a row in a user file read at every launch, and a repository with eight
+// projects declaring one name differently is already far past a real layout; past
+// the bound the oldest confirmation is dropped, which only asks about it again.
+const maxConfirmedDeclarations = 8
+
+// confirmedDeclarations are the declaration digests the user answered yes for on
+// this row: the list a newer binary writes plus the single Identity an older one
+// did, so a file from before the list still reads.
+func confirmedDeclarations(row ActivationOverride) []string {
+	var out []string
+	for _, d := range append(slices.Clone(row.Identities), row.Identity) {
+		if d != "" && !slices.Contains(out, d) {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// confirmDeclaration records an enable for digest on the slot override names. A
+// project of the same repository that declares the same name differently shares
+// the slot, so the enable adds to what the user already confirmed there instead
+// of replacing it; only a declaration on that list may start. Disabling still
+// replaces the whole row, which clears the list.
+func (s *ActivationStore) confirmDeclaration(override ActivationOverride, digest string) error {
+	if s == nil {
+		return nil
+	}
+	override = normalizeOverride(override)
+	if override.Name == "" {
+		return nil
+	}
+	return s.update(func(file *ActivationFile) {
+		confirmed := []string{}
+		if prior, ok := findOverride(file.Overrides, overrideKey(override)); ok && prior.Enabled {
+			confirmed = slices.DeleteFunc(confirmedDeclarations(prior), func(d string) bool { return d == digest })
+		}
+		confirmed = append(confirmed, digest)
+		if len(confirmed) > maxConfirmedDeclarations {
+			confirmed = confirmed[len(confirmed)-maxConfirmedDeclarations:]
+		}
+		override.Identity = digest
+		override.Identities = confirmed
+		file.Overrides = upsertOverride(file.Overrides, override)
+	})
 }

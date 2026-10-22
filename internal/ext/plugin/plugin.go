@@ -8,6 +8,7 @@ package plugin
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,9 +16,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"reflect"
 	"regexp"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -78,6 +77,8 @@ type Spec struct {
 	Env     map[string]string
 	URL     string
 	Headers map[string]string
+	// DisabledTools excludes exact server-local names before schema registration.
+	DisabledTools []string
 	// DefaultStartupTimeout is the background initialize + tools/list safety cap
 	// for this server. Zero keeps Reasonix's built-in default.
 	DefaultStartupTimeout time.Duration
@@ -104,9 +105,10 @@ type Spec struct {
 	// stdio servers keep inheriting Reasonix's cwd while still receiving the
 	// explicit workspace root when they ask for roots/list.
 	WorkspaceRoot string
-	// Stderr optionally mirrors plugin subprocess stderr output. Stderr is always
-	// captured in a bounded buffer for failure diagnostics; nil keeps it out of
-	// the terminal so child logs cannot corrupt interactive UIs.
+	// WritableRoots are the folders the session lets tools write, the workspace
+	// among them. A local stdio server is told the others per call; runtime-only.
+	WritableRoots []string
+	// Stderr receives byte-count summaries because raw child logs can carry credentials.
 	Stderr io.Writer
 	// LaunchManager owns exact project launch grants and mutable launcher locks.
 	// It never contributes to SchemaCacheKey or provider-visible tool schemas.
@@ -119,6 +121,10 @@ type Spec struct {
 	// servers set it only after an exact launch grant is resolved.
 	Authorized            bool
 	RequireLaunchApproval bool
+	// LaunchCheck, when set, runs before every process start or connection and
+	// refuses one whose project declaration no longer reads as it did when the
+	// spec was built; a lazy start can come long after the decision was read.
+	LaunchCheck func() error
 	// LaunchArgs and launcher metadata are host-local immutable resolutions for
 	// mutable package launchers. LauncherIdentityArgs is the same exact package
 	// resolution without an automatically injected offline/no-install flag: that
@@ -138,10 +144,14 @@ type Spec struct {
 	// agent command sandbox.
 	Sandbox         sandbox.Spec
 	StateDir        string
+	ProcessStateDir string
 	OAuthHTTPClient *http.Client
 	// OAuthAllowMissingPKCEMetadata accepts an authorization server that does
 	// not list code_challenge_methods_supported; see ErrOAuthPKCEUnadvertised.
 	OAuthAllowMissingPKCEMetadata bool
+	// OAuthScopeUpgrade makes AuthorizeHTTPMCP ask for the scopes the server
+	// challenged for, on top of what was granted, instead of starting afresh.
+	OAuthScopeUpgrade bool
 	// StripRawPrefix, when non-empty, removes this prefix from each MCP tool's
 	// raw name before namespacing. For example, StripRawPrefix="server_" turns
 	// "server_search" into "search", yielding "mcp__search__search" instead of
@@ -171,11 +181,12 @@ type Host struct {
 	// mu guards the slices below: StartAll builds the Host single-threaded, but
 	// after that a /mcp hot-add or -remove (one goroutine) can run concurrently
 	// with reads from a running turn's @ref resolution or the status UI.
-	mu        sync.RWMutex
-	clients   []*Client
-	prompts   []Prompt
-	resources []Resource
-	failures  []Failure
+	mu                sync.RWMutex
+	clients           []*Client
+	prompts           []Prompt
+	resources         []Resource
+	failures          []Failure
+	compositionGuards map[string]*compositionToolGuard
 
 	// statusMu guards statusSink alone: it is written once at assembly and read
 	// from whichever goroutine a background connection finished on.
@@ -206,6 +217,10 @@ type Host struct {
 	// proxies holds stable per-server backends for rolling replacement without
 	// changing provider-visible tool prefixes (spatiotemporal composability).
 	proxies map[string]*serverProxy
+
+	// toolListChanges are the subscribers to catalog changes a connected server
+	// announces; guarded by mu like the client list it publishes from.
+	toolListChanges toolListWatchers
 
 	// Detached stats/schema-cache writers from Start; off the boot path but
 	// drained by Close so cleanup can't race a still-open cache file.
@@ -251,9 +266,9 @@ type StartPolicy struct {
 	// on the host and other plugins keep going (StartAvailable semantics).
 	AbortOnError bool
 
-	// SkipPersistence disables RecordStartup / SaveCachedSchema side effects.
-	// Use for read-only live probes (capability diagnostics) that must not
-	// write MCP stats or schema cache files under Reasonix home.
+	// SkipPersistence disables the SaveCachedSchema side effect. Use for
+	// read-only live probes (capability diagnostics) that must not write
+	// schema cache files under Reasonix home.
 	SkipPersistence bool
 }
 
@@ -365,52 +380,32 @@ func Start(ctx context.Context, specs []Spec, p StartPolicy) (*Host, []tool.Tool
 			}
 
 			phaseAStart := time.Now()
-			recordedPhaseADur := func() time.Duration {
-				dur := time.Since(phaseAStart)
-				if p.PerPluginTimeout > 0 && callCtx.Err() == context.DeadlineExceeded && dur < p.PerPluginTimeout {
-					return p.PerPluginTimeout
-				}
-				return dur
-			}
 
 			// Transport on the parent ctx, startup RPCs on the timed callCtx: the
 			// per-plugin timeout caps initialize+listTools, but the long-lived
 			// stdio child must outlive the startup scope and later phase-B calls.
 			c, err := start(ctx, callCtx, spec)
 			if err != nil {
-				phaseADur := recordedPhaseADur()
 				cancelStartup()
-				if !p.SkipPersistence {
-					h.bgWrites.Go(func() { ; _ = RecordStartup(spec.Name, phaseADur) })
-				}
 				ch <- result{idx: idx, spec: spec, err: fmt.Errorf("start plugin %q: %w", spec.Name, err)}
 				return
 			}
 
 			ts, err := c.listTools(callCtx)
 			if err != nil {
-				phaseADur := recordedPhaseADur()
 				cancelStartup()
-				if !p.SkipPersistence {
-					h.bgWrites.Go(func() { ; _ = RecordStartup(spec.Name, phaseADur) })
-				}
 				c.close()
 				err = newStartupFailure("tools/list", phaseAStart, c.startupStderr(), err)
 				ch <- result{idx: idx, spec: spec, err: fmt.Errorf("list tools from %q: %w", spec.Name, err)}
 				return
 			}
-			c.toolCount = len(ts)
+			h.announceHeld(c)
 
-			// Persist for next launch on the side: a slow stats/cache write
-			// must not delay tools coming online, and either failure is
-			// recoverable (we just re-handshake or skip auto-demote).
-			phaseADur := recordedPhaseADur()
+			// Persist for next launch on the side: a slow cache write must not
+			// delay tools coming online, and a failed one only costs a handshake.
 			cancelStartup()
 			if !p.SkipPersistence {
-				h.bgWrites.Go(func() {
-					_ = RecordStartup(spec.Name, phaseADur)
-					c.saveHandshakeSchema(spec, ts)
-				})
+				h.bgWrites.Go(func() { c.saveHandshakeSchema(spec, ts) })
 			}
 
 			// Prompts and resources are deferred to StartPhaseB so the boot path
@@ -448,6 +443,7 @@ func Start(ctx context.Context, specs []Spec, p StartPolicy) (*Host, []tool.Tool
 			}
 			continue
 		}
+		h.bindToolListChanges(r.client)
 		tools = append(tools, r.tools...)
 		// prompts/resources are filled in later by StartPhaseB.
 	}
@@ -527,14 +523,14 @@ func (h *Host) StartPhaseB(ctx context.Context, sink event.Sink) {
 func (h *Host) fetchPrompts(ctx context.Context, c *Client, sink event.Sink) {
 	aux, err := c.auxiliaryClient(ctx)
 	if err != nil {
-		slog.Warn("plugin: start auxiliary prompt client failed", "server", c.name, "err", err)
+		slog.Warn("plugin: start auxiliary prompt client failed", "server", c.name, "err", secrets.DiagnosticError(err))
 		return
 	}
 	defer aux.close()
 
 	ps, err := aux.listPrompts(ctx)
 	if err != nil {
-		slog.Warn("plugin: listPrompts failed", "server", c.name, "err", err)
+		slog.Warn("plugin: listPrompts failed", "server", c.name, "err", secrets.DiagnosticError(err))
 		return
 	}
 	for i := range ps {
@@ -555,14 +551,14 @@ func (h *Host) fetchPrompts(ctx context.Context, c *Client, sink event.Sink) {
 func (h *Host) fetchResources(ctx context.Context, c *Client, sink event.Sink) {
 	aux, err := c.auxiliaryClient(ctx)
 	if err != nil {
-		slog.Warn("plugin: start auxiliary resource client failed", "server", c.name, "err", err)
+		slog.Warn("plugin: start auxiliary resource client failed", "server", c.name, "err", secrets.DiagnosticError(err))
 		return
 	}
 	defer aux.close()
 
 	rs, err := aux.listResources(ctx)
 	if err != nil {
-		slog.Warn("plugin: listResources failed", "server", c.name, "err", err)
+		slog.Warn("plugin: listResources failed", "server", c.name, "err", secrets.DiagnosticError(err))
 		return
 	}
 	h.mu.Lock()
@@ -592,6 +588,12 @@ type Client struct {
 	registrationClaims    map[uint64]struct{}
 	registrationCommitted bool
 
+	// modern is set once, at connect, when the server speaks a handshake-free
+	// revision; every request then carries its own _meta.
+	modern modernSession
+	// tasks drives results the server answers as a task instead of at once.
+	tasks taskState
+
 	// Capabilities advertised by the server at initialize. prompts/list and
 	// resources/list are only called when advertised, so we never provoke a
 	// "method not found" on a tools-only server.
@@ -602,8 +604,11 @@ type Client struct {
 	// initialize. Written during the handshake, before the client is published.
 	instructions string
 
-	toolCount int    // tools discovered, for /mcp status
 	transport string // declared transport type, for /mcp status ("stdio"/"http")
+	// owner is the host that published this client, which announces on its behalf.
+	owner atomic.Pointer[Host]
+	// scopeAnnounced is the scope request the user was last told about.
+	scopeAnnounced atomic.Value
 
 	// Prompts and resources discovered during StartAll, stored here so the
 	// parallel startup can collect them per-client before merging into Host.
@@ -618,7 +623,15 @@ type Client struct {
 	// MCP servers just to rebuild identical schemas.
 	toolsListed  bool
 	toolAdapters []tool.Tool
-	progressID   atomic.Uint64
+	held         []HeldTool
+	followed     []HeldTool
+	// toolsFingerprint covers the published catalog, so a re-read after a
+	// list_changed notice can tell a real change from the same tools again.
+	toolsFingerprint [sha256.Size]byte
+	progressID       atomic.Uint64
+
+	// refresh is this connection's catalog freshness: see tool_list_changed.go.
+	refresh toolRefresh
 }
 
 // auxiliaryClient opens a second connection so a background listing cannot
@@ -742,7 +755,7 @@ func (h *Host) EnsureConnectedInBackground(lifeCtx context.Context, s Spec) <-ch
 		tools, err := h.EnsureConnectedWithLifecycle(lifeCtx, startupCtx, s, generation)
 		cancelStartup()
 		if err != nil {
-			err = newStartupFailure("connect", started, "", err)
+			err = newStartupFailure("connect", started, 0, err)
 			if !errors.Is(err, context.Canceled) && !errors.Is(err, ErrDeferredSpawnCancelled) {
 				h.RecordFailure(s, err)
 			}
@@ -750,36 +763,6 @@ func (h *Host) EnsureConnectedInBackground(lifeCtx context.Context, s Spec) <-ch
 		result <- ConnectionResult{Tools: tools, Err: err}
 	}()
 	return result
-}
-
-// beginSpawn atomically claims the sole right to spawn the named server.
-// Returns owner=true if the caller should proceed. When another caller is
-// already spawning the same server, owner=false and done is closed when that
-// spawn finishes.
-func (h *Host) beginSpawn(key, server string) (*spawnAttempt, bool) {
-	h.spawningMu.Lock()
-	defer h.spawningMu.Unlock()
-	if h.spawning == nil {
-		h.spawning = make(map[string]*spawnAttempt)
-	}
-	if attempt, ok := h.spawning[key]; ok {
-		return attempt, false
-	}
-	attempt := &spawnAttempt{server: server, done: make(chan struct{})}
-	h.spawning[key] = attempt
-	return attempt, true
-}
-
-// endSpawn releases the spawn claim for the named server.
-func (h *Host) endSpawn(name string, tools []tool.Tool, err error) {
-	h.spawningMu.Lock()
-	if attempt, ok := h.spawning[name]; ok {
-		attempt.tools = append([]tool.Tool(nil), tools...)
-		attempt.err = err
-		delete(h.spawning, name)
-		close(attempt.done)
-	}
-	h.spawningMu.Unlock()
 }
 
 // has reports whether a server with this name is already connected.
@@ -862,14 +845,6 @@ func (h *Host) ToolsForSpec(ctx context.Context, spec Spec) ([]tool.Tool, error)
 	return c.listTools(ctx)
 }
 
-// MCPRuntimeSpecMatches compares the complete host-local runtime behavior of
-// two specs while deliberately excluding non-behavioral handles such as the
-// stderr writer and LaunchManager pointer. Secret values are compared only in
-// memory and are never serialized into diagnostics or provider-visible state.
-func MCPRuntimeSpecMatches(a, b Spec) bool {
-	return reflect.DeepEqual(mcpRuntimeSpecIdentityOf(a), mcpRuntimeSpecIdentityOf(b))
-}
-
 // MCPToolMatchesSpec reports whether a concrete plugin adapter or pinned lazy
 // placeholder belongs to the requested runtime spec. Unknown tool
 // implementations fail closed when a runtime-bound capability frontend asks.
@@ -898,6 +873,7 @@ type mcpRuntimeSpecIdentity struct {
 	DefaultCallTimeout      time.Duration
 	CallTimeout             time.Duration
 	ToolTimeouts            map[string]time.Duration
+	DisabledTools           []string
 	Dir                     string
 	WorkspaceRoot           string
 	LaunchWorkspace         string
@@ -911,6 +887,7 @@ type mcpRuntimeSpecIdentity struct {
 	ProcessMode             MCPProcessMode
 	Sandbox                 sandbox.Spec
 	StateDir                string
+	ProcessStateDir         string
 	StripRawPrefix          string
 	LowPriority             bool
 }
@@ -934,6 +911,7 @@ func mcpRuntimeSpecIdentityOf(s Spec) mcpRuntimeSpecIdentity {
 		DefaultCallTimeout:      s.DefaultCallTimeout,
 		CallTimeout:             s.CallTimeout,
 		ToolTimeouts:            nonEmptyDurationMap(s.ToolTimeouts),
+		DisabledTools:           disabledToolNames(s.DisabledTools),
 		Dir:                     s.Dir,
 		WorkspaceRoot:           s.WorkspaceRoot,
 		LaunchWorkspace:         launchWorkspace,
@@ -947,6 +925,7 @@ func mcpRuntimeSpecIdentityOf(s Spec) mcpRuntimeSpecIdentity {
 		ProcessMode:             s.ResolvedProcessMode(),
 		Sandbox:                 canonicalMCPRuntimeSandbox(s.Sandbox),
 		StateDir:                s.StateDir,
+		ProcessStateDir:         s.ProcessStateDir,
 		StripRawPrefix:          s.StripRawPrefix,
 		LowPriority:             s.LowPriority,
 	}
@@ -1020,14 +999,17 @@ func (h *Host) EnsureConnectedWithLifecycle(lifeCtx, callCtx context.Context, s 
 	if deferredGeneration != 0 && !h.deferredGenerationCurrent(s.Name, deferredGeneration) {
 		return nil, ErrDeferredSpawnCancelled
 	}
-	if tools, err := h.ToolsFor(callCtx, s.Name); err == nil {
+	if tools, err := h.ToolsForSpec(callCtx, s); err == nil {
 		return tools, nil
 	}
-	tools, err := h.addWithLifecycle(lifeCtx, callCtx, s, deferredGeneration)
+	_, err := h.addWithLifecycle(lifeCtx, callCtx, s, deferredGeneration)
 	if IsServerAlreadyConnected(err) {
-		return h.ToolsFor(callCtx, s.Name)
+		return h.ToolsForSpec(callCtx, s)
 	}
-	return tools, err
+	if err != nil {
+		return nil, err
+	}
+	return h.ToolsForSpec(callCtx, s)
 }
 
 // AddWithLifecycle connects one server live, allowing caller to specify separate
@@ -1055,7 +1037,7 @@ func (h *Host) addWithLifecycle(lifeCtx, callCtx context.Context, s Spec, deferr
 			if attempt.err != nil {
 				return nil, attempt.err
 			}
-			return append([]tool.Tool(nil), attempt.tools...), nil
+			return h.ToolsForSpec(callCtx, s)
 		case <-callCtx.Done():
 			return nil, callCtx.Err()
 		case <-lifeCtx.Done():
@@ -1092,13 +1074,14 @@ func (h *Host) addConnectedWithLifecycle(lifeCtx, callCtx context.Context, s Spe
 	if err != nil {
 		return nil, err
 	}
+	h.attachCompositionGuard(c)
 	ts, err := c.listTools(callCtx)
 	if err != nil {
 		c.close()
 		err = newStartupFailure("tools/list", startupStarted, c.startupStderr(), err)
 		return nil, fmt.Errorf("list tools: %w", err)
 	}
-	c.toolCount = len(ts)
+	h.announceHeld(c)
 	h.mu.Lock()
 	if h.closed {
 		h.mu.Unlock()
@@ -1124,7 +1107,14 @@ func (h *Host) addConnectedWithLifecycle(lifeCtx, callCtx context.Context, s Spe
 		return nil, err
 	}
 	h.clearFailure(s.Name)
+	// A server connected by hand leaves the same cache a started one does, so
+	// the next session registers it without a handshake. Added while h.closed is
+	// still false under h.mu, so Close, which sets it first, drains the write.
+	if deferredGeneration == 0 {
+		h.bgWrites.Go(func() { c.saveHandshakeSchema(s, ts) })
+	}
 	h.mu.Unlock()
+	h.bindToolListChanges(c)
 	// The status changed here, not when prompts finish arriving: a tools-only
 	// server has neither, so announcing from those paths leaves it showing a
 	// startup failure forever while the agent uses it perfectly well.
@@ -1199,8 +1189,8 @@ var ErrDeferredSpawnCancelled = errors.New("deferred MCP spawn cancelled")
 // the mechanism and not one of the two things it could mean — and those two
 // have different things to do next.
 var (
-	ErrHostClosed    = errors.New("the MCP host shut down (session ended or runtime rebuilt)")
-	ErrServerRemoved = errors.New("this MCP server was removed, disabled, or reconnected")
+	ErrHostClosed    error = hostDiagnosticCause("the MCP host shut down (session ended or runtime rebuilt)")
+	ErrServerRemoved error = hostDiagnosticCause("this MCP server was removed, disabled, or reconnected")
 )
 
 // start opens the transport on lifeCtx (whose cancellation later closes the
@@ -1215,11 +1205,14 @@ func start(lifeCtx, callCtx context.Context, s Spec) (*Client, error) {
 	var err error
 	s, err = applyStoredLauncherLock(s)
 	if err != nil {
-		return nil, newStartupFailure("launch", started, "", err)
+		return nil, newStartupFailure("launch", started, 0, err)
 	}
 	s, err = resolveProjectLaunchAuthorization(callCtx, s)
+	if err == nil {
+		err = checkDeclaredLaunch(s)
+	}
 	if err != nil {
-		return nil, newStartupFailure("authorization", started, "", err)
+		return nil, newStartupFailure("authorization", started, 0, err)
 	}
 	t, err := newTransport(lifeCtx, s)
 	if err != nil {
@@ -1231,18 +1224,17 @@ func start(lifeCtx, callCtx context.Context, s Spec) (*Client, error) {
 				err = cause
 			}
 		}
-		return nil, newStartupFailure("launch", started, "", err)
+		return nil, newStartupFailure("launch", started, 0, err)
 	}
 	tt := strings.ToLower(strings.TrimSpace(s.Type))
 	if tt == "" {
 		tt = "stdio"
 	}
 	c := &Client{name: s.Name, spec: s, transport: tt}
+	c.setRefreshLifetime(lifeCtx)
 	c.t = newReconnectingTransport(lifeCtx, t, s.ResolvedStartupTimeout(), c.redial,
-		func(ctx context.Context, next transport) error {
-			return c.initializeSessionOn(ctx, next, false)
-		})
-	if err := c.initialize(callCtx); err != nil {
+		c.handshakeOn)
+	if err := c.connect(callCtx); err != nil {
 		c.close()
 		err = newStartupFailure("initialize", started, c.startupStderr(), err)
 		return nil, err
@@ -1319,28 +1311,50 @@ func (s Spec) ServerAuthorized() bool {
 func newTransport(ctx context.Context, s Spec) (transport, error) {
 	switch strings.ToLower(strings.TrimSpace(s.Type)) {
 	case "", "stdio":
-		return newStdioTransport(ctx, s)
+		t, err := newStdioTransport(ctx, s)
+		return transportOrNil(t, err)
 	case "http", "streamable-http", "streamable_http":
-		return newHTTPTransport(s)
+		t, err := newHTTPTransport(s)
+		return transportOrNil(t, err)
 	case "sse":
-		return newSSETransport(ctx, s)
+		t, err := newSSETransport(ctx, s)
+		return transportOrNil(t, err)
 	default:
 		return nil, fmt.Errorf("unknown transport type %q (want stdio|http|sse)", s.Type)
 	}
 }
 
+// transportOrNil hands back a nil interface on failure. A nil concrete pointer
+// returned through the interface is not nil, so a caller's `next != nil` guard
+// would pass and close() would run on a nil receiver.
+func transportOrNil[T transport](t T, err error) (transport, error) {
+	if err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
 type mcpTool struct {
 	Name         string          `json:"name"`
+	Title        string          `json:"title,omitempty"`
 	Description  string          `json:"description"`
 	InputSchema  json.RawMessage `json:"inputSchema"`
 	OutputSchema json.RawMessage `json:"outputSchema,omitempty"`
 	// Annotations carries MCP's optional tool hints. readOnlyHint controls reader
 	// classification; destructiveHint remains destructive even when another hint
 	// claims the tool is read-only. Approval policy is applied separately.
-	Annotations *struct {
+	Annotations json.RawMessage `json:"annotations,omitempty"`
+}
+
+// hints reads the two annotations that drive safety classification; a missing
+// or malformed object declares neither.
+func (t mcpTool) hints() (readOnly, destructive bool) {
+	var a struct {
 		ReadOnlyHint    bool `json:"readOnlyHint"`
 		DestructiveHint bool `json:"destructiveHint"`
-	} `json:"annotations"`
+	}
+	_ = json.Unmarshal(t.Annotations, &a)
+	return a.ReadOnlyHint, a.DestructiveHint
 }
 
 func (c *Client) listTools(ctx context.Context) ([]tool.Tool, error) {
@@ -1349,62 +1363,18 @@ func (c *Client) listTools(ctx context.Context) ([]tool.Tool, error) {
 	if c.toolsListed {
 		return append([]tool.Tool(nil), c.toolAdapters...), nil
 	}
+	return c.relistToolsLocked(ctx)
+}
 
-	out, err := c.listToolsRawSettled(ctx)
+// relistToolsLocked answers a first listing: read one catalog and publish it.
+// The caller holds toolsMu.
+func (c *Client) relistToolsLocked(ctx context.Context) ([]tool.Tool, error) {
+	cat, err := c.readToolCatalog(ctx, true)
 	if err != nil {
 		return nil, err
 	}
-	if err := validateMCPToolNames(out); err != nil {
-		return nil, fmt.Errorf("plugin %q: %w", c.name, err)
-	}
-
-	toolInfos := make([]ToolInfo, 0, len(out))
-	tools := make([]tool.Tool, 0, len(out))
-	normalizedSchemas := make(map[string]json.RawMessage, len(out))
-	for _, t := range out {
-		schema, err := normalizeAndValidateToolSchema(t.InputSchema)
-		if err != nil {
-			continue
-		}
-		normalizedSchemas[t.Name] = schema
-	}
-	for _, t := range out {
-		readOnlyHint := t.Annotations != nil && t.Annotations.ReadOnlyHint
-		destructiveHint := t.Annotations != nil && t.Annotations.DestructiveHint
-		info := ToolInfo{Name: t.Name, Description: t.Description, ReadOnlyHint: readOnlyHint, DestructiveHint: destructiveHint}
-		schema, ok := normalizedSchemas[t.Name]
-		if !ok {
-			if _, err := normalizeAndValidateToolSchema(t.InputSchema); err != nil {
-				info.SchemaError = schemaValidationError(err)
-			}
-			toolInfos = append(toolInfos, info)
-			continue
-		}
-		visibleName := t.Name
-		if c.spec.StripRawPrefix != "" {
-			visibleName = strings.TrimPrefix(visibleName, c.spec.StripRawPrefix)
-		}
-		readOnly := readOnlyHint
-		toolInfos = append(toolInfos, info)
-		tools = append(tools, &remoteTool{
-			client:           c,
-			name:             toolName(c.name, visibleName),
-			rawName:          t.Name,
-			visibleName:      visibleName,
-			desc:             t.Description,
-			schema:           schema,
-			outputSchema:     t.OutputSchema,
-			declaredReadOnly: readOnlyHint,
-			readOnly:         readOnly,
-			destructive:      destructiveHint,
-		})
-	}
-	sort.SliceStable(toolInfos, func(i, j int) bool { return toolInfos[i].Name < toolInfos[j].Name })
-	sortedTools := sortToolsByName(tools)
-	c.tools = toolInfos
-	c.toolAdapters = append([]tool.Tool(nil), sortedTools...)
-	c.toolsListed = true
-	return append([]tool.Tool(nil), sortedTools...), nil
+	c.publishToolCatalogLocked(cat)
+	return append([]tool.Tool(nil), cat.tools...), nil
 }
 
 func normalizeAndValidateToolSchema(raw json.RawMessage) (json.RawMessage, error) {
@@ -1426,17 +1396,11 @@ func schemaValidationError(err error) string {
 }
 
 func (c *Client) listToolsRaw(ctx context.Context) ([]mcpTool, error) {
-	res, err := c.call(ctx, "tools/list", map[string]any{})
-	if err != nil {
-		return nil, err
+	tools, meta, err := listAllPagesMeta[mcpTool](ctx, c, "tools/list", "tools")
+	if err == nil {
+		c.noteToolListTTL(meta.ttlMs)
 	}
-	var out struct {
-		Tools []mcpTool `json:"tools"`
-	}
-	if err := json.Unmarshal(res, &out); err != nil {
-		return nil, fmt.Errorf("plugin %q: decode tools/list: %w", c.name, err)
-	}
-	return out.Tools, nil
+	return tools, err
 }
 
 // listToolsRawSettled gives dynamically registering servers a bounded startup
@@ -1458,17 +1422,17 @@ func (c *Client) listToolsRawSettled(ctx context.Context) ([]mcpTool, error) {
 	return out, nil
 }
 
-func validateMCPToolNames(tools []mcpTool) error {
-	seen := make(map[string]bool, len(tools))
+func validateMCPToolNames(server, stripRawPrefix string, tools []mcpTool) error {
+	seen := make(map[string]string, len(tools))
 	for _, candidate := range tools {
-		name := strings.TrimSpace(candidate.Name)
-		if name == "" {
-			return fmt.Errorf("tools/list returned an empty tool name")
+		if strings.TrimSpace(candidate.Name) == "" {
+			return fmt.Errorf("%w: tools/list returned an empty tool name", ErrAmbiguousToolCatalog)
 		}
-		if seen[candidate.Name] {
-			return fmt.Errorf("tools/list returned duplicate tool name %q", candidate.Name)
+		name := toolName(server, strings.TrimPrefix(candidate.Name, stripRawPrefix))
+		if previous, ok := seen[name]; ok {
+			return fmt.Errorf("%w: tools/list names %q and %q share model-visible name %q", ErrAmbiguousToolCatalog, previous, candidate.Name, name)
 		}
-		seen[candidate.Name] = true
+		seen[name] = candidate.Name
 	}
 	return nil
 }
@@ -1500,7 +1464,7 @@ func (c *Client) cachedTools() ([]tool.Tool, bool) {
 // "mcp__<server>__<tool>". The registry separately resolves unique portable
 // and Claude plugin-qualified references without exposing duplicate schemas.
 func toolName(server, raw string) string {
-	return ToolPrefix(server) + normalizeName(raw)
+	return boundedToolName(ToolPrefix(server), normalizeName(raw))
 }
 
 // ToolPrefix is the model-visible namespace prefix for every tool from server.
@@ -1546,7 +1510,7 @@ func shortNameHash(s string) string {
 }
 
 func summarizeFailureError(err error) string {
-	msg := strings.Join(strings.Fields(secrets.RedactCredentials(err.Error())), " ")
+	msg := strings.Join(strings.Fields(secrets.DiagnosticError(err).Error()), " ")
 	const max = 500
 	if len(msg) > max {
 		msg = msg[:max] + "..."
@@ -1570,13 +1534,6 @@ type rpcResponse struct {
 	Error   *rpcError       `json:"error"`
 }
 
-type rpcError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
-
-func (e *rpcError) Error() string { return fmt.Sprintf("rpc error %d: %s", e.Code, e.Message) }
-
 // remote tool adapter
 
 type remoteTool struct {
@@ -1592,6 +1549,9 @@ type remoteTool struct {
 	// destructive is the MCP destructiveHint. It takes precedence over a
 	// conflicting readOnlyHint in Plan and strict read-only execution.
 	destructive bool
+	// paramHeaders are the arguments a modern HTTP server has mirrored into
+	// Mcp-Param headers; nil on every other connection.
+	paramHeaders []paramHeader
 }
 
 func (t *remoteTool) Name() string        { return t.name }
@@ -1653,6 +1613,9 @@ func (t *remoteTool) Execute(ctx context.Context, args json.RawMessage) (string,
 // content items, which callers with a structural image channel (the agent)
 // forward to vision models instead of relying on the text placeholders alone.
 func (t *remoteTool) ExecuteWithImages(ctx context.Context, args json.RawMessage) (string, []string, error) {
+	if err := t.client.compositionContractError(); err != nil {
+		return "", nil, err
+	}
 	var argMap map[string]any
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &argMap); err != nil {
@@ -1679,12 +1642,12 @@ func (t *remoteTool) ExecuteWithImages(ctx context.Context, args json.RawMessage
 			return "", nil, fmt.Errorf("MCP server %q changed the authorization or destructive classification for tool %q; the call was blocked before dispatch — retry so Reasonix can re-apply the current Planner MCP safety boundary", t.client.name, t.rawName)
 		}
 	}
-	res, err := t.client.call(ctx, "tools/call", map[string]any{
+	res, err := t.client.call(withParamHeaders(ctx, t.paramHeaders, argMap), "tools/call", map[string]any{
 		"name":      t.rawName,
 		"arguments": argMap,
 	})
 	if err != nil {
-		return "", nil, err
+		return "", nil, t.client.scopeRefusal(err)
 	}
 	return parseToolResult(res)
 }

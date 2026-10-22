@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"sync/atomic"
+
 	"reasonix/internal/base/diff"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
@@ -31,6 +33,8 @@ type agentServices struct {
 	// attributed to the model that answered it and priced at its tier.
 	triageRef     string
 	triagePricing *provider.Pricing
+	// screenExternal asks triage about every external result; see injection_screen.go.
+	screenExternal bool
 	// pricing turns provider usage into money for the task budget.
 	pricing *provider.Pricing
 	// sink receives the turn's typed event stream. Frontends decide how to
@@ -42,7 +46,8 @@ type agentServices struct {
 	warnState *missingReasoningWarnState
 	// gate is the per-call permission gate for both standard and Plan
 	// workflows. nil disables gating entirely.
-	gate Gate
+	gate              Gate
+	checkTargetAccess tool.TargetAccessCheck
 	// extensions is the frozen Extension Protocol v2 dispatcher for this
 	// controller generation; nil means every intercept point passes through
 	// byte-identically. See extensions.go.
@@ -56,14 +61,24 @@ type agentServices struct {
 	// configWrite can ask the user whether a file tool may write a
 	// Reasonix-managed config file outside the workspace roots.
 	configWrite tool.ConfigWriteApprover
+	// paidSearch can ask the user whether a paid search backend may be used.
+	paidSearch tool.PaidSearchApprover
+	// nativeVideo says whether the selected model watches a video file natively.
+	nativeVideo tool.NativeVideoSource
 	// hooks fires PreToolUse / PostToolUse shell hooks around each tool call.
 	hooks ToolHooks
 	// asker lets the `ask` tool put questions to the user; nil in headless runs.
 	asker Asker
+	// postureLocked freezes gate and asker; see LockPosture.
+	postureLocked atomic.Bool
+	// surfaceLocked freezes the tool registry and dispatcher; see LockSurface.
+	surfaceLocked atomic.Bool
 	// preEdit is the seam the checkpoint store uses to snapshot pre-edit
 	// content. Only non-ReadOnly tool.Previewer tools fire it, so bash — whose
 	// targets are unknowable — is never tracked. Prefer mutationObserver.
 	preEdit func(diff.Change)
+	// admissionSaver persists the transcript once a turn's user message lands.
+	admissionSaver AdmissionSaver
 	// mutationObserver is the host-side unified file mutation observer: it
 	// captures preimages before tools run and fingerprints after, regardless of
 	// outcome. Never changes provider-visible schemas or prompts.
@@ -83,6 +98,12 @@ type agentServices struct {
 	// just-made memory change into the next turn, so it applies this session
 	// without touching the cache-stable prefix.
 	memQueue memory.Queue
+	// evidenceSeal is where the turn's shadow evidence bundle is sealed; nil
+	// seals nothing. Only the root agent's options carry it.
+	evidenceSeal *EvidenceSeal
+	// pathObserver is told which workspace files this agent's completed tool
+	// calls touched. Sub-agents have none: their reads are not the session's.
+	pathObserver PathObserver
 }
 
 // newAgentServices binds the collaborators New resolved. It exists so New stays
@@ -93,24 +114,27 @@ func newAgentServices(
 	configWrite tool.ConfigWriteApprover, hooks ToolHooks, opts Options,
 ) agentServices {
 	return agentServices{
-		prov:             prov,
-		triage:           opts.TriageProvider,
-		triageRef:        opts.TriageModelRef,
-		triagePricing:    opts.TriagePricing,
-		tools:            tools,
-		pricing:          opts.Pricing,
-		sink:             sink,
-		gate:             gate,
-		extensions:       opts.Extensions,
-		recoveryGate:     opts.RecoveryGate,
-		sandboxEscape:    sandboxEscape,
-		configWrite:      configWrite,
-		hooks:            hooks,
-		jobs:             opts.Jobs,
-		memQueue:         opts.MemoryQueue,
-		writeScheduler:   opts.WriteScheduler,
-		workspaceLease:   opts.WorkspaceLease,
-		warnState:        missingReasoningWarnStateFor(opts.MissingReasoningWarnStateDir),
-		mutationObserver: opts.MutationObserver,
+		prov:              prov,
+		triage:            opts.TriageProvider,
+		triageRef:         opts.TriageModelRef,
+		triagePricing:     opts.TriagePricing,
+		screenExternal:    opts.ScreenExternalContent,
+		tools:             tools,
+		pricing:           opts.Pricing,
+		sink:              sink,
+		gate:              gate,
+		checkTargetAccess: opts.CheckTargetAccess,
+		extensions:        opts.Extensions,
+		recoveryGate:      opts.RecoveryGate,
+		sandboxEscape:     sandboxEscape,
+		configWrite:       configWrite,
+		hooks:             hooks,
+		jobs:              opts.Jobs,
+		memQueue:          opts.MemoryQueue,
+		writeScheduler:    opts.WriteScheduler,
+		workspaceLease:    opts.WorkspaceLease,
+		warnState:         missingReasoningWarnStateFor(opts.MissingReasoningWarnStateDir),
+		mutationObserver:  opts.MutationObserver,
+		evidenceSeal:      opts.EvidenceSeal,
 	}
 }

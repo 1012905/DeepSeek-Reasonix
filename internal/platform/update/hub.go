@@ -15,7 +15,7 @@ import (
 // release-studio.yml. It is a constant rather than something a caller names: a
 // catalog that could be pointed elsewhere is one whose entries would offer to
 // "update" Studio into a different product.
-const StudioCatalog = "https://dl.reasonix.io/studio/versions.json"
+const StudioCatalog = StudioMirror + "/studio/versions.json"
 
 // Install is what a shell knows about itself that the kernel cannot work out.
 // A Go process inside an Electron bundle resolves neither half: os.Executable()
@@ -32,9 +32,16 @@ type VersionEntry struct {
 	Version     string `json:"version"`
 	Tag         string `json:"tag"`
 	PublishedAt string `json:"publishedAt"`
-	Notes       string `json:"notes"`
+	HasNotes    bool   `json:"hasNotes"`
 	Current     bool   `json:"current"`
 	Older       bool   `json:"older"`
+}
+
+// WithdrawnNote says the running version was pulled after publication and why,
+// so a panel can tell its user to move off it instead of presenting an update.
+type WithdrawnNote struct {
+	Version string `json:"version"`
+	Reason  string `json:"reason"`
 }
 
 // VersionHub is everything a version panel renders from. Err is carried beside
@@ -47,7 +54,9 @@ type VersionHub struct {
 	Latest   string         `json:"latest"`
 	Newer    bool           `json:"newer"`
 	Versions []VersionEntry `json:"versions"`
-	Err      string         `json:"err,omitempty"`
+	// Withdrawn is set when the running version is one the publisher pulled.
+	Withdrawn *WithdrawnNote `json:"withdrawn,omitempty"`
+	Err       string         `json:"err,omitempty"`
 }
 
 // catalogTimeout bounds the whole read. A version panel that hangs is worse
@@ -57,6 +66,17 @@ const catalogTimeout = 15 * time.Second
 // Hub reads the rollback catalog for one install, so no shell holds a copy of
 // what "newer", "pinned" or "latest" mean.
 func Hub(ctx context.Context, in Install) VersionHub {
+	return HubRefreshing(ctx, in, false)
+}
+
+// HubRefreshing is Hub that can skip the answer a recent read left behind, for
+// a reader who asked to try again.
+func HubRefreshing(ctx context.Context, in Install, refresh bool) VersionHub {
+	key := in.Version + "\x00" + PinnedVersion()
+	return memo.get(ctx, key, refresh, time.Now, func(ctx context.Context) VersionHub { return readHub(ctx, in) })
+}
+
+func readHub(ctx context.Context, in Install) VersionHub {
 	client, err := netclient.NewHTTPClient(ProxySpec(), netclient.TransportOptions{})
 	if err != nil {
 		hub := VersionHub{Current: in.Version, Pinned: PinnedVersion()}
@@ -73,9 +93,12 @@ func hubOver(ctx context.Context, in Install, client *http.Client) VersionHub {
 	hub := VersionHub{Current: in.Version, Pinned: PinnedVersion()}
 	ctx, cancel := context.WithTimeout(ctx, catalogTimeout)
 	defer cancel()
-	st, err := New(Options{Current: in.Version, Pinned: hub.Pinned, HTTP: client, IndexURL: StudioCatalog}).Check(ctx)
+	st, err := New(Options{Current: in.Version, Pinned: hub.Pinned, HTTP: client, IndexURL: StudioCatalog, UserAgent: UserAgent(in.Version)}).Check(ctx)
 	hub.Latest, hub.Newer, hub.StalePin = st.Latest, st.Newer, st.StalePin
 	hub.Versions = versionRows(st.Entries, in.Version)
+	if st.Withdrawn != nil {
+		hub.Withdrawn = &WithdrawnNote{Version: st.Withdrawn.Version, Reason: st.Withdrawn.Reason}
+	}
 	if err != nil {
 		hub.Err = err.Error()
 	}
@@ -91,7 +114,7 @@ func versionRows(entries []IndexEntry, current string) []VersionEntry {
 	rows := make([]VersionEntry, 0, len(entries)+1)
 	seen := false
 	for _, e := range entries {
-		row := VersionEntry{Version: e.Version, Tag: e.Tag, PublishedAt: e.PublishedAt}
+		row := VersionEntry{Version: e.Version, Tag: e.Tag, PublishedAt: e.PublishedAt, HasNotes: strings.TrimSpace(e.Notes) != ""}
 		if SameVersion(e.Version, current) {
 			row.Current, seen = true, true
 		} else {
@@ -135,6 +158,40 @@ func Pin(version string) error {
 		return err
 	}
 	return cfg.SaveTo(config.UserConfigPath())
+}
+
+// Mode is what this machine does about new releases on its own, read from the
+// user's config: manual unless the user chose otherwise.
+func Mode() string {
+	if cfg, err := config.Load(); err == nil && cfg != nil {
+		return cfg.DesktopUpdateMode()
+	}
+	return config.UpdateModeManual
+}
+
+// SetMode records the user's choice, refusing a mode this build does not offer
+// with config.ErrUpdateModeInvalid.
+func SetMode(mode string) error {
+	unlock := config.LockUserConfigEdits()
+	defer unlock()
+	cfg := config.LoadForEdit(config.UserConfigPath())
+	if err := cfg.SetDesktopUpdateMode(mode); err != nil {
+		return err
+	}
+	return cfg.SaveTo(config.UserConfigPath())
+}
+
+// ReleaseStalePin drops a pin that names a build other than the one running.
+// Such a pin holds nobody anywhere: it is what a move that never landed, or an
+// install from outside the app, leaves behind. A running build that is not a
+// release (a source build says "dev") keeps the pin, since it proves nothing.
+func ReleaseStalePin(running string) error {
+	pinned := PinnedVersion()
+	v := normalizeVersion(running)
+	if pinned == "" || SameVersion(pinned, running) || v == "" || v[0] < '0' || v[0] > '9' {
+		return nil
+	}
+	return Pin("")
 }
 
 // ProxySpec is the network route updates take, read from config so a machine

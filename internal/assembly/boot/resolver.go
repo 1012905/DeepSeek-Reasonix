@@ -31,8 +31,8 @@ func (r *LocalProviderResolver) Catalog() []provider.Descriptor {
 		return nil
 	}
 	defaultRef := ""
-	if def, _, ok := r.cfg.ResolveNewSessionChatModel(); ok {
-		if e, found := r.cfg.ResolveModel(def); found {
+	if def, ok := startupChatModel(r.cfg); ok {
+		if e, found := r.cfg.ResolveModel(def.Ref); found {
 			defaultRef = modelRefFromEntry(e)
 		}
 	}
@@ -74,10 +74,20 @@ func descriptorFor(e *config.ProviderEntry, ref string) provider.Descriptor {
 		d.InputPerMillion = price.Input
 		d.OutputPerMillion = price.Output
 	}
-	if len(e.SupportedEfforts) > 0 {
+	// The catalog must expose the same model-specific ladder as /effort.
+	capability := config.EffortCapabilityForEntry(e)
+	switch {
+	case len(e.SupportedEfforts) > 0:
 		d.Efforts = append([]string(nil), e.SupportedEfforts...)
 		d.Reasoning = true
+	case capability.Supported:
+		d.Efforts = capability.Levels
+		d.Reasoning = true
 	}
+	if d.DefaultEffort == "" {
+		d.DefaultEffort = capability.Default
+	}
+	d.ForcesThinking = config.EffortForcesThinking(e)
 	if config.ReasoningProtocolForEntry(e) == config.ReasoningProtocolDeepSeek {
 		d.ToolCallReasoning = true
 		d.Reasoning = true
@@ -89,16 +99,34 @@ func descriptorFor(e *config.ProviderEntry, ref string) provider.Descriptor {
 // A caller-owned resolver answers first: its models are the only ones this
 // session reaches, and a default read from this machine's config can name one
 // it cannot run. A resolver that marks none leaves the config to answer.
-func newSessionModel(resolver provider.Resolver, cfg *config.Config) string {
+func newSessionModel(resolver provider.Resolver, cfg *config.Config, fallback bool) (ref, skippedDefault string) {
 	if resolver != nil {
 		if ref := provider.DefaultRef(resolver.Catalog()); ref != "" {
-			return ref
+			return ref, ""
 		}
 	}
-	if resolved, _, ok := cfg.ResolveNewSessionChatModel(); ok {
-		return resolved
+	resolve := cfg.ResolveNewSessionChatModel
+	if fallback {
+		resolve = func() (config.NewSessionModel, bool) { return startupChatModel(cfg) }
 	}
-	return ""
+	if m, ok := resolve(); ok {
+		return m.Ref, m.SkippedDefault
+	}
+	return "", ""
+}
+
+// startupChatModel is what a build nobody named a model for opens on. A
+// plugin-owned default is the extension resolver's to answer, so it is kept.
+func startupChatModel(cfg *config.Config) (config.NewSessionModel, bool) {
+	if cfg == nil {
+		return config.NewSessionModel{}, false
+	}
+	if providerext.PluginRefOwner(strings.TrimSpace(cfg.DefaultModel)) != "" {
+		m, ok := cfg.ResolveNewSessionChatModel()
+		m.SkippedDefault = ""
+		return m, ok
+	}
+	return cfg.ResolveStartupChatModel()
 }
 
 func (r *LocalProviderResolver) Resolve(selection provider.Selection) (provider.Provider, error) {

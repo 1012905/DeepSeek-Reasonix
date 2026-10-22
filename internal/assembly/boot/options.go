@@ -5,8 +5,11 @@ import (
 	"reasonix/internal/state/sessionstore"
 	"time"
 
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/platform/browser"
+	"reasonix/internal/platform/feedback"
+	"reasonix/internal/platform/gitcmd"
 
 	"reasonix/internal/contract/ablation"
 	"reasonix/internal/contract/event"
@@ -14,10 +17,14 @@ import (
 	"reasonix/internal/contract/surface"
 	"reasonix/internal/ext/plugin"
 	"reasonix/internal/model/billing"
+	"reasonix/internal/platform/computer"
 	"reasonix/internal/runtime/taskmonitor"
+	"reasonix/internal/safety/sandbox"
 	"reasonix/internal/session/control"
 	"reasonix/internal/state/sessiontemp"
+	"reasonix/internal/state/workspacelease"
 	"reasonix/internal/tools/builtin"
+	"reasonix/internal/tools/jobs"
 )
 
 // Options carries the per-run knobs a frontend chooses; everything else is read
@@ -26,14 +33,25 @@ import (
 // run/serve pass true so a missing key fails fast, chat/desktop false so the UI
 // is reachable before one is set.
 type Options struct {
+	AgentComposition string
+	Composition      *agentcomposition.Binding
+	ComputerDriver   *computer.Driver
 	// Version is the host declaring a real installation, which is what lets an
 	// assembly record the last-known-good config snapshot recovery reads back.
-	Version     string
-	Model       string
-	MaxSteps    int
-	MaxStepsKey string
-	RequireKey  bool
-	Sink        event.Sink
+	Version        string
+	Model          string
+	MaxSteps       int
+	MaxStepsKey    string
+	RequireKey     bool
+	Sink           event.Sink
+	NativeSurfaces bool
+	// OpenOnFallbackModel lets an unnamed build pass over a default_model nothing
+	// configured serves. Only a window sets it: it must open to be fixed, while a
+	// headless run must not move to another provider and its billing unasked.
+	OpenOnFallbackModel bool
+	// WorkspaceScanLimit is a test seam: it can only lower the walk bound.
+	// Zero is the production limit.
+	WorkspaceScanLimit int
 	// EffortOverride is a session-local reasoning effort override. Nil means use
 	// the resolved provider config; a non-nil empty string means provider default.
 	EffortOverride *string
@@ -48,6 +66,8 @@ type Options struct {
 	// Interactive terminals must pass a private writer (or io.Discard) so
 	// background output cannot corrupt the TUI's raw mode.
 	Stderr io.Writer
+	// OnPhase receives completed assembly timings synchronously, including on a later failure.
+	OnPhase func(Phase)
 	// Project root for config, skills, memory, commands, hooks, and tool
 	// confinement; empty means the process cwd. Per-tab roots are what let
 	// concurrent sessions load different projects without a chdir.
@@ -56,10 +76,25 @@ type Options struct {
 	// empty follows the environment. It binds this assembly only — a
 	// Controller's later re-reads and the history index still read the process.
 	Home string
+	// NewConversation says this build opens a fresh conversation for a person, so
+	// the user's default mode applies. A resume, a headless run and a sub-agent
+	// leave it false and start as they always did.
+	NewConversation bool
+	// Tests that compare prompt bytes must not depend on host discovery probes.
+	resolvedShell *sandbox.Shell
+	clock         func() time.Time
+	// tuneShell adjusts shell discovery before it runs; tests drive a slow interpreter through it.
+	tuneShell func(*sandbox.ShellDiscovery)
 	// StatsSource labels this frontend's usage records. Unset — or a value this
 	// build does not know — disables usage recording rather than filing turns
 	// under a label nothing can read back.
 	StatsSource surface.Surface
+	// FeedbackSurface is the frontend a report from this session names. Empty
+	// leaves /feedback unavailable: a headless run or an editor has no form.
+	FeedbackSurface feedback.Surface
+	// AccountsURL is the identity service a feedback link proves the account
+	// against. Empty takes the shared default.
+	AccountsURL string
 	// BalanceStore lets a host that builds several runtimes — a window with more
 	// than one pane — read one wallet through one cache. Nil gives each runtime
 	// a private one.
@@ -100,7 +135,11 @@ type Options struct {
 	// ApplyHeadlessApprovalMode must match, or sub-agent gates diverge.
 	HeadlessApprovalMode string
 
+	// Observe, when set, builds the read-only unattended posture; see ObserveOptions.
+	Observe *ObserveOptions
+
 	GoalTurnsUnreachable bool // this assembly never arms a Goal turn; see GoalOnlyToolNames
+	UnattendedChild      bool // an unattended child run: it offers neither best_of_n nor isolation
 	// SessionRecoveryMeta and OnSessionRecovered let richer frontends attach
 	// local UI metadata to automatic transcript recovery branches.
 	SessionRecoveryMeta func(control.SessionRecoveryRequest) sessionstore.BranchMeta
@@ -126,11 +165,18 @@ type Options struct {
 	SandboxNetworkOverride *bool
 	SandboxBashOverride    string
 	WorkspaceOnly          bool
+	// WorkspaceRepo is the git identity the session opened with; a rebuild of
+	// the same workspace passes it on rather than resolving it again.
+	WorkspaceRepo gitcmd.Repo
 	// SessionTemp is the session-private temp manager; Rebuild reuses old's.
 	SessionTemp *sessiontemp.Manager
 	// BrowserSession is the agent's browser and the tabs it has open; Rebuild
 	// reuses old's so a model switch does not close them.
 	BrowserSession *browser.Session
+	// Jobs and WorkspaceLease are the outgoing controller's, adopted by a
+	// replacement of the same workspace so running jobs outlive the rebuild.
+	Jobs           *jobs.Manager
+	WorkspaceLease *workspacelease.Owner
 	RuntimeReload
 	// deferPublish keeps a replacement generation private until migration and
 	// commit succeed. Cold BuildRuntime leaves this false and publishes at boot.

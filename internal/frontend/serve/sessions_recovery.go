@@ -2,6 +2,7 @@ package serve
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"path/filepath"
 	"reasonix/internal/state/sessionstore"
@@ -40,6 +41,7 @@ func (s *Server) StartRecoveryGC(ctx context.Context) {
 		// Protect an upgrading user for a full startup grace before the first
 		// sweep, then clear the backlog without waiting out the long interval.
 		s.sweepRecoveryBranches(sessionstore.RecoveryGCStartupGracePeriod)
+		s.sweepInactiveSessions()
 		ticker := time.NewTicker(recoveryGCInterval)
 		defer ticker.Stop()
 		for {
@@ -48,6 +50,7 @@ func (s *Server) StartRecoveryGC(ctx context.Context) {
 				return
 			case <-ticker.C:
 				s.sweepRecoveryBranches(sessionstore.RecoveryGCGracePeriod)
+				s.sweepInactiveSessions()
 			}
 		}
 	}()
@@ -84,6 +87,17 @@ func (s *Server) sweepRecoveryBranches(grace time.Duration) int {
 	}
 	if swept > 0 {
 		slog.Info("serve: moved redundant recovery branches to the session trash", "count", swept)
+		s.bc.treeChanged()
 	}
 	return swept
+}
+
+// removeSessionVersions removes the earlier versions of the session at abs: a
+// version nobody lists must not outlive its conversation.
+func removeSessionVersions(absDir, abs string) error {
+	var errs error
+	for _, version := range sessionstore.SessionVersionPaths(abs) {
+		errs = errors.Join(errs, removeSessionFiles(absDir, version))
+	}
+	return errs
 }

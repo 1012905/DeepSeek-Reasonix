@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useModalFocus } from "./useModalFocus";
 import type { TreeWorkspace } from "../port/hub";
 import { t } from "../i18n";
 import { StudioIcon, type StudioIconName } from "./StudioIcon";
@@ -11,15 +12,21 @@ export interface Command {
   label: string;
   icon: StudioIconName;
   keywords: string;
+  // The shortcut that does the same thing, printed where "操作" would be.
+  keys?: string;
+  // What the command has to say right now, printed instead of a shortcut.
+  status?: string;
   run: () => void;
 }
+
+export interface PaletteWorkspace extends TreeWorkspace { host?: string; }
 
 interface Props {
   open: boolean;
   onClose: () => void;
   commands: Command[];
-  tree: TreeWorkspace[];
-  onOpenSession: (path: string) => void;
+  tree: PaletteWorkspace[];
+  onOpenSession: (path: string, workspace: PaletteWorkspace) => void;
 }
 
 interface Hit {
@@ -27,6 +34,7 @@ interface Hit {
   label: string;
   icon: StudioIconName;
   note?: string;
+  alert?: boolean;
   run: () => void;
 }
 
@@ -37,6 +45,8 @@ export function Palette({ open, onClose, commands, tree, onOpenSession }: Props)
   const [at, setAt] = useState(0);
   const box = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  const sheet = useRef<HTMLDivElement>(null);
+  useModalFocus(sheet, open);
 
   // A palette opened on what the last one was looking for is a palette that
   // answers the wrong question; it starts empty every time.
@@ -55,18 +65,18 @@ export function Palette({ open, onClose, commands, tree, onOpenSession }: Props)
       for (const session of workspace.sessions) {
         if (sessions.length >= SESSION_LIMIT) break;
         const title = session.title || session.name;
-        if (q && !title.toLowerCase().includes(q)) continue;
+        if (q && !`${title} ${workspace.name} ${workspace.host ?? ""}`.toLowerCase().includes(q)) continue;
         sessions.push({
-          key: `s:${session.path}`,
+          key: `s:${workspace.host ?? ""}:${session.path}`,
           label: title,
           icon: "clock",
-          note: workspace.name,
-          run: () => onOpenSession(session.path),
+          note: [workspace.name, workspace.host].filter(Boolean).join(" · "),
+          run: () => onOpenSession(session.path, { ...workspace, root: session.workspaceRoot || workspace.root }),
         });
       }
     }
     return [
-      { label: t("快捷操作"), hits: matched.map((c) => ({ key: `c:${c.id}`, label: c.label, icon: c.icon, note: t("操作"), run: c.run })) },
+      { label: t("快捷操作"), hits: matched.map((c) => ({ key: `c:${c.id}`, label: c.label, icon: c.icon, note: c.status ?? c.keys ?? t("操作"), alert: c.status !== undefined, run: c.run })) },
       { label: t("会话"), hits: sessions },
     ].filter((g) => g.hits.length > 0);
   }, [commands, tree, query, onOpenSession]);
@@ -94,7 +104,7 @@ export function Palette({ open, onClose, commands, tree, onOpenSession }: Props)
 
   return (
     <div className="palette-veil" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label={t("搜索与快捷操作")}>
+      <div ref={sheet} className="palette" role="dialog" aria-modal="true" aria-label={t("搜索与快捷操作")}>
         <label className="palette-input">
           <StudioIcon name="search" />
           <input
@@ -138,7 +148,7 @@ export function Palette({ open, onClose, commands, tree, onOpenSession }: Props)
                 >
                   <StudioIcon name={hit.icon} />
                   <span>{hit.label}</span>
-                  {hit.note && <small>{hit.note}</small>}
+                  {hit.note && <small data-alert={hit.alert ? "" : undefined}>{hit.note}</small>}
                 </button>
               ))}
             </div>

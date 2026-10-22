@@ -1,5 +1,6 @@
 import { MockProvider } from "./mock_provider";
-import type { CapabilityScope, McpCatalog, McpDraft, McpDraftServer, McpEntry, McpInstallResult, McpRisk, ScopeLayer } from "./port";
+import { HttpError } from "./http_error";
+import type { CapabilityScope, McpCatalog, McpDraft, McpDraftServer, McpEntry, McpInstallResult, McpLoad, McpRisk, ScopeLayer } from "./port";
 
 // Fixtures for the add-a-server flow: what a draft looks like once accepted,
 // and what the kernel would flag about it before it is.
@@ -61,7 +62,7 @@ export class MockMcp extends MockProvider {
     {
       // 真实的连不上就是这个长度：端点把整句话都塞进 error，而它有多长不由我们
       // 定 —— 右栏那一行必须扛得住，否则名字先被挤没。
-      name: "figma", state: "failed", enabled: true, transport: "http", tools: 1,
+      name: "figma", state: "failed", enabled: true, transport: "http", tools: 1, httpStatus: 401,
       error: "401 unauthorized: figma-mcp needs a personal access token with file_read scope; set FIGMA_TOKEN and reconnect",
       description: "Read Figma files, frames and comments.", remembered: true, stale: true,
       toolList: [{ name: "get_file", description: "Read one Figma file's node tree." }],
@@ -107,6 +108,39 @@ export class MockMcp extends MockProvider {
     ];
   }
 
+  async trustMcp(name: string, digest: string) {
+    const s = this.servers.find((x) => x.name === name);
+    if (!s) return { state: "failed", error: "no configured MCP server named " + name };
+    if (!s.held?.length || s.heldDigest !== digest) return { state: "failed", error: "the held MCP tool definitions changed since they were shown" };
+    s.held = undefined;
+    s.heldDigest = undefined;
+    s.tools = s.tools + 1;
+    return { state: "ready", tools: s.tools };
+  }
+
+  async signinMcp(name: string) {
+    const s = this.servers.find((x) => x.name === name);
+    if (!s) throw new HttpError(404, "no configured MCP server named " + name, { code: "mcp.signin_ineligible" });
+    s.state = "ready";
+    s.error = undefined;
+    s.httpStatus = undefined;
+    return { name, state: "ready", host: "this machine", tools: s.tools };
+  }
+
+  async upgradeMcp(name: string) {
+    const s = this.servers.find((x) => x.name === name);
+    if (!s) throw new HttpError(404, "no configured MCP server named " + name, { code: "mcp.signin_ineligible" });
+    s.scopeUpgrade = undefined;
+    return { name, state: "ready", host: "this machine", tools: s.tools };
+  }
+
+  async followMcp(name: string, follow: boolean) {
+    const s = this.servers.find((x) => x.name === name);
+    if (!s) throw new HttpError(404, "no configured MCP server named " + name, { code: "mcp.approval_owed" });
+    s.followsChanges = follow;
+    return { name, follow, tools: s.tools };
+  }
+
   async reconnectMcp(name: string) {
     const s = this.servers.find((x) => x.name === name);
     if (!s) return { state: "failed", error: "no configured MCP server named " + name };
@@ -129,6 +163,11 @@ export class MockMcp extends MockProvider {
     s.enabled = enabled;
     s.state = enabled ? (s.error ? "failed" : s.tools ? "standby" : "idle") : "disabled";
     s.localOverride = scope === "project";
+  }
+
+  async setMcpLoad(name: string, load: McpLoad) {
+    const s = this.servers.find((x) => x.name === name);
+    if (s) s.alwaysLoad = load === "always";
   }
 
   async clearMcpOverride(name: string) {

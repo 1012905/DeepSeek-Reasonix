@@ -11,16 +11,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
-
-	"github.com/BurntSushi/toml"
 
 	fileencoding "reasonix/internal/base/fileutil/encoding"
 	"reasonix/internal/contract/ablation"
 	"reasonix/internal/contract/config"
-	"reasonix/internal/session/control"
 )
 
 type task struct {
@@ -48,6 +44,7 @@ type task struct {
 	SeedCorrect string `toml:"seed_correct" json:"-"`
 	SeedWrong   string `toml:"seed_wrong" json:"-"`
 	dir         string
+	answerRoot  string
 }
 
 type runMetrics struct {
@@ -123,13 +120,15 @@ type sourceUsage struct {
 type result struct {
 	task
 	runMetrics
-	Profile string `json:"profile"`
+	SFT     *sftProvenance `json:"sft,omitempty"`
+	Profile string         `json:"profile"`
 	// Arm is the ablation arm the harness requested, not the arm the child
 	// reported, so a run that died before writing metrics is still attributable.
-	Arm     string `json:"arm"`
-	Passed  bool
-	Skipped bool
-	Note    string
+	Arm            string `json:"arm"`
+	Passed         bool
+	Skipped        bool
+	Note           string
+	answerAuditErr error
 	// Memory shadow: recall decisions and point-of-use evidence extracted from
 	// the trajectory (see memorybench.go). Zero for suites without seeds.
 	MemoryRecallEvents int `json:"memory_recall_events,omitempty"`
@@ -247,7 +246,7 @@ func main() {
 		fmt.Fprintf(flag.CommandLine.Output(), "  %[1]s -profile delivery\n", strings.Replace(flag.CommandLine.Name(), "e2ebench", "go run ./cmd/e2ebench", 1))
 	}
 
-	mode := flag.String("mode", "suite", "suite | diff | swebench | compare | traj | barrier | sft | serve")
+	mode := flag.String("mode", "suite", "suite | diff | swebench | compare | rollout | traj | barrier | sft | serve")
 	addr := flag.String("addr", "127.0.0.1:7480", "serve mode: live dashboard listen address")
 	subset := flag.String("subset", "benchmarks/swebench/subset.json", "swebench mode: instance subset file")
 	reportIn := flag.String("report", "", "sft mode: the run report (-json output) whose grader verdicts decide which runs are exported")
@@ -273,7 +272,7 @@ func main() {
 	ablateFlag := flag.String("ablate", "", "ablation arm: subsystems to switch off ("+ablation.ModuleList()+"; none|all)")
 	foldIndexFlag := flag.String("fold-index", "", "fold-index arm: how much of the model-visible address list to keep (default|half|quarter|off)")
 	outMD := flag.String("out", "", "write the markdown report here (default: stdout)")
-	trajDir := flag.String("trajectories", "", "suite mode: write one <task-id>.trajectory.jsonl per task into this directory")
+	trajDir := flag.String("trajectories", "", "suite mode: write one <task-id>.trajectory.jsonl per task into this directory (<task-id>.trial-N.trajectory.jsonl per trial under -trials)")
 	forcePlanner := flag.Bool("force-planner", false, "suite mode: prefix each prompt with a plan-first directive so the two-model turn engages regardless of the planner gate")
 	anchorFlag := flag.String("anchor", anchorBlind, "suite mode: hypothesis arm — blind (no hypothesis) | correct | wrong; correct/wrong prefix each prompt with the task's authored seed and skip tasks that have none")
 	outJSON := flag.String("json", "", "write the JSON report here (optional)")
@@ -286,8 +285,9 @@ func main() {
 	timeoutSec := flag.Int("timeout", 1200, "agent timeout in seconds (diff mode)")
 	attempts := flag.Int("attempts", 1, "suite/diff modes: retry a task up to N times until an attempt passes (stochastic agent); enables Pass@≤N")
 	tapeRecord, tapeReplay := registerTapeFlags()
-	trials := flag.Int("trials", 1, "suite mode: run every task N times and keep every outcome; reports pass^N (all passed) beside mean pass@1")
+	trials := flag.Int("trials", 1, "suite mode: run every task N times and keep every outcome; reports pass^N and pass@N over tasks that ran all N trials, beside mean pass@1 over every graded trial")
 	flag.Parse()
+	*trajDir = absTrajectoryDir(*trajDir)
 	if *trials > 1 && *attempts > 1 {
 		fmt.Fprintln(os.Stderr, "e2ebench: -trials and -attempts count repeats differently; use one")
 		os.Exit(2)
@@ -320,7 +320,7 @@ func main() {
 	}
 
 	if dispatchOfflineMode(*mode, offlineModeArgs{
-		trajDir: *trajDir, suite: *suite, reportIn: *reportIn, outMD: *outMD, addr: *addr,
+		trajDir: *trajDir, suite: *suite, reportIn: *reportIn, outMD: *outMD, outJSON: *outJSON, addr: *addr,
 	}) {
 		return
 	}
@@ -358,6 +358,10 @@ func runSuiteMode(cfg suiteConfig, suite, taskFilter, outMD, outJSON string) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
+	if err := validateAnswerIsolation(tasks); err != nil {
+		fmt.Fprintln(os.Stderr, "load suite:", err)
+		os.Exit(2)
+	}
 
 	results := runSuite(cfg, tasks)
 
@@ -370,17 +374,22 @@ func runSuiteMode(cfg suiteConfig, suite, taskFilter, outMD, outJSON string) {
 	} else {
 		fmt.Print(report)
 	}
-	if outJSON == "" {
-		return
+	if outJSON != "" {
+		b, err := json.MarshalIndent(results, "", "  ")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "marshal json:", err)
+			os.Exit(1)
+		}
+		if err := os.WriteFile(outJSON, b, 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, "write json:", err)
+			os.Exit(1)
+		}
 	}
-	b, err := json.MarshalIndent(results, "", "  ")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "marshal json:", err)
-		os.Exit(1)
-	}
-	if err := os.WriteFile(outJSON, b, 0o644); err != nil {
-		fmt.Fprintln(os.Stderr, "write json:", err)
-		os.Exit(1)
+	for _, r := range results {
+		if answerAuditFailed(r) {
+			fmt.Fprintln(os.Stderr, "MemoryBench answer audit:", r.Note)
+			os.Exit(1)
+		}
 	}
 }
 
@@ -393,37 +402,6 @@ func emit(report, outMD, _ string) {
 		return
 	}
 	fmt.Print(report)
-}
-
-func loadTasks(suite string) ([]task, error) {
-	tasksDir := filepath.Join(suite, "tasks")
-	entries, err := os.ReadDir(tasksDir)
-	if err != nil {
-		return nil, err
-	}
-	var tasks []task
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		dir := filepath.Join(tasksDir, e.Name())
-		var t task
-		data, err := fileencoding.ReadFileUTF8(filepath.Join(dir, "task.toml"))
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", e.Name(), err)
-		}
-		if _, err := toml.Decode(string(data), &t); err != nil {
-			return nil, fmt.Errorf("%s: %w", e.Name(), err)
-		}
-		t.ID = e.Name()
-		t.dir = dir
-		if t.TimeoutSec == 0 {
-			t.TimeoutSec = 240
-		}
-		tasks = append(tasks, t)
-	}
-	sort.Slice(tasks, func(i, j int) bool { return tasks[i].ID < tasks[j].ID })
-	return tasks, nil
 }
 
 func exitNoTasks(suite string) {
@@ -508,7 +486,11 @@ func runSuite(cfg suiteConfig, tasks []task) []result {
 			continue
 		}
 		if cfg.trials > 1 {
-			results = append(results, runTrials(cfg, t, &total)...)
+			trials := runTrials(cfg, t, &total)
+			results = append(results, trials...)
+			if len(trials) > 0 && answerLeakDetected(trials[len(trials)-1]) {
+				return results
+			}
 			continue
 		}
 		var cumWallMs int64
@@ -521,6 +503,9 @@ func runSuite(cfg suiteConfig, tasks []task) []result {
 			}
 			total += r.PromptTokens + r.CompletionTokens
 			results = append(results, r)
+			if answerLeakDetected(r) {
+				return results
+			}
 			if r.Passed || (cfg.budget > 0 && total >= cfg.budget) {
 				break
 			}
@@ -533,27 +518,25 @@ func runSuite(cfg suiteConfig, tasks []task) []result {
 // then drops in verify.sh and runs it as the grader. The grader is added only
 // after the run so the agent can't read the answer key.
 func runTask(cfg suiteConfig, t task) result {
-	r := result{task: t, Profile: cfg.profile, CacheArm: cfg.cacheArm, Effort: cfg.effort, ReplyLanguage: cfg.replyLanguage}
-	r.Arm = cfg.arm.Arm()
-	r.Anchor = cfg.anchor
-	t.Prompt = anchorPrompt(cfg.anchor, t)
-	if cfg.forcePlanner {
-		// The host's own routing marker, so the two-model turn engages without
-		// putting an English sentence in front of every prompt.
-		t.Prompt = control.PlannerRouteMarker + "\n\n" + t.Prompt
-		r.PlanForced = true
+	t, r, err := prepareRunTask(cfg, t)
+	if err != nil {
+		r.Note = "SFT provenance: " + err.Error()
+		return r
 	}
 
 	// The per-leg file names are decided in runSegments; only the directory has
 	// to exist before the first child starts, and the digest below reads the
 	// last leg's file.
 	trajPath := ""
-	if cfg.trajDir != "" {
-		if err := os.MkdirAll(cfg.trajDir, 0o755); err != nil {
-			r.Note = "trajectory dir: " + err.Error()
-			return r
+	runTrajDir, dropTraj, err := answerTrajectoryDir(cfg.trajDir, t.answerRoot != "")
+	if err != nil {
+		r.Note = "trajectory dir: " + err.Error()
+		if t.answerRoot != "" {
+			markAnswerAuditIncomplete(&r, err)
 		}
+		return r
 	}
+	defer dropTraj()
 
 	work, err := taskWorkdir(cfg, t.ID)
 	if err != nil {
@@ -562,14 +545,14 @@ func runTask(cfg suiteConfig, t task) result {
 	}
 	defer os.RemoveAll(work)
 
-	if seed := filepath.Join(t.dir, "workdir"); dirExists(seed) {
-		if err := copyDir(seed, work); err != nil {
-			r.Note = "copy seed: " + err.Error()
-			return r
-		}
-		pinTapeTimes(cfg, work)
+	if err := copyTaskSeed(cfg, t, work); err != nil {
+		r.Note = "copy seed: " + err.Error()
+		return r
 	}
-
+	if err := stageAnswerIsolation(t.answerRoot, work); err != nil {
+		r.Note = "isolate answers: " + err.Error()
+		return r
+	}
 	extraEnv, dropState, seedNote := taskExperimentEnv(cfg, t, work)
 	defer dropState()
 	if seedNote != "" {
@@ -590,19 +573,24 @@ func runTask(cfg suiteConfig, t task) result {
 	startedAt := time.Now()
 	snap, dropSnapshots := attachSnapshotter(cfg, t, work, startedAt)
 	defer dropSnapshots()
-	runErr := runSegments(ctx, cfg, t, work, cfg.trajDir, extraEnv, &r)
+	runErr := runSegments(ctx, cfg, t, work, runTrajDir, extraEnv, &r)
 	r.WallMs = time.Since(startedAt).Milliseconds()
 	var taken []checkpoint
 	if snap != nil {
 		taken = snap.halt()
 	}
+	if err := removeAnswerIsolation(t.answerRoot, work); err != nil {
+		r.Note = "remove answer isolation config: " + err.Error()
+		return r
+	}
 
 	mtr.record(&r)
-	if trajPath = lastSegmentTrajectory(cfg.trajDir, t.ID, r.Segments); trajPath != "" {
-		if summary, err := summarizeTrajectory(trajPath); err == nil {
-			r.Trajectory = summary
-		}
-		applyMemoryStats(&r, trajPath, t)
+	stem := trajectoryStem(t.ID, cfg.trial, cfg.trials)
+	if trajPath = lastSegmentTrajectory(runTrajDir, stem, r.Segments); trajPath != "" {
+		recordTaskTrajectory(&r, trajPath, t)
+	}
+	if !auditAnswerRun(&r, runTrajDir, stem, t) {
+		return r
 	}
 	// A killed child never writes metrics, so the deadline is the only place
 	// this failure mode is still observable.

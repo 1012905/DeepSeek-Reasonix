@@ -2,6 +2,7 @@ package config
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -145,30 +146,6 @@ func (r Roots) credentialsStoreMode() string {
 	return normalizeCredentialsStore(partial.CredentialsStore)
 }
 
-func (r Roots) credentialEnvNamesForRoot(root string) []string {
-	root = resolveRoot(root)
-	cfg := Default()
-
-	projectTOML := "reasonix.toml"
-	if root != "." {
-		projectTOML = filepath.Join(root, "reasonix.toml")
-	}
-	if uc := r.userConfigLoadPath(); uc != "" {
-		_ = mergeFile(cfg, uc)
-	}
-	_ = mergeFile(cfg, projectTOML)
-	var tomlSources []string
-	if uc := r.userConfigLoadPath(); uc != "" {
-		tomlSources = append(tomlSources, uc)
-	}
-	tomlSources = append(tomlSources, projectTOML)
-	if providers, _, _, ok, err := mergeTOMLProviders(tomlSources); err == nil && ok {
-		cfg.Providers = providers
-	}
-
-	return credentialEnvNamesFromConfig(cfg)
-}
-
 func credentialEnvNamesFromConfig(cfg *Config) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -257,16 +234,6 @@ func (e *ProviderEntry) ResolveAPIKeyForRoot(root string) {
 	resolveProviderCredentialWithResolver(e, NewCredentialResolverForRoot(root))
 }
 
-func (r Roots) loadCredentialStoreForRoot(root string) {
-	names := r.credentialEnvNamesForRoot(root)
-	if len(names) == 0 {
-		return
-	}
-	if p := r.UserCredentialsPath(); p != "" {
-		loadDotEnvFileAs(p, CredentialSource{Kind: CredentialSourceCredentials, Path: p, Label: "Reasonix credentials (.env)"})
-	}
-}
-
 // StoreCredentialLines stores KEY=value assignments in Reasonix's global .env
 // and pins them into the current process environment.
 func StoreCredentialLines(lines []string) (string, error) {
@@ -326,7 +293,12 @@ func SetCredential(key, value string) (string, error) {
 	if strings.ContainsAny(value, "\r\n") {
 		return "", fmt.Errorf("credential value for %s contains a newline", key)
 	}
-	return StoreCredentialLines([]string{key + "=" + value})
+	unlock, err := LockUserCredentialEdits()
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
+	return storeCredentialAssignmentsLocked(map[string]string{key: value})
 }
 
 // SetCredentialIfRevision stores one credential only when the global
@@ -341,11 +313,6 @@ func SetCredentialIfRevision(key, value, expectedRevision string) (string, bool,
 	if strings.ContainsAny(value, "\r\n") {
 		return "", false, fmt.Errorf("credential value for %s contains a newline", key)
 	}
-	assignments := parseCredentialLines([]string{key + "=" + value})
-	if len(assignments) != 1 {
-		return "", false, fmt.Errorf("invalid credential assignment for %s", key)
-	}
-
 	unlock, err := LockUserCredentialEdits()
 	if err != nil {
 		return "", false, err
@@ -354,7 +321,7 @@ func SetCredentialIfRevision(key, value, expectedRevision string) (string, bool,
 	if expectedRevision == "" || CredentialStoreRevision() != expectedRevision {
 		return CredentialsTargetDescription(), false, nil
 	}
-	path, err := storeCredentialAssignmentsLocked(assignments)
+	path, err := storeCredentialAssignmentsLocked(map[string]string{key: value})
 	if err != nil {
 		return "", false, err
 	}
@@ -689,35 +656,62 @@ func storeCredentialsInFile(path string, assignments map[string]string) error {
 			continue
 		}
 		if value, hit := assignments[key]; hit {
-			lines[i] = formatCredentialLine(key, value)
+			line, err := formatCredentialLine(key, value)
+			if err != nil {
+				return err
+			}
+			lines[i] = line
 			replaced[key] = true
 		}
 	}
 	keys := slices.Sorted(maps.Keys(assignments))
 	for _, key := range keys {
 		if !replaced[key] {
-			lines = append(lines, formatCredentialLine(key, assignments[key]))
+			line, err := formatCredentialLine(key, assignments[key])
+			if err != nil {
+				return err
+			}
+			lines = append(lines, line)
 		}
 	}
 	return writeCredentialFileLines(path, lines)
 }
 
-func formatCredentialLine(key, value string) string {
+// ErrCredentialValueUnstorable is returned for a value the dotenv file cannot
+// hold byte-for-byte; nothing is written, so the file stays readable.
+var ErrCredentialValueUnstorable = errors.New("credential value cannot be stored in the dotenv credential file")
+
+// formatCredentialLine picks the first encoding the reader returns unchanged.
+func formatCredentialLine(key, value string) (string, error) {
+	var candidates []string
 	if isBareDotEnvValue(value) {
-		return key + "=" + value
+		candidates = append(candidates, key+"="+value)
 	}
-	line, err := godotenv.Marshal(map[string]string{key: value})
-	if err != nil {
-		return key + "=" + value
+	single := key + "='" + strings.ReplaceAll(value, "'", "") + "'"
+	literal := !strings.ContainsAny(value, "'\r\n")
+	if literal && strings.ContainsAny(value, "\"$\\") {
+		candidates = append(candidates, single)
 	}
-	return line
+	if line, err := godotenv.Marshal(map[string]string{key: value}); err == nil {
+		candidates = append(candidates, line)
+	}
+	if literal {
+		candidates = append(candidates, single)
+	}
+	candidates = append(candidates, key+"="+value)
+	for _, line := range candidates {
+		if got, err := godotenv.Unmarshal(line); err == nil && len(got) == 1 && got[key] == value {
+			return line, nil
+		}
+	}
+	return "", ErrCredentialValueUnstorable
 }
 
 func isBareDotEnvValue(value string) bool {
 	if value == "" {
 		return true
 	}
-	return !strings.ContainsAny(value, " \t\r\n#'\"\\")
+	return !strings.ContainsAny(value, " \t\r\n#'\"\\$")
 }
 
 func removeCredentialFromFile(path, key string) error {

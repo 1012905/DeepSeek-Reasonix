@@ -13,30 +13,31 @@ import (
 )
 
 // registerMCPTools puts every enabled server into the tool catalog and returns
-// the configured specs it registered. Host-session servers take a short
-// readiness probe; configured ones stay process-idle until their first call.
-func registerMCPTools(ctx context.Context, host *plugin.Host, reg *tool.Registry, plan mcpSpecPlan, sink event.Sink) []plugin.Spec {
+// the configured specs it registered, with the names of those whose tools were
+// known at registration. Host-session servers take a short readiness probe;
+// configured ones stay process-idle until their first call.
+func registerMCPTools(ctx context.Context, host *plugin.Host, reg *tool.Registry, plan mcpSpecPlan, sink event.Sink) ([]plugin.Spec, map[string]bool) {
 	for _, s := range plan.extra {
+		plugin.ApplyDisabledMCPPolicy(reg, s)
 		registerHostSessionServer(ctx, host, reg, s, sink)
 	}
-	// The eager tier already carries the host-session servers connected above.
-	configSpecs := withoutSpecs(append(append([]plugin.Spec{}, plan.eager...), plan.background...), plan.extra)
-	for _, s := range configSpecs {
-		registerConfiguredServer(ctx, host, reg, s)
+	known := map[string]bool{}
+	for _, s := range plan.configured {
+		plugin.ApplyDisabledMCPPolicy(reg, s)
+		if registerConfiguredServer(ctx, host, reg, s, plan.alwaysLoad[s.Name]) {
+			known[s.Name] = true
+		}
 	}
-	for _, msg := range plan.demotions {
-		report(sink, event.Event{Level: event.LevelInfo, Text: msg})
-	}
-	return configSpecs
+	return plan.configured, known
 }
 
 // registerHostSessionServer connects a server the host session named for this
 // controller, so recovery and session-scoped servers are deterministic. A
 // failure still leaves a catalog entry for /mcp to diagnose.
 func registerHostSessionServer(ctx context.Context, host *plugin.Host, reg *tool.Registry, s plugin.Spec, sink event.Sink) {
-	if host.HasClient(s.Name) {
-		if tools, err := host.ToolsFor(ctx, s.Name); err == nil {
-			addTools(reg, tools)
+	if host.HasClientForSpec(s) {
+		if tools, err := host.ToolsForSpec(ctx, s); err == nil {
+			addServerTools(reg, host, s, tools)
 			return
 		}
 	}
@@ -44,33 +45,39 @@ func registerHostSessionServer(ctx context.Context, host *plugin.Host, reg *tool
 	tools, err := host.EnsureConnectedWithLifecycle(ctx, addCtx, s, 0)
 	addCancel()
 	if err == nil {
-		addTools(reg, tools)
+		addServerTools(reg, host, s, tools)
 		return
 	}
 	if plugin.IsServerAlreadyConnected(err) {
-		if tools, err2 := host.ToolsFor(ctx, s.Name); err2 == nil {
-			addTools(reg, tools)
+		if tools, err2 := host.ToolsForSpec(ctx, s); err2 == nil {
+			addServerTools(reg, host, s, tools)
 			return
 		}
 	}
+	host.RecordFailure(s, err)
 	cs, _ := plugin.LoadCachedSchemaForSpec(s)
 	addTools(reg, plugin.LazyToolset(s, cs, host, reg, ctx, false))
 	report(sink, event.Event{Level: event.LevelWarn,
 		Text: "An MCP server failed to start.", Detail: fmt.Sprintf("mcp %s: %v", s.Name, err)})
 }
 
-// registerConfiguredServer registers placeholders from the cached schema, and
-// starts a process for catalog discovery only when no usable schema is cached.
-func registerConfiguredServer(ctx context.Context, host *plugin.Host, reg *tool.Registry, s plugin.Spec) {
-	if host.HasClient(s.Name) {
-		if tools, err := host.ToolsFor(ctx, s.Name); err == nil {
-			addTools(reg, tools)
-			return
+// registerConfiguredServer registers placeholders from the cached schema. It
+// starts a process at once for catalog discovery when no usable schema is
+// cached, and for an authorized always-loaded server, whose tools the model
+// may call directly on its first turn; any other server connects on first use.
+// It reports whether the server's tools were known when it returned.
+func registerConfiguredServer(ctx context.Context, host *plugin.Host, reg *tool.Registry, s plugin.Spec, alwaysLoad bool) bool {
+	if host.HasClientForSpec(s) {
+		if tools, err := host.ToolsForSpec(ctx, s); err == nil {
+			addServerTools(reg, host, s, tools)
+			return true
 		}
 	}
 	cs, _ := plugin.LoadCachedSchemaForSpec(s)
-	kick := cs == nil || len(cs.Tools) == 0
-	addTools(reg, plugin.LazyToolset(s, cs, host, reg, ctx, kick))
+	known := cs != nil && len(cs.Tools) > 0
+	preconnect := alwaysLoad && plugin.ResolveStoredAuthorization(ctx, s).ServerAuthorized()
+	addTools(reg, plugin.LazyToolset(s, cs, host, reg, ctx, !known || preconnect))
+	return known
 }
 
 func withoutSpecs(specs, drop []plugin.Spec) []plugin.Spec {
@@ -90,6 +97,13 @@ func withoutSpecs(specs, drop []plugin.Spec) []plugin.Spec {
 	return kept
 }
 
+// addServerTools registers a connected server's tools and the held set its
+// client withheld, so a call to a withheld tool is refused with its cause.
+func addServerTools(reg *tool.Registry, host *plugin.Host, s plugin.Spec, tools []tool.Tool) {
+	addTools(reg, tools)
+	plugin.ApplyHeldMCPPolicy(reg, host, s)
+}
+
 func addTools(reg *tool.Registry, tools []tool.Tool) {
 	for _, t := range tools {
 		reg.Add(t)
@@ -102,7 +116,12 @@ func registerLSP(reg *tool.Registry, cfg *config.Config, root string) *lsp.Manag
 	if !cfg.LSP.Enabled {
 		return nil
 	}
-	mgr := lsp.NewManager(root, LSPSpecs(cfg.LSP))
+	specs := LSPSpecs(cfg.LSP)
+	for lang, spec := range specs {
+		spec.Verify = cfg.ProjectProgramVerifier(config.ProjectProgramLSP, lang)
+		specs[lang] = spec
+	}
+	mgr := lsp.NewManager(root, specs)
 	for _, t := range lsp.Tools(mgr) {
 		if t != nil {
 			reg.Add(t)

@@ -21,6 +21,7 @@ type streamedCall struct {
 	id, name, arguments string
 	argChars            int
 	completed           bool
+	announced           bool
 }
 
 // turn is what a response's events add up to: the visible answer, the reasoning
@@ -44,11 +45,12 @@ type turn struct {
 	responseID      string
 	terminal        bool
 	failed          bool
+	remember        bool
 }
 
 func newTurn(c *client, out chan<- provider.Chunk) *turn {
 	return &turn{
-		c: c, out: out,
+		c: c, out: out, remember: true,
 		calls:         map[string]*streamedCall{},
 		seenText:      map[string]bool{},
 		seenRefusal:   map[string]bool{},
@@ -118,7 +120,7 @@ func (t *turn) applyContent(ctx context.Context, event sseEvent, key string) boo
 // event: it carries its code and message directly and ends the turn.
 func (t *turn) streamError(ctx context.Context, event sseEvent) bool {
 	t.terminal, t.failed = true, true
-	err := error(&provider.StreamPayloadError{Provider: t.c.name, Message: cmp.Or(strings.TrimSpace(event.Message), "stream error"), Code: event.Code})
+	err := error(&provider.StreamPayloadError{Provider: t.c.name, Message: cmp.Or(strings.TrimSpace(event.Message), "stream error"), Code: event.Code.String()})
 	if authErr := authErrorFromResponse(t.c, &sseError{Message: event.Message, Code: event.Code}); authErr != nil {
 		err = authErr
 	}
@@ -164,6 +166,7 @@ func (t *turn) beginItem(ctx context.Context, item *sseItem) bool {
 	case "function_call":
 		call := t.callFor(item.ID)
 		call.id, call.name = item.CallID, item.Name
+		call.announced = true
 		return t.send(ctx, provider.Chunk{
 			Type: provider.ChunkToolCallStart, ToolCall: &provider.ToolCall{ID: call.id, Name: call.name},
 		})
@@ -200,10 +203,13 @@ func (t *turn) finishItem(ctx context.Context, item *sseItem) bool {
 	return true
 }
 
+// completeCall dispatches a call once. One with no name yet, such as an
+// arguments.done event that named no item, stays open for a later event to name.
 func (t *turn) completeCall(ctx context.Context, call *streamedCall) bool {
-	if call.completed {
+	if call.completed || call.name == "" {
 		return true
 	}
+	call.arguments = cmp.Or(call.arguments, "{}")
 	call.completed = true
 	return t.send(ctx, provider.Chunk{
 		Type:     provider.ChunkToolCall,
@@ -242,19 +248,61 @@ func (t *turn) applyTerminal(ctx context.Context, event sseEvent) bool {
 	}
 	t.terminal = true
 	if event.Response == nil {
+		if event.Type == "response.completed" {
+			if err := t.pendingCallError(); err != nil {
+				return t.refuseCalls(ctx, err)
+			}
+		}
 		return true
-	}
-	if event.Type == "response.completed" {
-		t.responseID = event.Response.ID
 	}
 	if !t.reportUsage(ctx, event) {
 		return false
+	}
+	if event.Type == "response.completed" {
+		if err := t.terminalOutputError(event.Response.Output); err != nil {
+			return t.refuseCalls(ctx, err)
+		}
+		t.responseID = event.Response.ID
+	}
+	if event.Type != "response.failed" && !t.closeCallsFromOutput(ctx, event.Response.Output) {
+		return false
+	}
+	if event.Type == "response.completed" {
+		if err := t.pendingCallError(); err != nil {
+			return t.refuseCalls(ctx, err)
+		}
 	}
 	if event.Type != "response.failed" {
 		return true
 	}
 	t.failed = true
 	return t.send(ctx, provider.Chunk{Type: provider.ChunkError, Err: failureError(t.c, event.Response.Error)})
+}
+
+// closeCallsFromOutput recovers omitted done events, deduplicated by call ID.
+// Completed output is validated first; incomplete output may still contain
+// truncated or unreadable calls that must remain undispatched.
+func (t *turn) closeCallsFromOutput(ctx context.Context, output []json.RawMessage) bool {
+	for _, raw := range output {
+		var item sseItem
+		if json.Unmarshal(raw, &item) != nil || item.Type != "function_call" || item.CallID == "" ||
+			(item.Status != "" && item.Status != "completed") || t.callClosed(item.CallID) {
+			continue
+		}
+		if !t.finishItem(ctx, &item) {
+			return false
+		}
+	}
+	return true
+}
+
+func (t *turn) callClosed(callID string) bool {
+	for _, call := range t.calls {
+		if call.completed && call.id == callID {
+			return true
+		}
+	}
+	return false
 }
 
 func failureError(c *client, responseError *sseError) error {
@@ -264,7 +312,7 @@ func failureError(c *client, responseError *sseError) error {
 	if authErr := authErrorFromResponse(c, responseError); authErr != nil {
 		return authErr
 	}
-	return &provider.StreamPayloadError{Provider: c.name, Message: responseError.Message, Code: responseError.Code}
+	return &provider.StreamPayloadError{Provider: c.name, Message: responseError.Message, Code: responseError.Code.String()}
 }
 
 // reportUsage forwards the turn's accounting. An all-zero usage object still
@@ -310,17 +358,22 @@ func (t *turn) assistant() provider.Message {
 	return message
 }
 
-// finish records the continuation point and closes the turn out.
-func (t *turn) finish(ctx context.Context, requestMessages []provider.Message) {
+// A summary must not replace the main conversation continuation.
+func (t *turn) recordContinuation(requestMessages []provider.Message) {
 	if t.responseID != "" {
 		expected := append(append([]provider.Message(nil), requestMessages...), t.assistant())
 		t.c.mu.Lock()
-		t.c.lastResponseID = t.responseID
-		t.c.expectedPrefixDigest = t.c.conversationDigest(expected)
+		if t.c.effectiveModeLocked() == "stateful" {
+			t.c.lastResponseID = t.responseID
+			t.c.expectedPrefixDigest = t.c.conversationDigest(expected)
+		}
 		t.c.mu.Unlock()
 	} else {
 		t.c.ResetContext()
 	}
+}
+
+func (t *turn) finish(ctx context.Context) {
 	if t.failed {
 		return
 	}
@@ -334,7 +387,7 @@ func (t *turn) finish(ctx context.Context, requestMessages []provider.Message) {
 	_ = t.send(ctx, provider.Chunk{Type: provider.ChunkDone})
 }
 
-func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<- provider.Chunk, requestMessages []provider.Message) {
+func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<- provider.Chunk, requestMessages []provider.Message, downgrade, remember bool) {
 	defer resp.Body.Close()
 	defer close(out)
 
@@ -351,6 +404,8 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 	defer close(watchDone)
 
 	t := newTurn(c, out)
+	t.remember = remember
+	completed := false
 	for scanner.Scan() {
 		select {
 		case activity <- struct{}{}:
@@ -361,8 +416,16 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 			continue
 		}
 		if data == "[DONE]" {
+			if err := t.pendingCallError(); err != nil {
+				t.refuseCalls(ctx, err)
+				return
+			}
 			t.terminal = true
 			break
+		}
+		if err := doneArgumentsError([]byte(data)); err != nil {
+			t.refuseCalls(ctx, err)
+			return
 		}
 		var event sseEvent
 		if json.Unmarshal([]byte(data), &event) != nil {
@@ -371,6 +434,7 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 		if !t.apply(ctx, event) {
 			return
 		}
+		completed = event.Type == "response.completed" && event.Response != nil
 		if t.terminal {
 			break
 		}
@@ -390,7 +454,13 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 		_ = sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkError, Err: provider.StreamInterrupt(io.ErrUnexpectedEOF, provider.StreamInterruptPrematureEOF)})
 		return
 	}
-	t.finish(ctx, requestMessages)
+	if downgrade && completed && !t.failed {
+		c.disableContinuation()
+	}
+	if remember {
+		t.recordContinuation(requestMessages)
+	}
+	t.finish(ctx)
 }
 
 func sseData(line string) (string, bool) {
@@ -403,7 +473,7 @@ func sseData(line string) (string, bool) {
 
 func interruptedRead(err error, idle time.Duration, stalled bool) error {
 	if stalled {
-		return provider.StreamInterrupt(fmt.Errorf("responses: stream idle timeout after %s", idle), provider.StreamInterruptIdleTimeout)
+		return provider.StreamInterrupt(fmt.Errorf("responses: stream idle timeout after %s; raise idle_timeout_seconds to allow a longer silence", idle), provider.StreamInterruptIdleTimeout)
 	}
 	return provider.StreamInterrupt(err, provider.ClassifyStreamInterrupt(err))
 }

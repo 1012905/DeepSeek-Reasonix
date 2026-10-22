@@ -3,6 +3,7 @@ package sessionstore
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -32,8 +33,21 @@ type BranchMeta struct {
 	// Archived removes a finished conversation from the everyday session list
 	// without moving or deleting its transcript. Keeping this as metadata makes
 	// archive/unarchive atomic and preserves every sidecar needed to resume it.
-	Archived bool   `json:"archived,omitempty"`
-	Model    string `json:"model,omitempty"`
+	Archived bool `json:"archived,omitempty"`
+	// Pinned is the user's "keep this": automatic archiving never touches it.
+	Pinned bool `json:"pinned,omitempty"`
+	// ManualRank is where the user placed this conversation among its project's
+	// list: lower is earlier, 0 means never placed, and an unplaced one sorts by
+	// activity above the placed ones.
+	ManualRank float64 `json:"manual_rank,omitempty"`
+	// AutoArchivedAt is set only by the automatic sweep and cleared on restore;
+	// it is what lets a window say "N conversations were archived for you".
+	AutoArchivedAt time.Time `json:"auto_archived_at,omitzero"`
+	// FinishedAt and ViewedAt are the two facts behind Unread. Both are optional:
+	// a sidecar written before they existed reads as seen.
+	FinishedAt time.Time `json:"finished_at,omitzero"`
+	ViewedAt   time.Time `json:"viewed_at,omitzero"`
+	Model      string    `json:"model,omitempty"`
 	// TokenMode is the legacy dual-write value (economy|full|delivery). Prefer
 	// AgentPreset (balanced|delivery) when both are present.
 	TokenMode string `json:"token_mode,omitempty"`
@@ -55,9 +69,12 @@ type BranchMeta struct {
 	// Walking ParentID instead breaks the moment GC reclaims a middle link,
 	// which is exactly what GC does.
 	RecoveryRootID string `json:"recovery_root_id,omitempty"`
-	Revision       int64  `json:"revision,omitempty"`
-	ContentDigest  string `json:"content_digest,omitempty"`
-	WriterID       string `json:"writer_id,omitempty"`
+	// Superseded marks a version of ParentID that a rewind replaced; it stays
+	// out of session lists and is reached through its parent.
+	Superseded    bool   `json:"superseded,omitempty"`
+	Revision      int64  `json:"revision,omitempty"`
+	ContentDigest string `json:"content_digest,omitempty"`
+	WriterID      string `json:"writer_id,omitempty"`
 	// SchemaVersion records the BranchMeta version that last wrote the listing
 	// fields (Turns/Preview) FROM the session's content. It is stamped only by the
 	// writers that actually derive those counts — Controller.snapshot's
@@ -75,6 +92,10 @@ type BranchMeta struct {
 	Turns        int               `json:"turns,omitempty"`
 	Preview      string            `json:"preview,omitempty"`
 	InFlightTurn *InFlightTurnMeta `json:"in_flight_turn,omitempty"`
+	ImportedFrom *ImportSource     `json:"imported_from,omitempty"`
+	// Adopted says this conversation was brought in from elsewhere: moved from
+	// another project, or read from a file. A move records where it left so it can go back.
+	Adopted *AdoptRecord `json:"adopted,omitempty"`
 }
 
 const (
@@ -140,7 +161,14 @@ func BranchMetaPath(sessionPath string) string {
 	return store.SessionMeta(sessionPath)
 }
 
+// branchMetaReadHook, when set, is told of every sidecar read; tests count
+// reads through it.
+var branchMetaReadHook func(sessionPath string)
+
 func LoadBranchMeta(sessionPath string) (BranchMeta, bool, error) {
+	if branchMetaReadHook != nil {
+		branchMetaReadHook(sessionPath)
+	}
 	metaPath := BranchMetaPath(sessionPath)
 	if metaPath == "" {
 		return BranchMeta{}, false, nil
@@ -243,6 +271,17 @@ func SaveBranchMetaPreserveUpdatedLocked(sessionPath string, m BranchMeta) error
 }
 
 func saveBranchMeta(sessionPath string, m BranchMeta, touchUpdated bool) error {
+	var persisted *BranchMeta
+	if existing, ok, err := LoadBranchMeta(sessionPath); err == nil && ok {
+		persisted = &existing
+	}
+	return saveBranchMetaAfter(sessionPath, m, touchUpdated, persisted)
+}
+
+// saveBranchMetaAfter is saveBranchMeta for a caller that holds the meta lock
+// and has just read the sidecar itself: persisted is that read (nil when there
+// was no sidecar), so the file is not read a second time within one transaction.
+func saveBranchMetaAfter(sessionPath string, m BranchMeta, touchUpdated bool, persisted *BranchMeta) error {
 	metaPath := BranchMetaPath(sessionPath)
 	if metaPath == "" {
 		return fmt.Errorf("empty session path")
@@ -257,8 +296,8 @@ func saveBranchMeta(sessionPath string, m BranchMeta, touchUpdated bool) error {
 	if touchUpdated || m.UpdatedAt.IsZero() {
 		m.UpdatedAt = now
 	}
-	if existing, ok, err := LoadBranchMeta(sessionPath); err == nil && ok {
-		preserveBranchMetaPersistence(&m, existing)
+	if persisted != nil {
+		preserveBranchMetaPersistence(&m, *persisted)
 	}
 	if err := os.MkdirAll(filepath.Dir(metaPath), 0o755); err != nil {
 		return err
@@ -337,11 +376,36 @@ func ensureBranchMetaUnlocked(sessionPath string) (BranchMeta, error) {
 	return m, saveBranchMeta(sessionPath, m, false)
 }
 
-// SetSessionArchived changes only the catalog state of a transcript. The
-// conversation and all of its artifacts stay in place so unarchive is lossless.
+// SetSessionArchived changes only catalog state; nothing is moved or deleted.
+// Archiving drops the pin, and restoring counts as activity so an automatic
+// sweep does not archive the conversation again.
 func SetSessionArchived(sessionPath string, archived bool) error {
-	return UpdateBranchMeta(sessionPath, false, func(m *BranchMeta) error {
+	return UpdateBranchMeta(sessionPath, !archived, func(m *BranchMeta) error {
 		m.Archived = archived
+		m.AutoArchivedAt = time.Time{}
+		if archived {
+			m.Pinned = false
+		}
+		return nil
+	})
+}
+
+// SetSessionRank records where the user put a conversation in its project's list;
+// 0 returns it to the activity order. A rank below zero means nothing and is refused.
+func SetSessionRank(sessionPath string, rank float64) error {
+	if rank < 0 || math.IsNaN(rank) || math.IsInf(rank, 0) {
+		return fmt.Errorf("a session rank is a finite number from 0, not %v", rank)
+	}
+	return UpdateBranchMeta(sessionPath, false, func(m *BranchMeta) error {
+		m.ManualRank = rank
+		return nil
+	})
+}
+
+// SetSessionPinned marks a conversation automatic archiving must leave alone.
+func SetSessionPinned(sessionPath string, pinned bool) error {
+	return UpdateBranchMeta(sessionPath, false, func(m *BranchMeta) error {
+		m.Pinned = pinned
 		return nil
 	})
 }
@@ -509,10 +573,10 @@ func ListBranches(dir string) ([]BranchInfo, error) {
 			continue
 		}
 		meta, ok, err := LoadBranchMeta(path)
-		if err != nil {
-			continue
-		}
-		if !ok {
+		if err != nil || !ok {
+			// An unreadable sidecar is an absent one: the branch is still a
+			// conversation on disk, and dropping it let a caller read "the turn
+			// did not continue here" out of a read failure.
 			meta = BranchMeta{
 				ID:        BranchID(path),
 				CreatedAt: info.ModTime().UTC(),
@@ -614,13 +678,18 @@ func UpdateSessionMeta(sessionPath, model, preview string, turns int, markActivi
 	if err != nil {
 		return err
 	}
+	persisted := m
 	if strings.TrimSpace(model) != "" {
 		m.Model = strings.TrimSpace(model)
+	}
+	// A version someone carried on is a conversation of its own now.
+	if m.Superseded && markActivity && turns > m.Turns {
+		m.Superseded = false
 	}
 	m.Preview = preview
 	m.Turns = turns
 	// These counts were derived from the current content, so mark them
 	// authoritative — listing can then trust Turns (even 0) without re-decoding.
 	m.SchemaVersion = BranchMetaCountsVersion
-	return saveBranchMeta(sessionPath, m, markActivity)
+	return saveBranchMetaAfter(sessionPath, m, markActivity, &persisted)
 }

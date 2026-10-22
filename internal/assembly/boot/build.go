@@ -2,6 +2,7 @@ package boot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,52 +12,65 @@ import (
 	"time"
 
 	"reasonix/internal/base/netclient"
+	"reasonix/internal/base/netdns"
 	"reasonix/internal/base/secrets"
+	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
 	"reasonix/internal/contract/event"
+	"reasonix/internal/contract/pricing"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/tool"
 	"reasonix/internal/ext/command"
 	"reasonix/internal/ext/extension"
 	"reasonix/internal/ext/extension/sidecar"
 	"reasonix/internal/ext/hook"
-	"reasonix/internal/ext/mcplaunch"
 	"reasonix/internal/ext/plugin"
 	"reasonix/internal/ext/pluginspec"
+	"reasonix/internal/model/billing"
 	"reasonix/internal/platform/browser"
+	"reasonix/internal/platform/gitcmd"
 	"reasonix/internal/platform/lsp"
+	"reasonix/internal/platform/otlp"
 	"reasonix/internal/runtime/agent"
 	"reasonix/internal/runtime/delegation"
+	"reasonix/internal/safety/endpointclient"
 	"reasonix/internal/safety/permission"
 	"reasonix/internal/safety/sandbox"
 	"reasonix/internal/session/control"
+	"reasonix/internal/tools/script"
 )
 
 // builder carries one build's state from stage to stage. Each stage reads
 // what the earlier ones settled and adds its own; none reaches back.
 type builder struct {
-	ctx              context.Context
-	opts             Options
-	timer            *phaseTimer
-	owner            *extension.RuntimeOwner
-	fileWriteReceipt func(path string, hadPrior bool, prior []byte)
-	stderr           io.Writer
-	root             string
-	roots            config.Roots
-	cfg              *config.Config
-	sink             event.Sink
-	proxy            netclient.ProxySpec
-	ext              *extensionStage
-	pendingMgr       *sidecar.Manager // sidecars no RuntimeSet owns yet
-	providers        providerStage
-	model            modelSelection
-	keep             agent.KeepPolicy
-	session          sessionRuntime
-	balanceClient    *http.Client
-	execProv         provider.Provider
-	shell            sandbox.Shell
-	prompt           promptAssembly
-	additionalDirs   []string
+	compositionBinding func(agentcomposition.Version, string) *agentcomposition.Binding
+	ctx                context.Context
+	closeLifetime      context.CancelFunc
+	opts               Options
+	timer              *phaseTimer
+	owner              *extension.RuntimeOwner
+	fileWriteReceipt   func(path string, hadPrior bool, prior []byte)
+	stderr             io.Writer
+	trace              *otlp.Exporter
+	root               string
+	repo               gitcmd.Repo // root's git identity, settled in load
+	roots              config.Roots
+	cfg                *config.Config
+	sink               event.Sink
+	quoteContext       *event.QuoteContext
+	proxy              netclient.ProxySpec
+	ext                *extensionStage
+	pendingMgr         *sidecar.Manager // sidecars no RuntimeSet owns yet
+	providers          providerStage
+	model              modelSelection
+	keep               agent.KeepPolicy
+	session            sessionRuntime
+	balanceClient      *http.Client
+	keyedClient        *http.Client // carries provider keys; refuses cross-origin redirects
+	execProv           provider.Provider
+	shell              sandbox.Shell
+	prompt             promptAssembly
+	additionalDirs     []string
 
 	tools   toolStage
 	cleanup func()
@@ -73,6 +87,10 @@ type toolStage struct {
 	configSpecs []plugin.Spec
 	lsp         *lsp.Manager
 	browser     *browser.Session
+	peerLink    *tool.PeerLink
+	subagents   *delegation.SubagentStore
+	settingLink *tool.SettingsLink
+	peerTools   func(enabled, dispatch bool)
 	maxSteps    int
 	policy      permission.Policy
 	gate        *control.SharedHeadlessGate
@@ -85,6 +103,11 @@ type toolStage struct {
 	runners     skillRunners
 	cmds        []command.Command
 	caps        *capabilitySurface
+	candidates  *candidateApproval // nil unless best_of_n is offered
+	isolation   *isolationWiring   // nil unless worktree isolation is offered
+	// mcpSchemaKnown names the configured servers whose tools were known at
+	// registration, the only ones an always-load can show this session.
+	mcpSchemaKnown map[string]bool
 }
 
 // build is the assembly behind BuildRuntime: it loads config, resolves the
@@ -92,28 +115,77 @@ type toolStage struct {
 // objects it just assembled. The controller owns plugin subprocesses until
 // Controller.Close releases them.
 func build(ctx context.Context, opts Options) (*BuildResult, error) {
-	b := &builder{timer: newPhaseTimer()}
-	b.ctx, b.opts, b.owner, b.fileWriteReceipt = bindRuntimeOwner(ctx, opts)
+	b := &builder{timer: newPhaseTimer(), compositionBinding: newLiveCompositionBinding}
+	return b.build(ctx, opts)
+}
+
+func (b *builder) build(ctx context.Context, opts Options) (*BuildResult, error) {
+	opts = observeOverrides(opts)
+	b.timer.observe = opts.OnPhase
+	// The runtime outlives the request that built it (Studio opens a pane with
+	// one), and its MCP servers and sidecars start on that context later.
+	life, detach, closeLifetime := constructionLifetime(ctx)
+	b.closeLifetime = closeLifetime
+	b.ctx, b.opts, b.owner, b.fileWriteReceipt = bindRuntimeOwner(life, opts)
 	defer b.retireUnownedSidecars()
+	delivered := false
+	var constructed *control.Controller
+	defer func() {
+		if !delivered {
+			closeLifetime()
+			if constructed != nil {
+				constructed.ReleaseResources()
+			} else {
+				b.discardBuildResources()
+			}
+		}
+	}()
+	if b.owner.Notices != nil && b.opts.Sink != nil {
+		window := b.owner.Notices.Begin(b.opts.Sink)
+		b.opts.Sink = window
+		defer func() { window.Close(delivered) }()
+	}
 	if err := b.load(); err != nil {
 		return nil, err
 	}
 	if err := b.wireTools(); err != nil {
 		return nil, err
 	}
+	if err := b.bindCompositionMCPContracts(ctx); err != nil {
+		return nil, err
+	}
 	ctrl, err := b.controller()
 	if err != nil {
 		return nil, err
 	}
-	return b.freeze(ctrl)
+	constructed = ctrl
+	b.tools.candidates.bind(ctrl)
+	b.tools.isolation.bind(ctrl)
+	res, err := b.freeze(ctrl)
+	if err == nil {
+		if cancelErr := detach(); cancelErr != nil {
+			ctrl.Close()
+			return nil, cancelErr
+		}
+	}
+	delivered = err == nil
+	return res, err
 }
 
-// retireUnownedSidecars closes the preflighted sidecars when the build fails
-// before the extension snapshot takes ownership: no process outlives a failed build.
+// workspaceExtraRoots is the one list of folders that count as the workspace
+// beside the root: the granted extra roots and this session's --add-dir folders.
+// The executor and every sub-agent it spawns read it, so a write in one is
+// observed the same way whoever made it.
+func (b *builder) workspaceExtraRoots() []string {
+	return appendUniquePaths(b.cfg.ExtraRoots(), b.additionalDirs...)
+}
+
+// retireUnownedSidecars restores adopted clients and closes fresh sidecars when
+// the build fails before the extension snapshot takes ownership.
 func (b *builder) retireUnownedSidecars() {
 	if b.pendingMgr != nil {
 		close(b.ext.failed)
-		_ = b.pendingMgr.Close()
+		b.pendingMgr.RollbackPlanStart(b.opts.Extensions)
 	}
 }
 
@@ -121,20 +193,41 @@ func (b *builder) retireUnownedSidecars() {
 // the session resources and the system prompt.
 func (b *builder) load() error {
 	opts := b.opts
+	if opts.Observe != nil && opts.Observe.Pending == nil {
+		return errors.New("boot: the read-only posture needs somewhere to park what needs a person")
+	}
 	b.stderr = opts.Stderr
 	if b.stderr == nil {
 		b.stderr = os.Stderr
 	}
 	b.root, b.roots = resolveWorkspaceRoot(opts.WorkspaceRoot), opts.roots()
+	if opts.Observe != nil {
+		if err := checkObserveRoot(b.root); err != nil {
+			return err
+		}
+	}
+	b.repo = workspaceRepo(b.ctx, opts.WorkspaceRepo, b.root)
 	var err error
 	if b.additionalDirs, err = normalizeAdditionalDirs(b.root, opts.AdditionalDirs); err != nil {
 		return err
 	}
-	migrations := runConfigMigrations(b.roots, b.root)
-	if b.cfg, err = b.roots.LoadForRoot(b.root); err != nil {
+	var migrations configMigrations
+	if opts.Observe == nil {
+		migrations = runConfigMigrations(b.roots, b.root)
+	}
+	if b.cfg, err = b.loadConfig(); err != nil {
 		return err
 	}
+	if err := b.prepareComposition(); err != nil {
+		return err
+	}
+	opts = b.opts
 	cfg := b.cfg
+	// Name resolution is settled before anything opens a socket, and here rather
+	// than in an `init` because the setting lives in the config. Empty leaves the
+	// resolver as it was; the proxy rides along because a DoH query is HTTPS.
+	proxyForDNS, _ := netclient.ProxyFunc(cfg.NetworkProxySpec())
+	netdns.InstallConfigured(cfg.NetworkDNS(), cfg.NetworkDoH(), proxyForDNS)
 	migrations.deepSeekErr = deepSeekProtocolMigrationNoticeError(handleConfigLoadWarnings(opts, cfg, b.stderr), migrations.deepSeekErr)
 	// [secrets] is user-global, so arming these package globals before any
 	// subprocess can spawn is correct for every concurrent workspace.
@@ -145,7 +238,13 @@ func (b *builder) load() error {
 	// One synchronized sink for every emitter: background jobs and sidecars
 	// emit from their own goroutines. The goal tee and the coalescer wrap it
 	// here, before the extension hub captures it, so agents emit through both.
-	b.sink = control.NewGoalUsageTee(event.Coalesce(quotedSink(cfg, opts), event.DefaultStreamDeltaWindow))
+	b.trace = newTraceExporter(cfg, b.root, opts.Version, b.stderr)
+	quoted, quoteContext := quotedSink(cfg, opts, b.trace)
+	b.quoteContext = quoteContext
+	b.sink = control.NewGoalUsageTee(event.Coalesce(quoted, event.DefaultStreamDeltaWindow))
+	// Tag a shell result whose whole output is a diff, once, before the
+	// extension hub captures the sink — every emitter shares this one.
+	b.sink = event.MarkEmbeddedDiffs(b.sink, cfg.EmbeddedDiffDetectionEnabled())
 
 	b.proxy = cfg.NetworkProxySpec()
 	if b.ext, err = startExtensions(b.ctx, opts, b.roots, b.root, b.owner, b.sink); err != nil {
@@ -178,19 +277,82 @@ func (b *builder) load() error {
 	if b.balanceClient, err = netclient.NewHTTPClient(b.proxy, netclient.TransportOptions{}); err != nil {
 		return err
 	}
+	if b.keyedClient, err = endpointclient.New(b.proxy, netclient.TransportOptions{}); err != nil {
+		return err
+	}
 	if b.execProv, err = resolveProvider(b.providers.effective, cfg, b.proxy, provider.Selection{Ref: b.model.ref, Effort: opts.EffortOverride}); err != nil {
 		return err
 	}
 	b.timer.mark("provider")
-	b.shell = sandbox.ResolveShell(cfg.Tools.Shell.Prefer, cfg.Tools.Shell.Path, b.stderr)
+	if opts.resolvedShell != nil {
+		b.shell = *opts.resolvedShell
+	} else {
+		b.shell = resolveShellWithNotice(opts, cfg.Tools.Shell.Prefer, cfg.Tools.Shell.Path, cfg.Tools.Shell.Args, b.stderr, b.sink)
+	}
+	// Record the resolved interpreter for diagnostics, staying at Debug because
+	// headless `run` must leave stderr empty unless --debug is passed. A launch
+	// failure emits an always-on Warn with the same kind/path/source fields.
+	b.timer.mark("shell")
+	slog.Debug("boot: shell tool interpreter resolved", "kind", b.shell.Kind.String(), "path", b.shell.Path, "prefer", cfg.Tools.Shell.Prefer)
 	b.prompt, err = buildPromptAssembly(b.ctx, opts, cfg, b.root, b.shell, b.sink, b.timer)
+	if err == nil {
+		err = b.bindCompositionSkills()
+	}
 	return err
+}
+
+// resolveShellWithNotice keeps shell-discovery warnings on stderr for CLI
+// diagnostics and also reports them through the boot sink, where the settings
+// surface can show which interpreter actually runs.
+func resolveShellWithNotice(opts Options, prefer, path string, args []string, stderr io.Writer, sink event.Sink) sandbox.Shell {
+	var warnings strings.Builder
+	d := sandbox.ShellDiscovery{Prefer: prefer, Path: path, Args: args, Warn: io.MultiWriter(stderr, &warnings), ProofDir: opts.roots().CacheDir()}
+	if opts.tuneShell != nil {
+		opts.tuneShell(&d)
+	}
+	shell := d.Resolve()
+	if detail := strings.TrimSpace(warnings.String()); detail != "" {
+		report(sink, event.Event{Level: event.LevelWarn, Text: "Shell tool interpreter fallback.", Detail: detail})
+	}
+	return shell
+}
+
+// loadConfig reads the configuration this build runs under. The read-only
+// posture takes the user's own and nothing the workspace declares, and holds no
+// MCP server at all.
+func (b *builder) loadConfig() (*config.Config, error) {
+	if b.opts.Observe == nil {
+		return b.roots.LoadForRoot(b.root)
+	}
+	cfg, err := b.roots.LoadUserScopeForRoot(b.root)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Plugins = nil
+	cfg.Secrets.ProtectSensitiveFiles, cfg.Secrets.ProtectCredentialFiles = true, true
+	return cfg, nil
+}
+
+// skippedDefaultDetail says why the saved default was passed over. A decision
+// source exists but answers system_one only, which is a different fix from a name
+// nothing declares.
+func (b *builder) skippedDefaultDetail() string {
+	var mismatch *config.AnswersMismatchError
+	if errors.As(b.cfg.RequireAnswers(b.model.skipped, config.AnswersChat), &mismatch) {
+		return fmt.Sprintf("default_model = %q is a decision source: it answers system_one's questions, not conversation; using %q. Choosing a default model replaces it; until then the file keeps it as written.", b.model.skipped, b.model.ref)
+	}
+	return fmt.Sprintf("default_model = %q names no configured provider or model; using %q. Choosing a default model replaces it; until then the file keeps it as written.", b.model.skipped, b.model.ref)
 }
 
 func (b *builder) reportModelNotices() {
 	cfg, entry := b.cfg, b.model.entry
 	if ignored := cfg.IgnoredProjectDefaultModel(); ignored != "" {
 		report(b.sink, event.Event{Level: event.LevelWarn, Text: "Ignored the project config's default_model.", Detail: fmt.Sprintf("./reasonix.toml sets default_model = %q but no configured provider serves it; using %q from your user config instead. Edit or remove that default_model line to silence this notice.", ignored, cfg.DefaultModel)})
+	}
+	if b.model.skipped != "" {
+		report(b.sink, event.Event{Level: event.LevelWarn, Code: event.NoticeCodeDefaultModelUnavailable,
+			Text:   "The saved default model is not configured, so another configured model is in use.",
+			Detail: b.skippedDefaultDetail()})
 	}
 	// Without RequireKey the UI stays reachable, so a missing key would
 	// otherwise surface only as a silently failing first request.
@@ -204,14 +366,28 @@ func (b *builder) reportModelNotices() {
 func (b *builder) wireTools() error {
 	opts, cfg, root := b.opts, b.cfg, b.root
 	t := &b.tools
-	t.reg = tool.NewRegistry()
+	t.reg = newToolRegistry(opts)
 	t.env = resolveToolEnvironment(opts, cfg, b.roots, root, b.additionalDirs, b.shell, b.stderr)
 	env := t.env
 	// The full inventory registers for use_capability; the provider-visible surface narrows later.
-	addBuiltins(t.reg, cfg.Tools.Enabled, env.writeRoots, env.bash, env.bashTimeout, env.search, b.stderr, root, b.proxy, env.forbidReadRoots, env.readPaths, env.sessionGuard, env.managedConfig, opts.FileOverlay, opts.TerminalRunner, env.sessionTemp, b.fileWriteReceipt)
-	addSystemOne(t.reg, cfg.Tools.Enabled, cfg, b.balanceClient)
-	b.wireMCP()
-	t.browser = bindMachineTools(t.reg, cfg.Browser, root, opts.BrowserSession)
+	addBuiltins(t.reg, cfg.Tools.Enabled, env.writeRoots, env.bash, env.bashTimeout, env.search, b.stderr, root, b.proxy, env.forbidReadRoots, env.readRoots, env.readPaths, env.sessionGuard, env.managedConfig, opts.FileOverlay, opts.TerminalRunner, env.sessionTemp, b.fileWriteReceipt)
+	addViewImage(t.reg, cfg, b.model.entry, env, root)
+	addPresentFiles(t.reg, cfg, env, root)
+	bindFileViews(t.reg, cfg.Tools.ChangedFilesProtected())
+	t.peerLink, t.peerTools = peerTools(t.reg, cfg)
+	t.settingLink = addSettingTool(t.reg, cfg)
+	addSystemOne(t.reg, cfg.Tools.Enabled, cfg, b.keyedClient)
+	addAdvisor(t.reg, cfg, b.proxy, b.sink)
+	addWebSearch(t.reg, cfg, b.proxy, b.sink)
+	addFetchChain(t.reg, cfg, b.proxy, b.sink)
+	b.addBestOf()
+	if cfg.Agent.CodeMode {
+		t.reg.Add(script.New())
+	}
+	if err := b.wireMCP(); err != nil {
+		return err
+	}
+	t.browser = bindMachineTools(t.reg, cfg, root, opts.BrowserSession, opts.ComputerDriver)
 	b.timer.mark("mcp")
 
 	t.maxSteps = max(opts.MaxSteps, 0)
@@ -219,74 +395,70 @@ func (b *builder) wireTools() error {
 	if err != nil {
 		return err
 	}
+	t.subagents = subagentStore
 	if subagentStore != nil {
 		subagentStore.WithDestroyedChecker(b.session.jobs.IsDestroying)
 	}
 	// One gate for the executor and every sub-agent, so a child is never a
 	// weaker path around the parent. A headless caller always names a mode:
 	// Ask fails closed, Auto allows writer fallbacks, DontAsk denies (#6927).
-	t.policy = permission.New(cfg.Permissions.Mode, cfg.Permissions.Allow, cfg.Permissions.Ask, cfg.Permissions.Deny).
+	mediaAsk := askWithUnsandboxedMedia(cfg.Permissions.Allow, cfg.Permissions.Ask, cfg.Permissions.Deny, env.bash.Enforce() && sandbox.AvailableFor(env.bash))
+	t.policy = permission.New(cfg.Permissions.Mode, cfg.Permissions.Allow, mediaAsk, cfg.Permissions.Deny).
 		WithAllowDynamicBashFallback(cfg.Permissions.AllowDynamicBash).
+		WithAskOnOrigin(cfg.Permissions.AskOnExternalOrigin).
 		WithSessionAllow(opts.PermissionAllow)
 	t.gate = control.NewSharedHeadlessGate(t.policy, opts.HeadlessApprovalMode)
-	t.hooks, t.hookRunner = loadHooks(opts, b.roots, root, b.shell, b.sink)
+	t.hooks, t.hookRunner, err = loadHooks(opts, b.roots, root, b.shell, b.sink)
+	if err != nil {
+		return err
+	}
 
 	t.roles = roleWiring{cfg: cfg, roots: b.roots, resolver: b.providers.effective, extension: b.providers.extension,
-		proxy: b.proxy, sink: b.sink, gate: t.gate, reg: t.reg, keep: b.keep}
+		proxy: b.proxy, sink: b.sink, gate: t.gate, reg: t.reg, keep: b.keep, hooks: t.hookRunner, checkTargetAccess: t.env.targetAccessCheck()}
 	t.sub = newSubagentConfig(opts, cfg, b.model.entry, b.model.name, b.providers.effective, b.proxy, b.prompt.skillStore)
+	if t.sub.inheritedEffortDropped {
+		report(b.sink, event.Event{
+			Code:   event.NoticeCodeInheritedSubagentEffortDropped,
+			Level:  event.LevelWarn,
+			Text:   "Ignored the inherited subagent effort for the selected model.",
+			Detail: fmt.Sprintf("Inherited subagent effort %q is not supported by the current execution model %q; subagents that follow it will use the provider/model default effort. The persisted setting was not changed.", firstNonEmpty(cfg.Agent.RoleEfforts["subagent"], cfg.Agent.SubagentEffort), b.model.ref),
+		})
+	}
 	t.taskTool, t.skillRun = t.roles.delegation(delegationInputs{opts: opts, sub: t.sub, exec: b.execProv, entry: b.model.entry,
 		modelName: b.model.name, root: root, maxSteps: t.maxSteps, delivery: b.model.delivery, store: subagentStore,
-		session: b.session, bashEnforced: env.bash.Enforce})
+		session: b.session, bashEnforced: env.bash.Enforce, extraRoots: b.workspaceExtraRoots(), childTools: childViewImage(cfg, env, root)})
+	b.addIsolation()
 	registerSessionTools(t.reg, opts.Ablation, b.roots, b.session.dir, b.prompt.memory.Store)
+	if opts.NativeSurfaces {
+		t.reg.Add(agent.NewRenderSurfaceTool())
+	}
 
-	t.runners = skillRunners{readOnly: t.skillRun.runReadOnly, run: t.skillRun.run, profile: skillProfile(cfg)}
+	t.runners = skillRunners{readOnly: t.skillRun.runReadOnly, run: t.skillRun.run, profile: skillProfile(cfg, t.sub.inheritedFor)}
 	t.cmds = loadCommands(opts, root)
 	addInstallSourceTool(b.ctx, t.reg, t.host, root, b.balanceClient, t.specOptions, opts.Stderr)
-	registerSkillTools(t.reg, opts.Ablation, b.prompt.skillStore, b.prompt.implicitSkills, t.runners, t.cmds)
+	var liveCommands func() []command.Command
+	if opts.Composition.Live() {
+		liveCommands = func() []command.Command { return loadCommands(opts, root) }
+	}
+	registerSkillTools(t.reg, opts.Ablation, b.prompt.skillStore, b.prompt.implicitSkills, t.runners, t.cmds, liveCommands)
 
-	t.caps = newCapabilitySurface(b.ctx, cfg, root, t.specOptions, t.host, t.reg, b.prompt.skillStore, b.model.profile, t.mcp.enabled)
+	t.caps = newCapabilitySurface(b.ctx, cfg, root, t.specOptions, t.host, t.reg, b.prompt.skillStore, b.model.profile, t.mcp.enabled, t.mcp.extra...)
+	if opts.Composition.Live() {
+		t.caps.runtime.ConfigureComposition(opts.Composition.Resolved)
+		t.caps.runtime.ConfigureInventorySource(b.liveMCPInventory())
+		t.reg.BindMCPRuntime(t.caps.runtime.BindRegisteredTool)
+	}
+	if _, ok := t.reg.Get(plugin.ResourceReadToolName); ok {
+		t.reg.Add(t.caps.runtime.ResourceReadTool())
+	}
 	t.skillRun.capRuntime = t.caps.runtime
 	addExtensionTools(t.reg, b.ext.mgr, b.ext.warn)
+	if opts.Composition.Live() {
+		t.caps.refresh = func() { addExtensionTools(t.reg, b.ext.mgr, b.ext.warn) }
+	}
 	t.reg.Add(t.caps.proxy)
 	gateSkillsOnCatalog(b.prompt.skillStore, t.caps.catalog)
 	return nil
-}
-
-// wireMCP registers the MCP servers and LSP tools and chains their shutdown
-// into the controller's cleanup. A caller-supplied shared host lets
-// controllers for one workspace reuse running MCP processes; its owner closes it.
-func (b *builder) wireMCP() {
-	opts, cfg, root, t := b.opts, b.cfg, b.root, &b.tools
-	t.host = opts.SharedHost
-	if t.host == nil {
-		t.host = plugin.NewHost()
-	}
-	// A lazy server connects in the background; without a status sink every
-	// status view keeps showing what it saw at boot.
-	t.host.SetStatusSink(opts.Sink)
-	t.specOptions = pluginspec.Options{
-		DefaultStartupTimeout: time.Duration(cfg.MCPStartupTimeoutSeconds()) * time.Second,
-		DefaultCallTimeout:    time.Duration(cfg.MCPCallTimeoutSeconds()) * time.Second,
-		LaunchManager:         mcplaunch.ForWorkspace(b.roots.Home(), root),
-		ConfigSource:          "workspace_config",
-		StateHome:             b.roots.Home(),
-		WriterRoots:           t.env.writeRoots,
-		ForbidReadRoots:       t.env.forbidReadRoots,
-		Network:               t.env.network,
-		PackageOwners:         pluginspec.PackageOwners(cfg),
-		OAuthHTTPClient:       b.balanceClient,
-	}
-	t.mcp = resolveMCPSpecs(opts, cfg, root, t.specOptions)
-	t.configSpecs = registerMCPTools(b.ctx, t.host, t.reg, t.mcp, b.sink)
-	b.cleanup = t.host.Close
-	if opts.SharedHost != nil {
-		b.cleanup = func() {}
-	}
-	// The LSP manager is session-scoped: its servers stop with the controller.
-	if t.lsp = registerLSP(t.reg, cfg, root); t.lsp != nil {
-		prev, mgr := b.cleanup, t.lsp
-		b.cleanup = func() { prev(); mgr.Close() }
-	}
 }
 
 // controller builds the executor, the optional planner around it, and the
@@ -299,7 +471,11 @@ func (b *builder) controller() (*control.Controller, error) {
 		return nil, err
 	}
 	ctrlOpts := b.controllerOptions(runner, executor, label)
-	ctrl := withWindowPosture(control.New(ctrlOpts), b.cfg, b.opts.StatsSource)
+	ctrl := withWindowPosture(control.New(ctrlOpts), b.cfg, b.opts.StatsSource, b.sink)
+	if b.opts.NewConversation && b.cfg.DefaultPlanMode() {
+		ctrl.SetPlanMode(true)
+	}
+	reportDormantPermissionRules(b.sink, b.cfg, ctrl)
 	b.ext.publish(ctrl)
 	// Task and fleet sub-agents share the root agent's recovery checkpoint.
 	if t.taskTool != nil {
@@ -317,33 +493,53 @@ func (b *builder) controller() (*control.Controller, error) {
 	router := t.roles.semanticRouter(t.sub, b.execProv, b.model.ref, b.model.entry.Price, t.caps.audit)
 	ctrl.WireCapabilityRouting(b.cfg.Plugins, t.caps.specs, router, t.caps.audit)
 	ctrl.SetCapabilityProxyRouting(true)
+	reportKeptTools(b.sink, t.reg.DisableTools(b.cfg.DisabledTools()))
 	// Every role setting sees one provider-visible surface, fixed before the
 	// snapshot freezes registry schemas for cache diagnostics.
-	applyUnifiedProviderToolSurface(t.reg, b.opts.GoalTurnsUnreachable, b.opts.Ablation)
+	if b.opts.Observe == nil {
+		pinned := pinnedMCPServers(t.mcp.alwaysLoad, t.mcpSchemaKnown)
+		if b.opts.Composition.Live() {
+			pinned = nil
+		}
+		applyUnifiedProviderToolSurface(t.reg, b.opts.GoalTurnsUnreachable, b.opts.Ablation, pinned)
+	}
+	if binding := b.opts.Composition; binding != nil {
+		if binding.Digest != "" {
+			t.reg.SetProviderVisibleTools(binding.ToolSurface)
+		} else if !binding.Live() && binding.Version.Definition.Tools.Mode == "select" {
+			t.reg.SetProviderVisibleTools(nil)
+		}
+	}
 	return ctrl, nil
 }
 
 func (b *builder) executor() *agent.Agent {
 	cfg, entry, t := b.cfg, b.model.entry, &b.tools
 	triageProv, triageRef, triagePrice := resolveTriage(cfg, b.model.ref, b.proxy)
-	return agent.New(b.execProv, t.reg, newObservedSession(b.prompt.prompt), agent.Options{
+	ag := agent.New(b.execProv, t.reg, newObservedSession(b.prompt.prompt), agent.Options{
 		MaxSteps:       t.maxSteps,
 		MaxStepsKey:    b.opts.MaxStepsKey,
 		Temperature:    cfg.Agent.Temperature,
 		TaskBudget:     taskBudgetFromConfig(cfg),
+		ProgressWatch:  control.ProgressWatchFromConfig(cfg),
 		Pricing:        entry.Price,
 		ModelRef:       b.model.ref,
 		TriageProvider: triageProv, TriageModelRef: triageRef, TriagePricing: triagePrice,
-		Gate:  t.gate,
-		Hooks: t.hookRunner,
-		Jobs:  b.session.jobs,
+		ScreenExternalContent:   cfg.Agent.ScreenExternalContent,
+		MaxPerseverationRetries: perseverationRetries(cfg, entry),
+		Gate:                    t.gate,
+		CheckTargetAccess:       t.roles.checkTargetAccess,
+		Hooks:                   t.hookRunner,
+		Jobs:                    b.session.jobs,
 		// Reserving writes at the executor entry covers every writer, late MCP
 		// adds included, without wrapping tool schemas.
 		WriteScheduler:     t.sub.scheduler,
-		WriteWorkspaceRoot: b.root, WorkspaceVCS: b.prompt.workspaceVCS, RenderRoot: renderRoot(t.browser, entry, b.root),
+		WriteWorkspaceRoot: b.root, ExtraWorkspaceRoots: b.workspaceExtraRoots(), WorkspaceScanLimit: b.opts.WorkspaceScanLimit, WorkspaceVCS: b.prompt.workspaceVCS, WorkspaceUnversioned: b.prompt.workspaceVCS == "", RenderRoot: renderRoot(t.browser, entry, b.root),
 		ProjectChecks: b.prompt.projectChecks, ProjectSensitivePaths: b.prompt.sensitivePaths,
+		EvidenceSeal:                 t.env.evidenceSeal,
 		AgentPreset:                  b.model.preset,
 		DeliveryProfile:              b.model.delivery,
+		WaiveOwedChecks:              cfg.HostVerificationOff(),
 		Ablation:                     b.opts.Ablation,
 		WorkspaceLease:               b.session.lease,
 		CapabilityLedger:             t.caps.ledger,
@@ -358,40 +554,68 @@ func (b *builder) executor() *agent.Agent {
 		ReasoningLanguage:            cfg.ReasoningLanguage(),
 		SubagentDepth:                0,
 		MaxSubagentDepth:             t.sub.maxDepth,
-		MissingReasoningWarnStateDir: config.MissingReasoningWarnStateDir(),
+		ProviderRetries:              agent.ProviderRetriesFromConfig(cfg.Agent.MaxProviderRetries),
+		MissingReasoningWarnStateDir: b.roots.MissingReasoningWarnStateDir(),
 	}, b.sink)
+	ag.SetNativeVideo(nativeVideoSource(entry, cfg))
+	return ag
+}
+
+// perseverationRetries resolves the degenerate-generation-loop budget for the
+// active provider: the provider's own setting when it has one, else the global
+// [progress_watch].perseveration_retries default. Unset reports; negative
+// disables.
+func perseverationRetries(cfg *config.Config, entry *config.ProviderEntry) *int {
+	if entry != nil && entry.PerseverationRetries != nil {
+		return entry.PerseverationRetries
+	}
+	return cfg.ProgressWatch.PerseverationRetries
 }
 
 func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, label string) control.Options {
 	opts, cfg, root, entry, t := b.opts, b.cfg, b.root, b.model.entry, &b.tools
 	specOptions := t.specOptions
+	providerIdentity := ResolveProviderBuildIdentity(entry, b.proxy, nil)
 	return control.Options{
+		Observe:                        b.observeRun(),
 		TaskBudget:                     taskBudgetFromConfig(cfg),
 		GoalTokenBudget:                cfg.Agent.GoalTokenBudget,
 		Runner:                         runner,
 		Executor:                       executor,
 		Sink:                           b.sink,
+		QuoteContext:                   b.quoteContext,
 		Policy:                         t.policy,
 		SubagentGate:                   t.gate,
 		Label:                          label,
 		ModelRef:                       b.model.ref,
+		Effort:                         providerIdentity.Effort,
+		ProviderFingerprint:            providerIdentity.Fingerprint,
+		ModelModes:                     config.RequestModes(entry),
+		ModelEntry:                     entry,
 		SystemPrompt:                   b.prompt.prompt,
 		SessionDir:                     b.session.dir,
+		Peers:                          peersOptions(cfg, t.peerLink, t.peerTools),
+		Subagents:                      subagentReader(t.subagents),
+		Settings:                       t.settingLink,
 		Host:                           t.host,
 		Commands:                       t.cmds,
 		Skills:                         b.prompt.skills,
 		AllSkills:                      b.prompt.allSkills,
 		SkillStore:                     b.prompt.skillStore,
 		AllSkillStore:                  b.prompt.allSkillStore,
-		DisableImplicitSkillInvocation: !b.prompt.implicitSkills,
+		Clock:                          b.clock(),
+		DisableImplicitSkillInvocation: !b.prompt.implicitSkills || b.opts.Observe != nil,
 		SkillRunner:                    t.runners.run,
 		ReadOnlySkillRunner:            t.runners.readOnly,
+		SideFactory:                    t.skillRun.newSide,
 		SkillProfile:                   t.runners.profile,
 		Hooks:                          t.hookRunner,
 		Memory:                         b.prompt.memory,
 		// Read at Close time: freeze chains the extension runtime set onto it.
-		Cleanup:               func() { b.cleanup() },
-		Balance:               opts.BalanceStore.Cache(b.balanceClient, entry.BalanceURL, entry.APIKey()),
+		Cleanup:               func() { defer b.closeLifetime(); b.cleanup() },
+		Balance:               opts.BalanceStore.Cache(b.keyedClient, entry.BalanceURL, billing.Format(entry.BalanceFormat), entry.APIKey()),
+		Tariff:                func(at time.Time) (pricing.Tariff, bool) { return b.cfg.LiveTariff(b.model.ref, at) },
+		Feedback:              control.FeedbackOptions{Service: feedbackService(b.roots.Home(), b.proxy, opts.AccountsURL), ProviderKind: feedbackProviderKind(entry), Surface: opts.FeedbackSurface},
 		Jobs:                  b.session.jobs,
 		TaskStore:             opts.TaskStore,
 		WorkspaceLease:        b.session.lease,
@@ -403,6 +627,7 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 				return
 			}
 			spec.LaunchManager = specOptions.LaunchManager
+			spec.Package = strings.TrimSpace(specOptions.PackageOwners[spec.Name])
 			if strings.TrimSpace(spec.ConfigSource) == "" {
 				spec.ConfigSource = specOptions.ConfigSource
 			}
@@ -413,10 +638,14 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		},
 		CapabilityRuntime:      t.caps.runtime,
 		WorkspaceRoot:          root,
+		WorkspaceRepo:          b.repo,
+		Posture:                control.PostureEvidence{WritesConfined: sandbox.IntegrityEnforced(t.env.bash), Home: b.roots.Home()},
 		ExternalFolderToolRefs: t.env.readPaths,
 		ResponseLanguage:       cfg.ResponseLanguage(),
 		ReasoningLanguage:      cfg.ReasoningLanguage(),
+		TurnNarration:          cfg.TurnNarration(),
 		DisableColdResumePrune: !cfg.ColdResumePruneEnabled(),
+		EmbeddedDiffDetection:  cfg.EmbeddedDiffDetectionEnabled(),
 		Shell:                  b.shell,
 		ApprovalTimeout:        opts.ApprovalTimeout,
 		RuntimeProfile:         b.model.profile,
@@ -440,6 +669,7 @@ func (b *builder) controllerOptions(runner agent.Runner, executor *agent.Agent, 
 		RecoveryHeadless: recoveryHeadlessMode(opts),
 		GoalEvaluator:    goalEvaluator(cfg, b.model.ref, b.proxy, b.sink),
 		PromptRefiner:    promptRefiner(entry, b.proxy, b.sink),
+		CommitMessenger:  commitMessenger(entry, b.proxy, b.sink),
 	}
 }
 
@@ -461,8 +691,8 @@ func (b *builder) freeze(ctrl *control.Controller) (*BuildResult, error) {
 		session:            ext.session(),
 		ui:                 ext.hub,
 		onWarning:          ext.warn,
+		onSidecarDown:      ext.sidecarDown,
 		skipPromptStrategy: shouldSkipPromptStrategy(b.opts.PreviousPlan),
-		previousDispatcher: b.opts.PreviousDispatcher,
 	}, ext.mgr)
 	// Assembly owns the sidecars on every path: closed inside, or in the runtime set.
 	b.pendingMgr = nil
@@ -477,6 +707,7 @@ func (b *builder) freeze(ctrl *control.Controller) (*BuildResult, error) {
 		// The failed assembly already retired the sidecars; bind neither hub nor manager.
 		extensionMgr = nil
 	}
+	installSidecarStreamRouters(extensionMgr, b.providers.extension)
 	providerResolver := b.providers.base
 	if b.providers.extension != nil {
 		providerResolver = b.providers.extension
@@ -498,6 +729,12 @@ func (b *builder) freeze(ctrl *control.Controller) (*BuildResult, error) {
 			ctrl.ApplyExtensionSystemPrompt(final)
 		}
 	}
+	ctrl.SealObserveSurface()
+	ctrl.ConfigureCompositions(b.roots.Home(), nil)
+	if err := b.finishComposition(ctrl, snap); err != nil {
+		ctrl.ReleaseResources()
+		return nil, err
+	}
 	assembly := &ReusedAssembly{
 		SystemPrompt:            b.prompt.prompt,
 		Skills:                  b.prompt.skills,
@@ -508,5 +745,5 @@ func (b *builder) freeze(ctrl *control.Controller) (*BuildResult, error) {
 		Memory:                  b.prompt.memory,
 		ProjectChecks:           b.prompt.projectChecks, ProjectSensitivePaths: b.prompt.sensitivePaths,
 	}
-	return finalizeBuildResult(b.roots, &BuildResult{Controller: ctrl, Snapshot: snap, Runtime: runtimeSet, Owner: b.owner, Extensions: extensionMgr, Dispatcher: dispatcher, ExtensionUI: hub, ProviderResolver: providerResolver, BaseProviderResolver: b.providers.base, Assembly: assembly, Phases: b.timer.done("assemble")}, !b.opts.deferPublish), nil
+	return finalizeBuildResult(b.roots, &BuildResult{ComputerDriver: b.opts.ComputerDriver, Controller: ctrl, Snapshot: snap, Runtime: runtimeSet, Owner: b.owner, Extensions: extensionMgr, Dispatcher: dispatcher, ExtensionUI: hub, ProviderResolver: providerResolver, BaseProviderResolver: b.providers.base, Assembly: assembly, Phases: b.timer.done("assemble")}, !b.opts.deferPublish), nil
 }

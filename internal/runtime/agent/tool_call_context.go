@@ -2,9 +2,11 @@ package agent
 
 import (
 	"context"
+	"io"
 	"reasonix/internal/runtime/langpref"
 
 	"reasonix/internal/contract/event"
+	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/tool"
 	"reasonix/internal/safety/evidence"
 	"reasonix/internal/safety/sandbox"
@@ -18,13 +20,18 @@ import (
 // preferences it must honor. Every binding is optional, so a degraded
 // assembly loses the capability rather than the call.
 func (a *Agent) toolCallContext(ctx context.Context, plan *toolCallPlan) context.Context {
-	cctx := tool.WithContextCompressor(WithCallContext(ctx, plan.call.ID, a.svc.sink, a.svc.asker, a.PlanningPhase()), a)
+	cctx, spawned := tool.WithProvenanceSink(ctx)
+	plan.spawned = spawned
+	cctx = tool.WithContextCompressor(WithCallContext(cctx, plan.call.ID, a.svc.sink, a.svc.asker, a.PlanningPhase()), a)
 	cctx = tool.WithContextRecaller(cctx, a)
 	cctx = tool.WithContextBudgetReporter(cctx, a)
+	cctx = tool.WithTranscriptReader(cctx, a)
 	cctx = WithSubagentDepth(cctx, a.subagentDepth)
+	cctx = WithRequestEffort(cctx, a.sess.effort.get())
 	if a.task.ledger != nil {
 		cctx = evidence.WithLedger(cctx, a.task.ledger)
 		cctx = evidence.WithSessionMessages(cctx, a.sess.conversation.Snapshot)
+		cctx = evidence.WithWorkspaceRoot(cctx, a.writeWorkspaceRoot)
 		if a.deliveryProfile {
 			cctx = evidence.WithDeliveryProfile(cctx)
 		}
@@ -40,12 +47,25 @@ func (a *Agent) toolCallContext(ctx context.Context, plan *toolCallPlan) context
 	}
 	if a.svc.jobs != nil {
 		cctx = jobs.WithManager(cctx, a.svc.jobs)
+		session, manager := jobs.SessionFromContext(cctx), a.svc.jobs
+		cctx = tool.WithBackgroundStarter(cctx, func(kind, label string, run func(context.Context, io.Writer) (string, error)) string {
+			return manager.StartForSession(session, kind, label, run).ID
+		})
 	}
 	if a.svc.sandboxEscape != nil {
 		cctx = sandbox.WithEscapeApprover(cctx, a.svc.sandboxEscape)
 	}
 	if a.svc.configWrite != nil {
 		cctx = tool.WithConfigWriteApprover(cctx, a.svc.configWrite)
+	}
+	cctx = tool.WithNativeVideo(cctx, a.svc.nativeVideo)
+	cctx = tool.WithUserAddresses(cctx, a.userAddresses)
+	if a.svc.paidSearch != nil {
+		cctx = tool.WithPaidSearchApprover(cctx, a.svc.paidSearch)
+	}
+	// Whoever answers this run's questions also fills an external party's form.
+	if e, ok := a.svc.asker.(tool.Elicitor); ok {
+		cctx = tool.WithElicitor(cctx, e)
 	}
 	if v := a.responseLanguage.Load(); v != nil {
 		if lang, ok := v.(string); ok {
@@ -65,4 +85,10 @@ func (a *Agent) toolCallContext(ctx context.Context, plan *toolCallPlan) context
 		a.svc.sink.Emit(event.Event{Kind: event.ToolProgress, Tool: event.Tool{ID: callID, Output: chunk}})
 	})
 	return cctx
+}
+
+// Transcript is a copy of this agent's conversation, for a tool that has to
+// read all of it; see tool.TranscriptReader.
+func (a *Agent) Transcript() []provider.Message {
+	return a.sess.conversation.Snapshot()
 }
