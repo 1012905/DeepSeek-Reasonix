@@ -19,6 +19,9 @@
 .projects-open:hover:not(:disabled), .projects-manage:hover { background: var(--overlay); }
 .projects-open:focus-visible, .projects-manage:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .rail > .projects-manage { width: calc(var(--rail-open) - 30px); margin: 0 15px 8px; padding-top: 10px; border-top: 1px solid var(--hair); border-radius: 0; }
+.rail > .projects-manage { color: var(--muted); font: 500 calc(11px * var(--fs-scale, 1))/1.35 var(--ui); }
+.rail > .projects-manage:hover { color: var(--text); }
+.rail > .projects-manage > .studio-icon:first-child { width: 14px; height: 14px; }
 .projects-manage > span { flex: 1; }
 .projects-manage > .studio-icon:last-child { width: 12px; color: var(--faint); }
 .rail .wsnode { padding: 0 0 6px; }
