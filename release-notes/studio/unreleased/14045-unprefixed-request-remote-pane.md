@@ -1,0 +1,2 @@
+- 修复：只打开了远程会话窗格时，直接访问本机端口（不带窗格前缀）的请求没有应答，现在会转发给远端内核；本地窗格仍然优先。关联 #14045。
+- Fixed: a request made straight to the port with no pane prefix got no answer while only a remote pane was open; it now goes to the far kernel, and a local pane still takes precedence. Refs #14045.
