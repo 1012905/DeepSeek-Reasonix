@@ -576,6 +576,7 @@ export const ACTIONS: UIAction[] = [
   { id: "theme.remove", kind: "destructive", target: "entity", proof: "authority-effect" },
 
   // Usage changes what report is read, not canonical session state.
+  { id: "usage.range.today", kind: "view", target: "none", proof: "interaction" },
   { id: "usage.range.start", kind: "view", target: "none", proof: "interaction" },
   { id: "usage.range.end", kind: "view", target: "none", proof: "interaction" },
   { id: "usage.range.month", kind: "view", target: "none", proof: "interaction" },
