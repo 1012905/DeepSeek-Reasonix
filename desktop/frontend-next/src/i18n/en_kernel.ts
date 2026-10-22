@@ -41,6 +41,7 @@ export const EN_KERNEL: Record<string, string> = {
   "自动命名失败，原标题未更改，请重试": "Automatic naming failed. The original title is unchanged. Please try again",
   "自动命名超时：标题模型没有及时回答，原标题未更改，请稍后重试": "Automatic naming timed out: the title model did not answer in time. The original title is unchanged. Please try again later",
   "自动命名失败：标题模型没有返回任何文字，原标题未更改": "Automatic naming failed: the title model returned no text. The original title is unchanged",
+  "自动命名失败：标题模型把输出额度都花在思考上，没有给出标题。请在设置里把“自动命名”换成能关闭思考的模型，原标题未更改": "Automatic naming failed: the title model spent its output budget thinking and gave no title. In Settings, pick a naming model that can turn thinking off. The original title is unchanged",
   "自动命名失败：标题模型的接口拒绝了请求（HTTP {status}）{detail}": "Automatic naming failed: the title model's endpoint refused the request (HTTP {status}) {detail}",
   "会话标题保存失败，请重试": "The session title could not be saved. Please try again",
 

@@ -69,6 +69,7 @@ const SAID: Record<string, string> = {
   "session.title_failed": "自动命名失败，原标题未更改，请重试",
   "session.title_timeout": "自动命名超时：标题模型没有及时回答，原标题未更改，请稍后重试",
   "session.title_no_text": "自动命名失败：标题模型没有返回任何文字，原标题未更改",
+  "session.title_thought_only": "自动命名失败：标题模型把输出额度都花在思考上，没有给出标题。请在设置里把“自动命名”换成能关闭思考的模型，原标题未更改",
   "session.title_refused": "自动命名失败：标题模型的接口拒绝了请求（HTTP {status}）{detail}",
   "session.title_save_failed": "会话标题保存失败，请重试",
 
