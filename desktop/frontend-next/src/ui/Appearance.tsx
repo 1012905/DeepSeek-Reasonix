@@ -22,6 +22,7 @@ import { NavEntriesSection } from "./NavEntriesSection";
 import { NavRailSection } from "./NavRailSection";
 import { GraphicsSection } from "./GraphicsSection";
 import { SendShortcut } from "./SendShortcut";
+import { KeysSheet } from "./KeysSheet";
 import { SessionTabsSetting } from "./SessionTabsSetting";
 import { EscStopSetting } from "./EscStopSetting";
 import { ThemeImport } from "./ThemeImport";
@@ -573,6 +574,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
       <NewAnswerSection />
       <GraphicsSection />
       <SendShortcut />
+      <KeysSheet />
       <EscStopSetting />
       <SessionTabsSetting />
       <Folding />
