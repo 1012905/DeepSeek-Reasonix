@@ -170,7 +170,7 @@ func TestPreToolAccessReadScopeAndAllowedEdit(t *testing.T) {
 	a := New(nil, reg, sessionstore.NewSession(""), Options{CheckTargetAccess: ws.TargetAccessCheck()}, event.Discard)
 	args, _ := json.Marshal(map[string]string{"path": path, "old_string": "outside", "new_string": "changed"})
 	out := a.executeOne(context.Background(), &a.turn, provider.ToolCall{Name: "edit_file", Arguments: string(args)})
-	if !out.blocked || !strings.Contains(out.output, "outside the folders this session may read") || !strings.Contains(out.output, path) || out.refusalCode != builtin.CodeReadOutsideScope {
+	if !out.blocked || !strings.Contains(out.output, "outside the folders this session may read") || !strings.Contains(out.output, filepath.Base(path)+"`") || out.refusalCode != builtin.CodeReadOutsideScope {
 		t.Fatalf("read scope not enforced: %+v", out)
 	}
 	local := filepath.Join(root, "note.txt")
