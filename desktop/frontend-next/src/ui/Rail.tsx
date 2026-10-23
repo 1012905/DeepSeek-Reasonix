@@ -273,10 +273,13 @@ export function Rail({ marks, total, scroll, flow, onJump, bound, scope }: Props
   }, [tops, marks]);
 
   // What is drawn: one line per question while the spacing holds, a folded run
-  // per line once it does not. `at` indexes this list either way.
+  // per line once it does not. `at` indexes this list either way. `groups` is a
+  // state slice, so after a rewind drops questions it can still name an index
+  // the shorter `marks` no longer has; the fold is filtered to what exists.
   const view: RailView[] = useMemo(
-    () => groups ?? drawn.map((i) => ({ top: tops[i] ?? 0, from: i, to: i, single: true })),
-    [groups, drawn, tops],
+    () => (groups ?? drawn.map((i) => ({ top: tops[i] ?? 0, from: i, to: i, single: true })))
+      .filter((v) => v.from < marks.length),
+    [groups, drawn, tops, marks.length],
   );
 
   // The pointer's y decides which mark it means. Hitting a three-pixel line is
