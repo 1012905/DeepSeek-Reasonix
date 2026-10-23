@@ -96,35 +96,46 @@ try {
       return { same: Math.abs(a.width - r.width) <= 1 && Math.abs(a.height - r.height) <= 1, radius: getComputedStyle(ini).borderRadius, rowRadius: getComputedStyle(row).borderRadius };
     });
     check(`${scheme}: the account avatar is one rounded square, not a circle inside another shape`, avatar !== null && avatar.same && avatar.radius === avatar.rowRadius, JSON.stringify(avatar));
-    const tabBoxes = await page.evaluate(() => [...document.querySelectorAll(".studio-session-segments button")].map((e) => {
-      const r = e.getBoundingClientRect();
-      return { x: r.x, y: r.y, width: r.width, height: r.height };
-    }));
-    const tabGaps = [];
-    for (const box of tabBoxes) {
-      const shot = await page.screenshot({ clip: box });
-      tabGaps.push(await page.evaluate(async (b64) => {
-        const img = new Image();
-        img.src = `data:image/png;base64,${b64}`;
-        await img.decode();
-        const c = document.createElement("canvas");
-        c.width = img.width; c.height = img.height;
-        const g = c.getContext("2d");
-        g.drawImage(img, 0, 0);
-        const d = g.getImageData(0, 0, c.width, c.height).data;
-        const bg = [d[(c.width >> 1) * 4], d[(c.width >> 1) * 4 + 1], d[(c.width >> 1) * 4 + 2]];
-        let top = -1, bottom = -1;
-        for (let y = 0; y < c.height; y++) {
-          for (let x = Math.floor(c.width * 0.2); x < Math.floor(c.width * 0.8); x++) {
-            const i = (y * c.width + x) * 4;
-            if (Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > 90) { if (top < 0) top = y; bottom = y; break; }
+    const tabGapsAt = async () => {
+      const boxes = await page.evaluate(() => [...document.querySelectorAll(".studio-session-segments button")].map((e) => {
+        const r = e.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      }));
+      const gaps = [];
+      for (const box of boxes) {
+        const shot = await page.screenshot({ clip: box });
+        gaps.push(await page.evaluate(async (b64) => {
+          const img = new Image();
+          img.src = `data:image/png;base64,${b64}`;
+          await img.decode();
+          const c = document.createElement("canvas");
+          c.width = img.width; c.height = img.height;
+          const g = c.getContext("2d");
+          g.drawImage(img, 0, 0);
+          const d = g.getImageData(0, 0, c.width, c.height).data;
+          const mid = (c.width >> 1) * 4;
+          const bg = [d[mid], d[mid + 1], d[mid + 2]];
+          let top = -1, bottom = -1;
+          for (let y = 0; y < c.height; y++) {
+            for (let x = Math.floor(c.width * 0.2); x < Math.floor(c.width * 0.8); x++) {
+              const i = (y * c.width + x) * 4;
+              if (Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > 90) { if (top < 0) top = y; bottom = y; break; }
+            }
           }
-        }
-        return { above: top / 4, below: (c.height - 1 - bottom) / 4 };
-      }, shot.toString("base64")));
+          return { above: top / 4, below: (c.height - 1 - bottom) / 4 };
+        }, shot.toString("base64")));
+      }
+      return gaps.reduce((w, g) => (Math.abs(g.above - g.below) > Math.abs(w.above - w.below) ? g : w), gaps[0]);
+    };
+    for (const scale of [0.9, 1, 1.15, 1.3]) {
+      await page.evaluate((f) => document.documentElement.style.setProperty("--fs-scale", String(f)), scale);
+      await page.waitForTimeout(120);
+      const worst = await tabGapsAt();
+      check(`${scheme}: at text size ${scale} each session tab's text has equal space above and below`, Math.abs(worst.above - worst.below) <= 0.75, JSON.stringify(worst));
     }
-    const worstTab = tabGaps.reduce((w, g) => (Math.abs(g.above - g.below) > Math.abs(w.above - w.below) ? g : w), tabGaps[0]);
-    check(`${scheme}: each session tab's text has equal space above and below`, tabGaps.length === 4 && Math.abs(worstTab.above - worstTab.below) <= 0.75, JSON.stringify(worstTab));
+    await page.evaluate(() => document.documentElement.style.removeProperty("--fs-scale"));
+    const pillY = await page.evaluate(() => document.querySelector(".studio-session-segments").getBoundingClientRect().y);
+    check(`${scheme}: the session pill sits on a whole pixel, so its fill has equal edges above and below`, Number.isInteger(pillY), `y ${pillY}`);
     const looks = new Set(seen.map((r) => r.look));
     check(`${scheme}: every row's label has one size, weight and colour`, looks.size === 1, seen.map((r) => `${r.name} ${r.look}`).join("; "));
     const fill = seen.find((r) => r.name === "新建会话")?.fill ?? "";
