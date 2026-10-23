@@ -2029,7 +2029,7 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
    about. One row until asked: the composer already carries the run line, the
    outbox and a toolbar, and a plan opened over all of them pushes the box a
    person types in off a laptop screen. */
-.studio-todo { margin: 0 0 5px; animation: todo-in var(--m-card) var(--ease-out) both; }
+.studio-todo { margin: 0 0 5px; position: relative; animation: todo-in var(--m-card) var(--ease-out) both; }
 @keyframes todo-in { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
 .studio-todo-sum {
   width: 100%; min-height: 26px; display: flex; align-items: center; gap: 7px;
@@ -2045,8 +2045,8 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 .studio-todo-fold { transition: transform var(--m-line) }
 .studio-todo[data-open] .studio-todo-fold { transform: rotate(180deg) }
 .studio-todo-body {
-  max-height: 28vh; overflow-y: auto; overscroll-behavior: contain; padding-top: 2px;
-  animation: todo-in var(--m-card) var(--ease-out) both;
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 8; max-height: min(46vh, 380px); overflow-y: auto; overscroll-behavior: contain;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-float); animation: todo-in var(--m-card) var(--ease-out) both;
 }
 .view-action { position: relative; }
 .view-action[aria-pressed="true"] { background: var(--overlay); color: var(--text); }
