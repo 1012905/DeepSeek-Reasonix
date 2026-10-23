@@ -591,6 +591,8 @@ declare global {
     // conversations really cost.
     __feed: (ev: WireEvent) => void;
     __panes: () => number;
+    // Answer every completion request with this one, as the kernel would for a command typed in full.
+    __complete: (answer: import("../src/port/port").Completion) => void;
     __previewFiles: (files: Record<string, { kind: PreviewInfo["kind"]; text: string }>) => void;
     // Sub-agent runs the kernel would list, each with the conversation it would return.
     __subagents: (runs: { run: SubagentRun; messages: HistoryMessage[] }[]) => void;
@@ -626,6 +628,7 @@ window.__subagents = (runs) => hub.feeds.forEach((port) => {
     return { run: found.run, messages: found.messages, after: 0, next: found.messages.length, total: found.messages.length, live: false };
   };
 });
+window.__complete = (answer) => hub.feeds.forEach((port) => { port.complete = async () => answer; });
 window.__refuse = (method, message) => {
   (hub as unknown as Record<string, unknown>)[method] = () => Promise.reject(new Error(message));
 };
