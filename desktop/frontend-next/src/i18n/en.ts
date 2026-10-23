@@ -1160,6 +1160,7 @@ export const EN: Record<string, string> = {
   "已过期": "Expired",
   "无法读取记忆。": "Could not read the memory.",
   "无法读取记忆": "Memory could not be read",
+  "这些记忆无法读取": "These memories could not be read",
   "如需手动记录，请在输入框中使用 {cmd} 命令。": "To write one yourself, use {cmd} in the composer.",
   "正在读取记忆…": "Loading memory…",
 

@@ -393,6 +393,7 @@ export const EN_KERNEL: Record<string, string> = {
   "尚未打开任何会话": "No session is open yet",
   "该会话未启用记忆": "Memory is not enabled for this session",
   "无法读取记忆目录，请检查权限或存储状态后重试": "Cannot read the memory directory; check permissions or storage and try again",
+  "这条记忆存在于磁盘上，但读取失败，已拒绝覆盖；请检查权限或存储状态后重试": "This memory exists on disk but could not be read, so the save was refused; check permissions or storage and try again",
   "这个会话不支持辅助提问": "Side questions are not available in this session",
   "这个辅助提问已经关闭，请重新打开": "That side question is closed; open it again",
   "上一个问题还在回答，请稍候再问": "The previous question is still being answered; wait a moment",
