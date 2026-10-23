@@ -789,6 +789,43 @@ func strandedSessionDestDir(srcDir, srcPath, base string, projectDir func(string
 	return "", ""
 }
 
+// copyBranchMetaSidecar copies <src>.meta to <dst>.meta when present so the
+// desktop sidebar keeps the session's title, topic, and tree position. Best
+// effort: a missing or unreadable sidecar just means the session shows with a
+// generated title.
+func copyBranchMetaSidecar(srcPath, dstPath string) error {
+	b, err := os.ReadFile(BranchMetaPath(srcPath))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	dstMeta := BranchMetaPath(dstPath)
+	if err := os.MkdirAll(filepath.Dir(dstMeta), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(dstMeta), ".branch.*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, dstMeta); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	return nil
+}
+
 func copySubagentArtifacts(srcSessionDir, dstSessionDir, parentSession string) error {
 	if sameDirPath(srcSessionDir, dstSessionDir) {
 		return nil
@@ -852,20 +889,6 @@ func copyFileIfExists(src, dst string) error {
 	}
 	_ = os.Chtimes(dst, info.ModTime(), info.ModTime())
 	return nil
-}
-
-// sameDirPath reports whether two directory paths resolve to the same location.
-func sameDirPath(a, b string) bool {
-	ca, cb := filepath.Clean(a), filepath.Clean(b)
-	if ca == cb {
-		return true
-	}
-	if aa, err := filepath.Abs(ca); err == nil {
-		if bb, err := filepath.Abs(cb); err == nil {
-			return aa == bb
-		}
-	}
-	return false
 }
 
 // reconstructSession folds the chronological event stream into the provider
