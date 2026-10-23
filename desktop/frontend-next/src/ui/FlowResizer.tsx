@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { t } from "../i18n";
 import { onRoomWidth } from "./viewport";
@@ -204,6 +204,28 @@ function FlowGrip({ edge, column }: { edge: "l" | "r"; column: Column }) {
   // had reached is dropped rather than committed — the reader never let go.
   useEffect(() => forget, [forget]);
 
+  // The keys walk the same path the hand does: an arrow towards this edge's own
+  // side of the window widens the column, so the left handle's ArrowLeft and the
+  // right handle's ArrowRight both mean "wider". Reversing it per handle would
+  // make one of the two teach the opposite of what dragging it does.
+  const key = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      const dir = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
+      if (dir) {
+        e.preventDefault();
+        const grow = edge === "l" ? -dir : dir;
+        const next = clamp(column.width + grow * (e.shiftKey ? 48 : 12), column.floor, column.ceiling);
+        if (next !== column.width) column.commit(next);
+        return;
+      }
+      if (e.key === "Home") {
+        e.preventDefault();
+        column.commit(column.floor);
+      }
+    },
+    [edge, column],
+  );
+
   return (
     <div
       className={`flowgrip flowgrip-${edge}`}
@@ -213,10 +235,13 @@ function FlowGrip({ edge, column }: { edge: "l" | "r"; column: Column }) {
       aria-valuenow={Math.round(column.width)}
       aria-valuemin={column.floor}
       aria-valuemax={column.ceiling}
+      tabIndex={0}
       data-action-pointerdown="appearance.reading-width"
       data-action-pointermove="appearance.reading-width"
       data-action-pointerup="appearance.reading-width"
       data-action-pointercancel="appearance.reading-width"
+      data-action-keydown="appearance.reading-width"
+      onKeyDown={key}
       onPointerDown={down}
       onPointerMove={move}
       onPointerUp={up}

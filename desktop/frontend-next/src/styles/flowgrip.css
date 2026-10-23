@@ -8,10 +8,17 @@
 .flowgrip-l { left: calc(var(--grip-left, 0px) - 7px) }
 .flowgrip-r { right: calc(var(--grip-right, 0px) - 7px) }
 .flowgrip::before {
-  content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px;
-  background: transparent; transition: background var(--m-card) var(--ease);
+  content: ""; position: absolute; top: 50%; left: 3px; width: 1px; height: 38px;
+  translate: 0 -50%;
+  background: var(--hair);
+  transition: background var(--m-card) var(--ease), height var(--m-card) var(--ease);
 }
-.flowgrip:hover::before { background: var(--border) }
-body[data-flowdrag] .flowgrip::before { background: var(--accent) }
+.flowgrip:hover::before { background: var(--border); height: 64px }
+.flowgrip:focus-visible { outline: none }
+.flowgrip:focus-visible::before { background: var(--focus); height: 64px }
+body[data-flowdrag] .flowgrip::before { background: var(--accent); height: 64px }
 body[data-flowdrag], body[data-flowdrag] * { cursor: col-resize }
 body[data-flowdrag] { user-select: none }
+@media (prefers-reduced-motion: reduce) {
+  .flowgrip::before { transition: none }
+}
