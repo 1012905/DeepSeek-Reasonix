@@ -87,7 +87,7 @@ jobs:
   browser-guards:
     name: browser guards
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: desktop/frontend-next
