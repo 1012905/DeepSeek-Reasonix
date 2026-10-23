@@ -137,9 +137,9 @@ export function ToolCard({
     if (bad) setOpen(null);
   }, [bad]);
   const open = touched ?? start;
-  // A delegate's child calls are the bulk of a long session, so a finished,
-  // closed card does not mount them; once opened they stay, so what the reader
-  // did inside (show all) survives closing it again.
+  // The body of a finished, closed card is most of what a long session holds in
+  // the page, so such a card does not mount it; once opened it stays, so what the
+  // reader did inside (show all) survives closing it again.
   const opened = useRef(false);
   useEffect(() => {
     if (open) opened.current = true;
@@ -154,7 +154,7 @@ export function ToolCard({
   // A call being watched in the activity group opens to its input even with no
   // output yet: a row that cannot open is the one that looks stuck.
   const hasBody = Boolean(
-    takeover || tool.diff || goal || tool.name === "todo_write" ||
+    takeover || tool.diff || goal || tool.argumentNormalization || tool.name === "todo_write" ||
     (tool.output && !echoed && children.length === 0) || tool.err || children.length || (activity && running && activityArgs),
   );
   const activityResult = Boolean(
@@ -190,6 +190,15 @@ export function ToolCard({
   );
   const body = (
     <div className="out">
+      {tool.argumentNormalization && (
+        <section className="activity-call-input">
+          <p>{t("参数格式已自动兼容")}</p>
+          <details>
+            <summary>{t("兼容前的原始输入")}</summary>
+            <pre>{prettyArgs(tool.argumentNormalization.original)}</pre>
+          </details>
+        </section>
+      )}
       {activity && (
         <>
           <div className="activity-call-meta">
@@ -312,9 +321,9 @@ export function ToolCard({
       </div>
       <div className="c">
         {hasBody ? (
-          <details className="tool-disclosure" data-lazy={children.length > 0 && !nestMounted ? "" : undefined} open={open} onToggle={(event) => event.currentTarget.open !== open && setOpen(event.currentTarget.open)}>
+          <details className="tool-disclosure" data-lazy={nestMounted ? undefined : ""} open={open} onToggle={(event) => event.currentTarget.open !== open && setOpen(event.currentTarget.open)}>
             <summary className="hl" data-swap={settling.swap ? "" : undefined}>{heading}</summary>
-            {body}
+            {nestMounted ? body : null}
           </details>
         ) : (
           <div className="hl" data-swap={settling.swap ? "" : undefined}>{heading}</div>

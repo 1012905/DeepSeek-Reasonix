@@ -1,13 +1,61 @@
 package control
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"reasonix/internal/ext/skill"
 	"reasonix/internal/runtime/agent/testutil"
 )
+
+func TestModuleChoicesDeclareTheirSourceWithoutGuessingNames(t *testing.T) {
+	c, _, _ := newOneTurnController(t, testutil.Turn{Text: "answer"})
+	testComposition(t, c)
+	s := c.PresetStore()
+	store := skill.New(skill.Options{ProjectRoot: s.Workspace, ReasonixHomeDir: s.Home, SuppressWarnings: true})
+	var builtin string
+	for _, sk := range store.CompositionSkills() {
+		if sk.Scope == skill.ScopeBuiltin {
+			builtin = sk.SlashName()
+			break
+		}
+	}
+	if builtin == "" {
+		t.Fatal("missing built-in skill fixture")
+	}
+	check := func(id, want string) {
+		t.Helper()
+		catalog, err := c.AgentPresets()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, choice := range catalog.Modules["skills"] {
+			if choice.ID != id {
+				continue
+			}
+			raw, _ := json.Marshal(choice)
+			var fields map[string]any
+			_ = json.Unmarshal(raw, &fields)
+			if fields["source"] != want {
+				t.Fatalf("%s source = %v, want %s", id, fields["source"], want)
+			}
+			return
+		}
+		t.Fatalf("missing choice %s", id)
+	}
+	check(builtin, "builtin")
+	dir := filepath.Join(s.Home, "skills", builtin)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: "+builtin+"\ndescription: Personal override\n---\nBody"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	check(builtin, "custom")
+}
 
 func choiceByID(t *testing.T, kind string, c *Controller, id string) (string, bool) {
 	t.Helper()

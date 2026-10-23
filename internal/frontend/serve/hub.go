@@ -18,6 +18,7 @@ import (
 	"reasonix/internal/platform/computer"
 	"reasonix/internal/platform/wsl"
 
+	"reasonix/internal/base/backgroundwork"
 	"reasonix/internal/base/fileutil"
 	"reasonix/internal/contract/agentcomposition"
 	"reasonix/internal/contract/config"
@@ -50,6 +51,7 @@ const runtimePrefix = "/rt/"
 // published under /rt/{id}/; the hub owns only what they share — the auth gate,
 // the workspace tree, and the rule that one session file gets one runtime.
 type Hub struct {
+	legacy   *hubLegacyListings
 	currency control.DisplayCurrencyGroup
 	mu       sync.RWMutex
 	runtimes map[string]*Runtime
@@ -312,6 +314,7 @@ func (h *Hub) Open(ctx context.Context, req OpenRequest) (*Runtime, error) {
 }
 
 func (h *Hub) openBound(ctx context.Context, req OpenRequest, inherited *agentcomposition.Binding) (*Runtime, error) {
+	defer backgroundwork.Shared.Foreground()()
 	if rt := h.findSession(req.SessionPath); rt != nil {
 		return rt, nil
 	}
@@ -614,15 +617,31 @@ func (h *Hub) routeRuntime(w http.ResponseWriter, r *http.Request) {
 }
 
 // routeDefault keeps an unprefixed client working — a browser opened straight
-// at the port, or an older frontend — by serving the first runtime.
+// at the port, or an older frontend — by serving the first local runtime. With
+// only a remote pane open the request goes to the far kernel, since this side
+// has no server to answer it.
 func (h *Hub) routeDefault(w http.ResponseWriter, r *http.Request) {
 	h.mu.RLock()
-	var rt *Runtime
-	if len(h.order) > 0 {
-		rt = h.runtimes[h.order[0]]
+	var local, far *Runtime
+	for _, id := range h.order {
+		rt := h.runtimes[id]
+		if rt == nil {
+			continue
+		}
+		if rt.remote == nil {
+			local = rt
+			break
+		}
+		if far == nil {
+			far = rt
+		}
 	}
 	h.mu.RUnlock()
-	if rt == nil {
+	if local == nil {
+		if far != nil {
+			refuseDeviceBeforeForwarding(refuseLocalOnly(remoteProxy(far.remote.ep))).ServeHTTP(w, r)
+			return
+		}
 		// A reload with every pane closed still needs the page back. Only past
 		// the gate: "/" is public in token mode so a bare shell can bootstrap.
 		if r.Method == http.MethodGet && r.URL.Path == "/" && h.opts.Page != nil && h.auth.authenticated(r) {
@@ -632,7 +651,7 @@ func (h *Hub) routeDefault(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusServiceUnavailable, "hub.no_runtime_open", "no runtime is open", nil)
 		return
 	}
-	rt.Server.routes().ServeHTTP(w, r)
+	local.Server.routes().ServeHTTP(w, r)
 }
 
 // publish registers a runtime and freezes the handler that serves it. The

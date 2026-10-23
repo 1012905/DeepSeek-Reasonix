@@ -105,11 +105,18 @@ export interface Bound {
  */
 export type ToolIssuer = "model" | "host" | "user" | "provider";
 
+export interface ArgumentNormalization {
+  reason: string;
+  original: string;
+  effective: string;
+}
+
 export interface Tool {
   deliveries?: import("./workspace").DeliveredFile[];
   id?: string;
   name: string;
   args?: string;
+  argumentNormalization?: ArgumentNormalization;
   resolvedName?: string;
   capabilityId?: string;
   output?: string;

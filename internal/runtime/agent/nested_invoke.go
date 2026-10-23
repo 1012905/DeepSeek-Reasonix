@@ -27,12 +27,13 @@ func (n *nestedInvoker) Invoke(ctx context.Context, name string, args json.RawMe
 		args = json.RawMessage(`{}`)
 	}
 	call := provider.ToolCall{ID: tool.NestedCallID(n.parent.call.ID, int(n.seq.Add(1))), Name: name, Arguments: string(args)}
+	call = n.a.prepareCallArguments(call)
 	n.a.emitFullToolDispatch(ctx, call, false)
 	started := time.Now()
 	out := n.a.executeOne(tool.MarkNested(ctx), n.turn, call)
 	elapsed := time.Since(started).Milliseconds()
 	n.a.svc.sink.Emit(event.Event{Kind: event.ToolResult, Tool: event.Tool{
-		ID: call.ID, Name: name, Args: call.Arguments, Output: out.output, Err: out.errMsg,
+		ID: call.ID, Name: name, Args: call.ExecutionArguments(), ArgumentNormalization: call.ArgumentNormalization, Output: out.output, Err: out.errMsg,
 		RefusalCode: out.refusalCode, Bound: out.bound, DurationMs: elapsed,
 		WorkspaceLease: out.workspaceLease,
 		StartedAt:      started.UnixMilli(), EndedAt: started.UnixMilli() + elapsed, Issuer: event.IssuedByModel,

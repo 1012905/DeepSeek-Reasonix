@@ -38,6 +38,9 @@ type MigrationReport struct {
 	Unreadable []string
 }
 
+// memoryStoreMutationMu serializes mutations inside this process only, and is
+// always taken before the cross-process lock (lockMutations), never after it;
+// other processes are excluded by that lock, so both layers share one order.
 var memoryStoreMutationMu sync.Mutex
 
 func (s Store) MigrateV2() (MigrationReport, error) {
@@ -47,6 +50,11 @@ func (s Store) MigrateV2() (MigrationReport, error) {
 func (s Store) MigrateV2WithVersion(version string) (report MigrationReport, err error) {
 	memoryStoreMutationMu.Lock()
 	defer memoryStoreMutationMu.Unlock()
+	release, err := s.lockMutations()
+	if err != nil {
+		return MigrationReport{}, err
+	}
+	defer release()
 	// The caller receives this report even when a later directory fails, so the
 	// names stay sorted on every return path.
 	defer func() { slices.Sort(report.Unreadable) }()
@@ -83,7 +91,7 @@ func (s Store) MigrateV2WithVersion(version string) (report MigrationReport, err
 				// A previous run can have rewritten the fact and then failed to
 				// publish the index, which leaves a migrated fact with a stale
 				// line. Repairing it is what makes the retry converge.
-				if migrated, ok := loadMemory(path); ok {
+				if migrated, ok, readErr := loadMemory(path); readErr == nil && ok {
 					migrated.Name = slug(migrated.Name)
 					if err := reindexIn(dir, migrated.Name, migrated); err != nil {
 						return report, err
@@ -91,8 +99,10 @@ func (s Store) MigrateV2WithVersion(version string) (report MigrationReport, err
 				}
 				continue
 			}
-			memory, ok := loadMemory(path)
-			if !ok {
+			// Unreadable after a successful raw read is a race; skip the rewrite
+			// and let the next migration pass see the file again.
+			memory, ok, readErr := loadMemory(path)
+			if readErr != nil || !ok {
 				continue
 			}
 			memory.Name = slug(memory.Name)
@@ -191,6 +201,11 @@ func (s Store) validatePinnedBudget(m Memory) error {
 func (s Store) SaveWithOptions(m Memory, opts SaveOptions) (SaveResult, error) {
 	memoryStoreMutationMu.Lock()
 	defer memoryStoreMutationMu.Unlock()
+	release, err := s.lockMutations()
+	if err != nil {
+		return SaveResult{}, err
+	}
+	defer release()
 
 	inputID := strings.TrimSpace(m.ID)
 	inputRef := parseMemoryReference(m.Name)
@@ -208,7 +223,7 @@ func (s Store) SaveWithOptions(m Memory, opts SaveOptions) (SaveResult, error) {
 			actual = existing.Revision
 		}
 		if actual != opts.ExpectedRevision {
-			return SaveResult{}, fmt.Errorf("memory revision conflict: expected %d, found %d", opts.ExpectedRevision, actual)
+			return SaveResult{}, memoryRevisionConflict(opts.ExpectedRevision, actual)
 		}
 	}
 	if opts.RequireCreate && exists {
@@ -458,6 +473,11 @@ func (s Store) Restore(ref string, revision int) (SaveResult, error) {
 func (s Store) RestoreArchived(archivePath string) (SaveResult, error) {
 	memoryStoreMutationMu.Lock()
 	defer memoryStoreMutationMu.Unlock()
+	release, err := s.lockMutations()
+	if err != nil {
+		return SaveResult{}, err
+	}
+	defer release()
 
 	// A restore killed after it staged its entry leaves the entry hidden. The
 	// sweep resolves it by id before this call stages anything: an active id
@@ -538,8 +558,16 @@ func snapshotMemoryRevisionInDir(base, path string, memory Memory) error {
 	if memory.ID == "" || memory.Revision < 1 {
 		return nil
 	}
+	if err := fault("read-file", path); err != nil {
+		return err
+	}
 	b, err := os.ReadFile(path)
 	if err != nil {
+		return err
+	}
+	// The bytes must still be this id at this revision — another process may
+	// have published over them since the caller read the fact.
+	if err := snapshotRevisionConflict(path, b, memory); err != nil {
 		return err
 	}
 	dir := filepath.Join(base, ".revisions", memory.ID)

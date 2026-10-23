@@ -38,7 +38,7 @@ func (c *Controller) actionSpec(callID string) (*surfacespec.Spec, error) {
 		for _, call := range message.ToolCalls {
 			if call.ID == callID {
 				matches++
-				spec, _ = surfacespec.FromCall(call.Name, call.ResolvedName, call.Arguments)
+				spec, _ = surfacespec.FromCall(call.Name, call.ResolvedName, call.ExecutionArguments())
 			}
 		}
 		if message.Role == provider.RoleTool && message.ToolCallID == callID {

@@ -192,6 +192,9 @@ func (gs *Session) review(ctx context.Context, toolName string, args json.RawMes
 	var assessment Assessment
 	if agentErr != nil {
 		gs.rollbackReview(before, rewriteBefore)
+		// The turns these entries came from went with the rollback, so the
+		// cursor goes back too: left advanced, they are never resent.
+		gs.cursor = TranscriptCursor{HistoryVersion: oldVersion, EntryCount: oldCount}
 		failure = fmt.Errorf("guardian review failed: %w", agentErr)
 		assessment = Assessment{
 			RiskLevel:         "high",

@@ -198,6 +198,11 @@ and selected states, while long titles truncate within the remaining width.
 - The mirror copies the textarea's computed metrics rather than restating them:
   the composer's font, zoom and line height are set in several places, and one
   missed rule shifts every chip.
+- The mirror's edges follow `.fmain` in CSS, so column transitions reflow it in
+  the same layout as the textarea rather than waiting for a resize observer.
+  The textarea is a block, leaving no inline baseline gap in that shared box.
+- The mirror's right padding includes the native textarea scrollbar's width;
+  a space-consuming scrollbar must not give the mirror an extra strip of text.
 - The chip's wash is a `box-shadow` spread, not padding: padding changes the
   width of the run and the caret lands a few pixels beside the letter it is on.
   Weight is left alone for the same reason.
@@ -835,6 +840,9 @@ what exists.
   each settings block (`.apply`). Results are laid under the header without
   repainting settings itself: looking for something should not take away the
   page you are reading.
+- Search results give the setting name a full-width first row. Section and
+  scope/apply metadata share a wrapping second row; neither can consume the
+  name's width. Results retain their content height inside the scrolling list.
 - What changing a setting costs is a fact, not a warning: one colour for all
   three tiers, only lighter than body text. What deserves colour is a present
   state such as "cannot be changed while a turn is running".
@@ -1553,9 +1561,11 @@ A sub-agent row, by the list's own width:
 - The phone layout (`data-fold~="scene"`) shows settings full screen, so it is
   excluded.
 
-## The feedback veil
+## Settings and feedback veils
 
-- `.fbk-veil` is a flat scrim, not a blurred backdrop.
+- `.prefs` and `.fbk-veil` use the same flat, 93% page-colour scrim in both
+  themes, not a blurred backdrop. Settings stays visually separate from live
+  content without filtering that content on every frame.
 - A backdrop filter over the whole window is redone every frame while anything
   beneath it moves; a running turn's spinners are enough.
 - The scrim is opaque enough that what shows through reads as dimmed, which is
@@ -1674,6 +1684,9 @@ A sub-agent row, by the list's own width:
 - The trigger shows only the mode name and arrow. Source and lock state remain in its accessible name, tooltip and menu; they do not widen the trigger.
 - Preset management separates two built-in mode cards from custom presets. Card selection inspects a definition; setting a default affects new conversations and never switches the active binding.
 - Open floating controls follow responsive fold changes and recheck their anchor after layout transitions finish; window resize alone precedes the body observer's fold publication.
+
+- Preset module selection uses one anchored, scroll-bounded checkbox popover with source groups, search, group selection and current-result selection. It stays open for repeated choices and returns focus on dismissal.
+- Source groups come from the module catalog; older hosts without provenance use an unclassified group. Selection edits retain existing parameter drafts. Selecting all does not change the inheritance mode.
 
 ## Side question
 

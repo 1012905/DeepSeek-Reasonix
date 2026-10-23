@@ -14,6 +14,7 @@ import { EN_WINDOW } from "./en_window";
 import { EN_GRAPH } from "./en_graph";
 import { EN_TRAJECTORY } from "./en_trajectory";
 import { EN_SETTINGS } from "./en_settings";
+import { EN_TOOL_BLURBS } from "./en_tool_blurbs";
 import { EN_PERSONA } from "./en_persona";
 import { EN_METRICS } from "./en_metrics";
 import { EN_STORAGE } from "./en_storage";
@@ -25,6 +26,13 @@ import { EN_COMMUNITY } from "./en_community";
 import { EN_SPONSOR } from "./en_sponsor";
 
 export const EN: Record<string, string> = {
+  "部分历史摘要暂不可用，可继续打开会话": "Some history summaries are unavailable. You can still open conversations.",
+  "仍在搜索部分历史会话…": "Still searching some historical conversations…",
+  "正在读取历史摘要…": "Reading history summaries…",
+  "正在读取摘要": "Reading summary",
+  "摘要暂不可用": "Summary unavailable",
+  "用搜索查找更多会话": "Search to find more conversations",
+  "显示更多": "Show more",
 	...EN_COMPOSITION,
   ...EN_DOCUMENT,
   "此检查点不包含文件快照": "This checkpoint contains no file snapshots",
@@ -44,6 +52,7 @@ export const EN: Record<string, string> = {
   "工作台": "Workbench",
   "从右侧选择文件，或打开浏览器": "Choose a file on the right, or open a browser",
   ...EN_SETTINGS,
+  ...EN_TOOL_BLURBS,
   ...EN_PERSONA,
   ...EN_COMMUNITY,
   ...EN_SPONSOR,
@@ -79,7 +88,7 @@ export const EN: Record<string, string> = {
   "要求扩大可改范围": "Asking to widen what it may change",
   "这个子任务声明之外的文件": "A file outside this subtask's declared paths",
   "这个会话正在别处运行，这里只能看": "Running in another window — read-only here",
-  "可读取代码、查找资料、运行工具并修改文件。完整执行过程可在「轨迹」中查看。":
+  "可读取代码、查找资料、运行工具并修改文件。完整执行过程可在「运行分析」中查看。":
     "It can read code, research, run tools, and edit files. The full run stays visible in the Trajectory.",
   "等待回包 {secs}s": "Waiting for a response · {secs}s",
   "连接被中断": "Connection closed",
@@ -257,6 +266,7 @@ export const EN: Record<string, string> = {
   "收起度量栏": "Collapse the metrics rail",
   "展开度量栏": "Show the metrics rail",
   "调整工作区栏宽度": "Resize the workspace rail",
+  "调整正文字宽": "Resize the reading column",
   "调整度量栏宽度": "Resize the metrics rail",
   "从列表移除": "Remove from the list",
   "改为输入路径": "Type a path instead",
@@ -1150,6 +1160,7 @@ export const EN: Record<string, string> = {
   "已过期": "Expired",
   "无法读取记忆。": "Could not read the memory.",
   "无法读取记忆": "Memory could not be read",
+  "这些记忆无法读取": "These memories could not be read",
   "如需手动记录，请在输入框中使用 {cmd} 命令。": "To write one yourself, use {cmd} in the composer.",
   "正在读取记忆…": "Loading memory…",
 
@@ -1525,6 +1536,7 @@ export const EN: Record<string, string> = {
   "执行任务并使用已启用工具": "Run tasks with enabled tools",
   "先整理步骤，不写入文件": "Plan steps before changing files",
   "直接回答，不调用工具": "Answer directly without tools",
+  "Ask（未实现）": "Ask (Not implemented)",
   "当前 Git 分支": "Current Git branch",
   "后续任务会继续使用这个分支": "Later tasks will continue on this branch",
   "由模型自动选择": "Let the model choose",
@@ -1750,6 +1762,8 @@ export const EN: Record<string, string> = {
   "这个文件已经不在改动列表里了，请刷新后再试": "That file is no longer in the changes list; refresh and try again",
   "暂存请求无法识别": "The stage request was not understood",
   "暂存 {path}": "Stage {path}",
+  "还有 {n} 项没有显示": "{n} more not shown",
+  "再显示 {n} 项": "Show {n} more",
   "暂存全部": "Stage all",
   "取消全部暂存": "Unstage all",
   "暂存失败，请重试": "Staging failed; try again",
@@ -1811,8 +1825,10 @@ export const EN: Record<string, string> = {
   "后台任务已结束：{name}": "Background job finished: {name}",
   "后台任务已终止：{name}": "Background job killed: {name}",
   "后台任务 {name} 失败，需要处理": "Background job {name} failed: needs attention",
-  "后台任务 {name} 已有 {quiet} 没往自己的输出里写任何内容：可能是在写文件，也可能卡住了；可以用 wait 或 bash_output 查看，或用 kill_shell 结束它":
-    "Background job {name} has written nothing to its own output for {quiet}: it may be writing to a file, or stuck; check it with wait or bash_output, or stop it with kill_shell",
+  "后台任务 {name} 已有 {quiet} 没有活动（{work}）：可能在等某个东西，也可能卡住了；可以用 wait 或 bash_output 查看，或用 kill_shell 结束它":
+    "Background job {name} has been inactive for {quiet} ({work}): it may be waiting on something, or stuck; check it with wait or bash_output, or stop it with kill_shell",
+  "{n} 步在静默前完成": "{n} step(s) completed before going quiet",
+  "静默前没有任何进展": "no progress reported",
   "被信号 {signal} 终止": "Ended by signal {signal}",
   "退出码 {code}": "Exit code {code}",
   "已恢复 {n} 条未完成的指令。待发送已暂停，请先在输入框上方的队列里查看，再点“继续派发”": "Recovered {n} unfinished instruction(s). Sending is paused: review them in the queue above the input box, then press Release",

@@ -233,10 +233,7 @@ func memoryCompilerSourceEvent(body string) string {
 
 // UserPreviewText returns the user-authored part of a persisted user message.
 func UserPreviewText(content string) string {
-	s := StripTransientUserBlocks(content)
-	s = HandoffTask(s)
-	s = StripTransientUserBlocks(s)
-	return strings.TrimSpace(s)
+	return userAuthoredText(content)
 }
 
 // pasteDisplayLabelPattern matches the standalone label desktop prepends to a
@@ -255,12 +252,9 @@ func StripPasteDisplayLabel(content string) string {
 // deterministic wrapper stripping.
 func UserMessageText(msg provider.Message) string {
 	if msg.RawContent != "" {
-		// Stripped here too: RawContent is meant to hold what a person typed,
-		// but a host-authored turn writes its own composed text to it, and
-		// returning that verbatim put <background-jobs> in the transcript.
-		return strings.TrimSpace(StripTransientUserBlocks(msg.RawContent))
+		return UserSaidText(msg.RawContent)
 	}
-	return UserPreviewText(msg.Content)
+	return UserSaidText(msg.Content)
 }
 
 // migrateLegacyProviderContent canonicalizes both historical user-turn shapes:
@@ -319,6 +313,11 @@ var SyntheticUserPrefixes = []string{
 	"<reasoning-language>",
 	"Plan approved — plan mode is off",
 	"Host final-answer readiness check failed",
+	// Both openings must stay listed. readinessContinuationPrompt writes the
+	// attributed one; a session written before it did starts with the older
+	// text, and either one read back as user input becomes a title.
+	"Host: this turn ended with work still outstanding",
+	"This turn ended with work still outstanding",
 	"You are already in the executor phase",
 	"The previous assistant response was interrupted while a tool call",
 	"The previous assistant response was interrupted during streaming",

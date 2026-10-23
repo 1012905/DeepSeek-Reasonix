@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import userEvent from "@testing-library/user-event";
 import { UserCard } from "./cards/UserCard";
 import { ToolCard } from "./cards/ToolCard";
+import { openCards } from "./cards/openCards";
 import { Composer } from "./Composer";
 import { MockPort } from "../port/mock";
 import type { AgentPort, SessionStatus } from "../port/port";
@@ -88,7 +89,7 @@ describe("shared image preview entrances", () => {
     const user = userEvent.setup();
     const { container } = render(<ToolCard tool={{ id: "shot", name: "computer_read", images: [shot], output: "screen", readOnly: true }} running={false} />);
     const disclosure = container.querySelector("details")!;
-    fireEvent.click(disclosure.querySelector("summary")!);
+    openCards(container);
     await user.click(screen.getByRole("button", { name: "查看图片 工具截图 1" }));
     expect(within(screen.getByRole("dialog")).getByRole("img").getAttribute("src")).toBe(shot);
     expect(disclosure.open).toBe(true);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../i18n";
 import { systemLabel } from "./osname";
 import { memoryLines } from "./memoryrows";
@@ -11,6 +11,7 @@ import { StudioIcon } from "./StudioIcon";
 import { dropDraft, heldDraft, holdDraft } from "./feedbackdraft";
 import { feedbackFailure, type FeedbackFailure } from "./feedbackfailure";
 import { FeedbackShot } from "./FeedbackShot";
+import { LazyMarkdown } from "./LazyMarkdown";
 import { admit, megabytes, payload, readShot, REFUSED_LABEL, type Refused, type Shot } from "./feedbackshots";
 import { useFileDrop } from "./filedrop";
 
@@ -46,6 +47,7 @@ export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props
   const [category, setCategory] = useState<FeedbackCategory>(() => heldDraft().category);
   const [body, setBody] = useState(() => heldDraft().body);
   const [contact, setContact] = useState(() => heldDraft().contact);
+  const [preview, setPreview] = useState(false);
   const [name, setName] = useState("");
   const [shots, setShots] = useState<Shot[]>(() => heldDraft().shots);
   const [refused, setRefused] = useState<Refused[]>([]);
@@ -148,8 +150,12 @@ export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props
 
   const zone = useFileDrop((d) => void add(d.files), setOver);
 
-  const onPaste = (e: ClipboardEvent<HTMLFormElement>) => {
-    const files = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
+  const takePaste = (e: { clipboardData: DataTransfer | null; preventDefault(): void }) => {
+    const data = e.clipboardData;
+    if (!data) return;
+    const offered = [...data.files, ...[...(data.items ?? [])].flatMap((i) => (i.kind === "file" ? [i.getAsFile()] : []))];
+    const images = offered.filter((f): f is File => f !== null && f.type.startsWith("image/"));
+    const files = images.filter((f, i) => images.findIndex((g) => g.name === f.name && g.size === f.size && g.type === f.type) === i);
     if (files.length === 0) return;
     e.preventDefault();
     void add(files);
@@ -249,7 +255,8 @@ export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props
       noValidate
       data-action-paste="feedback.shot.add"
       data-action-submit="feedback.send"
-      onPaste={onPaste}
+      tabIndex={-1}
+      onPaste={takePaste}
       onSubmit={(e) => {
         e.preventDefault();
         void send();
@@ -302,22 +309,37 @@ export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props
           ))}
         </div>
 
-        <label className="fbk-field">
-          <span className="fbk-label">{t("发生了什么？")}</span>
-          <textarea
-            ref={field}
-            data-action="feedback.body"
-            value={body}
-            rows={6}
-            placeholder={t("描述你遇到的情况，或你希望它怎样。")}
-            aria-invalid={problem === "body-long" ? true : undefined}
-            aria-describedby="fbk-count"
-            onChange={(e) => setBody(e.target.value)}
-          />
-          <span id="fbk-count" className="fbk-count" data-over={problem === "body-long" ? "" : undefined}>
-            {t("{n} / {max} 字节", { n: bytes.toLocaleString(), max: (limits?.bodyBytes ?? 0).toLocaleString() })}
-          </span>
-        </label>
+        <div className="fbk-field">
+          <div className="fbk-labelrow">
+            <label className="fbk-label" htmlFor="fbk-body">{t("发生了什么？")}</label>
+            <button type="button" className="fbk-previewtoggle" aria-pressed={preview} disabled={!body.trim()} onClick={() => setPreview((v) => !v)} data-action="feedback.preview">
+              {t(preview ? "编辑" : "预览")}
+            </button>
+          </div>
+          {preview ? (
+            <>
+              <div className="fbk-preview" aria-label={t("正文预览")} role="region"><LazyMarkdown text={body} images={false} /></div>
+              <span className="fbk-count">{t("公开的议题会把原文放在代码块里，原样显示。")}</span>
+            </>
+          ) : (
+            <>
+              <textarea
+                id="fbk-body"
+                ref={field}
+                data-action="feedback.body"
+                value={body}
+                rows={6}
+                placeholder={t("描述你遇到的情况，或你希望它怎样。")}
+                aria-invalid={problem === "body-long" ? true : undefined}
+                aria-describedby="fbk-count"
+                onChange={(e) => setBody(e.target.value)}
+              />
+              <span id="fbk-count" className="fbk-count" data-over={problem === "body-long" ? "" : undefined}>
+                {t("{n} / {max} 字节", { n: bytes.toLocaleString(), max: (limits?.bodyBytes ?? 0).toLocaleString() })}
+              </span>
+            </>
+          )}
+        </div>
 
         <div className="fbk-row">
           <label className="fbk-field">

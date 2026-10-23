@@ -37,6 +37,10 @@ func mcpCommand(args []string) int {
 	case "list", "ls":
 		return mcpList()
 	case "add":
+		if len(args) > 1 && (args[1] == "-h" || args[1] == "--help") {
+			mcpUsage()
+			return 0
+		}
 		return mcpAddCLI(args[1:])
 	case "get":
 		return mcpGetCLI(args[1:])

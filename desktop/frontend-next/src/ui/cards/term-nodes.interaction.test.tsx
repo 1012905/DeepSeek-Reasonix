@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 import "../testkit";
 import { Transcript } from "../Transcript";
+import { openCards } from "./openCards";
 import { capToolOutput } from "../../state/outputcap";
 import type { Item } from "../../state/session";
 
@@ -36,6 +37,7 @@ describe("what a finished call's output costs the page", () => {
 
   it("still shows every line of a block that was not capped", () => {
     render(view([call(1)]));
+    openCards();
     expect(document.body.textContent).toContain("line 199 of a command's output");
   });
 });

@@ -16,6 +16,7 @@ import (
 type Choice struct {
 	ID          string `json:"id"`
 	Description string `json:"description,omitempty"`
+	Source      string `json:"source,omitempty"`
 }
 
 type Catalog struct {
