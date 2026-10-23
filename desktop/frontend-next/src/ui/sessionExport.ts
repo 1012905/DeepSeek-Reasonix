@@ -14,8 +14,7 @@ export async function saveSessionFile(
     const parsed = JSON.parse(exported.content) as { format?: string; records?: unknown[] };
     if (parsed.format === "reasonix-native-session") nativeArchive = parsed;
   } catch {}
-  // A native archive keeps its messages in `records`; the earlier version sent
-  // an empty list and exported a file with nothing but a title.
+  // A native archive keeps its messages in `records`, not one per line.
   const records = nativeArchive
     ? (nativeArchive.records ?? [])
     : exported.content
