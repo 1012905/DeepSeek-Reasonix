@@ -88,7 +88,7 @@ export const EN: Record<string, string> = {
   "要求扩大可改范围": "Asking to widen what it may change",
   "这个子任务声明之外的文件": "A file outside this subtask's declared paths",
   "这个会话正在别处运行，这里只能看": "Running in another window — read-only here",
-  "可读取代码、查找资料、运行工具并修改文件。完整执行过程可在「轨迹」中查看。":
+  "可读取代码、查找资料、运行工具并修改文件。完整执行过程可在「运行分析」中查看。":
     "It can read code, research, run tools, and edit files. The full run stays visible in the Trajectory.",
   "等待回包 {secs}s": "Waiting for a response · {secs}s",
   "连接被中断": "Connection closed",
