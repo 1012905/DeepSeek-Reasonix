@@ -892,6 +892,7 @@ export const EN: Record<string, string> = {
   "有改动；没有主机能读作证据的检查": "changed; no check the host could read as proof",
   "改动后未再检查": "changed, never looked at again",
   "有 Claude Code mod 在运行；它写了什么不在主机观测范围内": "a Claude Code mod was active; what it wrote is outside what the host observes",
+  "写在了主机观测范围之外；这里没有任何证据能说明它留下了什么": "written outside the folder this host watches; nothing here can say what it left",
   "你在等待期间，另一个会话改动了本会话占用的路径；之前读到的内容可能已过时": "another session wrote under this session's paths while it waited on you; earlier reads there may be stale",
   "自己申报未验证": "declared unverified by the turn itself",
   "同一账号的两种接入方式。当前这一种不支持联网搜索；这是协议差异，不是可配置项。": "Two ways in to the same account. This one has no web search — that is a difference between the protocols, not a setting.",
