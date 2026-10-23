@@ -297,6 +297,12 @@ class BenchPort extends MockPort {
   }
 
   private settingCardSent = false;
+  private receiptSent = false;
+
+  async receiptSettings() {
+    const read = await super.receiptSettings();
+    return query.has("receipt") ? { ...read, show: true } : read;
+  }
   private meterSent = false;
 
   subscribe(on: (e: WireEvent) => void) {
@@ -310,6 +316,14 @@ class BenchPort extends MockPort {
           this.feed({ kind: "usage", usage: usage(amount) } as unknown as WireEvent);
           this.feed({ kind: "turn_done" } as unknown as WireEvent);
         }
+      }, 500);
+    }
+    if (query.has("receipt") && !this.receiptSent) {
+      this.receiptSent = true;
+      const script = "cd \"C:/Users/me/work\" && cat > \"$TMPDIR/check/verify_006.py\" <<'PYEOF'\n" + "import os, re, sys, unittest\nclass T(unittest.TestCase):\n    def test_a(self):\n        self.assertEqual(1, 1)\n".repeat(18) + "PYEOF\npython -m unittest verify_006 2>&1 | tail -12";
+      setTimeout(() => {
+        this.feed({ kind: "turn_started", msgIndex: 9 } as unknown as WireEvent);
+        this.feed({ kind: "turn_done", receipt: { saysSomething: true, severity: "warn", gaps: [{ kind: "failed_verification", detail: script }, { kind: "inconclusive_verification", detail: "go test ./internal/... 2>&1 | tail -5" }] } } as unknown as WireEvent);
       }, 500);
     }
     const card = query.get("settingcard");
