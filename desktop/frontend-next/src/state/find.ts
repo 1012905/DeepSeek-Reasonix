@@ -7,6 +7,8 @@ export interface Hit {
   id: string;
   row: number;
   at: number;
+  /** How much the hit covers: the needle's length, or the regex match's. */
+  length: number;
 }
 
 /** Everything a row says, in reading order. Exhaustive over Item on purpose: a
@@ -87,46 +89,90 @@ export interface FindMode {
   caseSensitive?: boolean;
 }
 
-export function search(items: Item[], query: string, receipts = false, mode: FindMode = {}): Hit[] {
-  const text = query.trim();
-  if (!text) return [];
+/** One match: where it starts and how much it covers. */
+export interface Match {
+  at: number;
+  length: number;
+}
 
-  // Where the next hit starts, from a given offset. Written once per call so the
-  // loop below does not branch on the mode for every row.
-  let next: (hay: string, from: number) => number;
+export type Matcher = (text: string, from: number) => Match | null;
+
+/** How one query is read. The count and the painter share this, so a hit the
+ *  counter sees is one the painter can draw. */
+export interface Finder {
+  match: Matcher;
+  /** Whether the text must be read as written (a regex, or a case-sensitive
+   *  search). A substring search reads the folded copy instead. */
+  verbatim: boolean;
+}
+
+/** null when the query is empty or the pattern does not compile yet: a
+ *  half-typed `(` is not an error worth a message, the box just has nothing to
+ *  point at. */
+export function finderFor(query: string, mode: FindMode = {}): Finder | null {
+  const text = query.trim();
+  if (!text) return null;
   if (mode.regex) {
     let re: RegExp;
     try {
       re = new RegExp(text, mode.caseSensitive ? "g" : "gi");
     } catch {
-      // Half-typed parentheses are not an error worth a message: the box simply
-      // has nothing to point at yet.
-      return [];
+      return null;
     }
-    next = (hay, from) => {
-      re.lastIndex = from;
-      const hit = re.exec(hay);
-      return hit ? hit.index : -1;
+    return {
+      verbatim: true,
+      match: (hay, from) => {
+        re.lastIndex = from;
+        const hit = re.exec(hay);
+        return hit ? { at: hit.index, length: hit[0].length } : null;
+      },
     };
-  } else if (mode.caseSensitive) {
-    next = (hay, from) => hay.indexOf(text, from);
-  } else {
-    const needle = text.toLocaleLowerCase();
-    next = (hay, from) => hay.indexOf(needle, from);
   }
+  if (mode.caseSensitive) {
+    return {
+      verbatim: true,
+      match: (hay, from) => {
+        const at = hay.indexOf(text, from);
+        return at < 0 ? null : { at, length: text.length };
+      },
+    };
+  }
+  const needle = text.toLocaleLowerCase();
+  return {
+    verbatim: false,
+    match: (hay, from) => {
+      const at = hay.indexOf(needle, from);
+      return at < 0 ? null : { at, length: needle.length };
+    },
+  };
+}
 
-  const verbatim = mode.regex || mode.caseSensitive;
-  // A plain substring advances by its own length, so overlapping text is counted
-  // the way it always was ("aa" in "aaaa" is two, not three). A regular
-  // expression may match nothing at all (`^`, a lookahead), so it can only
-  // advance one position at a time or it would never move.
-  const stride = mode.regex ? 1 : text.length;
+/** The match after `m`. A plain substring advances by its own length, so
+ *  overlapping text is counted the way it always was ("aa" in "aaaa" is two,
+ *  not three). A regex may match nothing at all (`^`, a lookahead), so an empty
+ *  match steps one position instead of standing still. */
+export function afterMatch(finder: Finder, hay: string, m: Match): Match | null {
+  const from = m.at + (m.length || 1);
+  return from > hay.length ? null : finder.match(hay, from);
+}
+
+/** One search may not spend longer than this on a pathological pattern: a typed
+ *  `(a+)+$` would otherwise run against the whole transcript on every keystroke
+ *  and freeze the window. Cutting it short keeps the window usable; the count
+ *  then speaks for what was scanned. */
+const BUDGET_MS = 50;
+
+export function search(items: Item[], query: string, receipts = false, mode: FindMode = {}): Hit[] {
+  const finder = finderFor(query, mode);
+  if (!finder) return [];
   const out: Hit[] = [];
+  const deadline = Date.now() + BUDGET_MS;
   for (let row = 0; row < items.length; row++) {
     if (items[row].t === "receipt" && !receipts) continue;
-    const hay = verbatim ? exactHaystack(items[row]) : haystack(items[row]);
-    for (let at = next(hay, 0); at >= 0; at = next(hay, at + stride)) {
-      out.push({ id: items[row].id, row, at });
+    if (Date.now() > deadline) break;
+    const hay = finder.verbatim ? exactHaystack(items[row]) : haystack(items[row]);
+    for (let m = finder.match(hay, 0); m; m = afterMatch(finder, hay, m)) {
+      out.push({ id: items[row].id, row, at: m.at, length: m.length });
       if (out.length >= MAX) return out;
     }
   }

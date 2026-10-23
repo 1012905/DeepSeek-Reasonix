@@ -14,7 +14,7 @@ export interface Finding {
   total: number;
   capped: boolean;
   // n moves on every step, so landing on the same occurrence twice is asked for.
-  at: { id: string; nth: number; n: number } | null;
+  at: { id: string; nth: number; n: number; mode: FindMode } | null;
   ask: (query: string) => void;
   step: (by: 1 | -1) => void;
   close: () => void;
@@ -85,7 +85,7 @@ export function useFind(items: Item[], pulse: number, active: boolean, onOpen: (
     focus: held?.focus ?? 0,
     total,
     capped: total >= MAX,
-    at: at ? { id: at.id, nth, n: nonce } : null,
+    at: at ? { id: at.id, nth, n: nonce, mode: { regex: held?.re ?? false, caseSensitive: held?.cs ?? false } } : null,
     ask,
     step,
     close,
