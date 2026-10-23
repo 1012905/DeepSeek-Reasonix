@@ -4232,3 +4232,4 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 .other-field input { flex: 1; min-width: 0; }
 .other-field .studio-control-tip { left: auto; right: 0; }
 .other-wrap .refine-card { margin: 8px 0 0; }
+.keys-row .ds kbd { display: inline-block; min-width: 13em }
