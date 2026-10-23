@@ -43,7 +43,7 @@ try {
         }
         const label = [...row.querySelectorAll("*")].find((e) => e.children.length === 0 && e.textContent.trim() && !e.closest("kbd,small,.fbk-badge")) ?? row;
         const cs = getComputedStyle(label);
-        return { icon: svg.x + svg.width / 2, text, look: `${cs.fontSize}/${cs.fontWeight}` };
+        return { icon: svg.x + svg.width / 2, text, look: `${cs.fontSize}/${cs.fontWeight}/${cs.color}`, fill: getComputedStyle(row).backgroundColor };
       }, sel);
       if (at) seen.push({ name, ...at });
     }
@@ -53,7 +53,9 @@ try {
     check(`${scheme}: the icons share one vertical line`, spread("icon") <= TOLERANCE, `spread ${spread("icon").toFixed(1)}px — ${show("icon")}`);
     check(`${scheme}: the labels start on one vertical line`, spread("text") <= TOLERANCE, `spread ${spread("text").toFixed(1)}px — ${show("text")}`);
     const looks = new Set(seen.map((r) => r.look));
-    check(`${scheme}: every row's label has one size and weight`, looks.size === 1, seen.map((r) => `${r.name} ${r.look}`).join("; "));
+    check(`${scheme}: every row's label has one size, weight and colour`, looks.size === 1, seen.map((r) => `${r.name} ${r.look}`).join("; "));
+    const fill = seen.find((r) => r.name === "新建会话")?.fill ?? "";
+    check(`${scheme}: New session has no fill at rest`, /rgba\(0, 0, 0, 0\)|transparent/.test(fill), fill);
     await ctx.close();
   }
 } finally {
