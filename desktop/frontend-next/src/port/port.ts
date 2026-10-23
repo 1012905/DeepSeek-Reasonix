@@ -75,7 +75,6 @@ export type * from "./look";
 // accepted item replaces. Offsets are UTF-16 code units — the units a string
 // index uses here, converted from the kernel's bytes at the boundary.
 export type * from "./boundary";
-
 export type * from "./provider";
 
 /** A skill chip as the kernel takes it; offset only orders chips in a line. */
