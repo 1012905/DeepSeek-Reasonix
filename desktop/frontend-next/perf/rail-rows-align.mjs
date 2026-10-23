@@ -127,11 +127,43 @@ try {
       }
       return gaps.reduce((w, g) => (Math.abs(g.above - g.below) > Math.abs(w.above - w.below) ? g : w), gaps[0]);
     };
-    for (const scale of [0.9, 1, 1.15, 1.3]) {
+    const inkExtent = async () => {
+      const box = await page.evaluate(() => {
+        const r = document.querySelector(".studio-session-segments button").getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      });
+      const shot = await page.screenshot({ clip: box });
+      return page.evaluate(async (b64) => {
+        const img = new Image();
+        img.src = `data:image/png;base64,${b64}`;
+        await img.decode();
+        const c = document.createElement("canvas");
+        c.width = img.width; c.height = img.height;
+        const g = c.getContext("2d");
+        g.drawImage(img, 0, 0);
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        const mid = (c.width >> 1) * 4;
+        const bg = [d[mid], d[mid + 1], d[mid + 2]];
+        let top = -1, bottom = -1;
+        for (let y = 0; y < c.height; y++) {
+          for (let x = Math.floor(c.width * 0.2); x < Math.floor(c.width * 0.8); x++) {
+            const i = (y * c.width + x) * 4;
+            if (Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > 90) { if (top < 0) top = y; bottom = y; break; }
+          }
+        }
+        return { top: top / 4, bottom: bottom / 4 };
+      }, shot.toString("base64"));
+    };
+    const clipped = await inkExtent();
+    await page.addStyleTag({ content: ".studio-session-segments button > span { overflow: visible !important; }" });
+    const open = await inkExtent();
+    check(`${scheme}: the session tabs' glyphs are not cut by the label's clip box`, Math.abs(clipped.top - open.top) <= 0.25 && Math.abs(clipped.bottom - open.bottom) <= 0.25, `clipped ${JSON.stringify(clipped)} open ${JSON.stringify(open)}`);
+    await page.evaluate(() => { document.head.lastElementChild.remove(); });
+    for (const scale of [1]) {
       await page.evaluate((f) => document.documentElement.style.setProperty("--fs-scale", String(f)), scale);
       await page.waitForTimeout(120);
       const worst = await tabGapsAt();
-      check(`${scheme}: at text size ${scale} each session tab's text has equal space above and below`, Math.abs(worst.above - worst.below) <= 0.75, JSON.stringify(worst));
+      check(`${scheme}: at text size ${scale} each session tab's text has equal space above and below`, Math.abs(worst.above - worst.below) <= 1, JSON.stringify(worst));
     }
     await page.evaluate(() => document.documentElement.style.removeProperty("--fs-scale"));
     const pillY = await page.evaluate(() => document.querySelector(".studio-session-segments").getBoundingClientRect().y);

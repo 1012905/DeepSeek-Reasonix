@@ -628,7 +628,7 @@ body { background: var(--page) !important; }
 }
 .studio-session-segments button:hover { background: var(--raised); color: var(--text); }
 .studio-session-segments button[aria-pressed="true"] { background: var(--raised); color: var(--text); font-weight: 650; }
-.studio-session-segments button > span { min-width: 0; overflow: hidden; line-height: 1.4; text-box: trim-both cap alphabetic; text-overflow: ellipsis; }
+.studio-session-segments button > span { min-width: 0; overflow: hidden; line-height: 1.4; position: relative; top: .1em; text-overflow: ellipsis; }
 .studio-session-segments b { flex: none; min-width: 8px; color: var(--faint); font: 560 calc(9px * var(--fs-scale, 1))/1 var(--ui); font-variant-numeric: tabular-nums; }
 .studio-session-segments button[aria-pressed="true"] b { color: var(--muted); }
 @container (max-width: 219px) {
