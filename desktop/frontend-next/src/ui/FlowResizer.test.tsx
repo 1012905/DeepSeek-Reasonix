@@ -74,6 +74,20 @@ describe("the two sidebars making room for the column", () => {
     expect(released).toEqual({ rail: 316, dock: 316 });
     expect(barsFit(2400, 760, 316, 316, RAIL_MIN, DOCK_MIN)).toEqual(released);
   });
+
+  it("answers for a width a hand is still holding, not only a committed one", () => {
+    // A drag asks this on every frame. Committing on release only is what let
+    // the column grow under sidebars that had not moved yet, so the answer has
+    // to exist before anything is stored.
+    localStorage.clear();
+    const { result } = renderHook(() => useColumn(316, 400, RAIL_MIN, DOCK_MIN));
+    const bars = result.current.fit(result.current.ceiling);
+    expect(bars.rail).toBeGreaterThanOrEqual(RAIL_MIN);
+    expect(bars.dock).toBeGreaterThanOrEqual(DOCK_MIN);
+    expect(bars.rail + bars.dock).toBeLessThan(316 + 400);
+    // The same rule the committed numbers obey, so committing cannot jump.
+    expect(bars).toEqual(barsFit(document.body.clientWidth, result.current.ceiling, 316, 400, RAIL_MIN, DOCK_MIN));
+  });
 });
 
 describe("the column's remembered width", () => {
@@ -113,6 +127,7 @@ describe("the keys walk the same path the hand does", () => {
   const column = (over: Partial<Column> = {}): Column => ({
     width: 900, floor: 760, ceiling: 1048, rail: 300, dock: 400, dragged: 900,
     commit: () => {},
+    fit: (w) => barsFit(2400, w, 300, 400, RAIL_MIN, DOCK_MIN),
     ...over,
   });
 
