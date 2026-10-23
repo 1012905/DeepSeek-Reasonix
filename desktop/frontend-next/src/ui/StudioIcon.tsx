@@ -52,7 +52,7 @@ const PATHS = {
   wallet: "M3 6h17v15H3V6zM3 6l14-4v4M15 11h7v6h-7v-6zM18 14h.01",
   eye: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0",
   eyeoff: "M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 3.9M6.6 6.6C3.9 8.4 2 12 2 12s4 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2",
-  gauge: "M4 18a8 8 0 1 1 16 0M12 18l4-6M7 17h.01M17 17h.01M12 9v.01",
+  activity: "M22 12h-4l-3 9L9 3l-3 9H2",
 } as const;
 
 export type StudioIconName = keyof typeof PATHS;
