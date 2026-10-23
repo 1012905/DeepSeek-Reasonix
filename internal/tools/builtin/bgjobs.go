@@ -318,21 +318,23 @@ func clampWaitSeconds(requested int) (seconds int, capped bool) {
 
 // stillRunning states what happened while the caller waited. No thresholds and
 // no verdict: a task making slow progress and one that has stopped differ by
-// whether anything arrived, and the caller is the one who knows which of those
-// its own task should look like.
+// what arrived, and the caller is the one who knows which of those its own task
+// should look like. Output text and reported steps are separate readings because
+// a sub-agent works in its own transcript: it advances without ever writing here.
 func stillRunning(p *jobs.Progress) string {
 	if p == nil {
 		return ""
 	}
-	produced := "nothing on its own output so far"
-	if p.Produced > 0 {
-		produced = fmt.Sprintf("%s produced", byteCount(p.Produced))
+	parts := []string{fmt.Sprintf("running %s", p.Running.Round(time.Second))}
+	switch {
+	case p.Produced > 0:
+		parts = append(parts, fmt.Sprintf("%s of output, %s of it while waiting", byteCount(p.Produced), byteCount(p.Delta)))
+	case p.Steps > 0:
+		parts = append(parts, fmt.Sprintf("no output text (it does not write here), %d step(s) reported, %d while waiting", p.Steps, p.StepDelta))
+	default:
+		parts = append(parts, "no output text and no steps reported yet")
 	}
-	arrived := "nothing arrived while waiting"
-	if p.Delta > 0 {
-		arrived = fmt.Sprintf("%s arrived while waiting", byteCount(p.Delta))
-	}
-	return fmt.Sprintf(" — running %s, %s, %s", p.Running.Round(time.Second), produced, arrived)
+	return " — " + strings.Join(parts, ", ")
 }
 
 func byteCount(n int64) string {
