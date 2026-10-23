@@ -172,6 +172,9 @@ export function search(items: Item[], query: string, receipts = false, mode: Fin
     if (Date.now() > deadline) break;
     const hay = finder.verbatim ? exactHaystack(items[row]) : haystack(items[row]);
     for (let m = finder.match(hay, 0); m; m = afterMatch(finder, hay, m)) {
+      // An empty match (`^`, `a*`) covers nothing to paint; the painter skips
+      // it, so the count has to as well or the box shows hits with no range.
+      if (m.length === 0) continue;
       out.push({ id: items[row].id, row, at: m.at, length: m.length });
       if (out.length >= MAX) return out;
     }
