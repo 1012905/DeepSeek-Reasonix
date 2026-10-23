@@ -53,9 +53,11 @@ func rehomeFlatImport(oldPath, newPath, destDir, base, summary string, srcInfo o
 }
 
 // importBakSessions recovers sessions whose .jsonl was lost but a .jsonl.bak
-// remains.
-func importBakSessions(entries []os.DirEntry, srcDir, globalDest string, hasEvents map[string]bool, projectDir func(string) string, rep *LegacyReport) int {
+// remains. It returns the count imported and whether a copy failed; a failed
+// recovery copy has to reach the caller so the one-time marker is withheld.
+func importBakSessions(entries []os.DirEntry, srcDir, globalDest string, hasEvents map[string]bool, projectDir func(string) string, rep *LegacyReport) (int, bool) {
 	imported := 0
+	hadCopyFailure := false
 	// .jsonl.bak recovery: when the .jsonl was lost but a backup remains.
 	for _, e := range entries {
 		name := e.Name()
@@ -89,6 +91,7 @@ func importBakSessions(entries []os.DirEntry, srcDir, globalDest string, hasEven
 		srcInfo, _ := e.Info()
 		if err := transformAndCopyJsonl(bakPath, dest); err != nil {
 			rep.skipWrite(bakPath, err)
+			hadCopyFailure = true
 			continue
 		}
 		if srcInfo != nil {
@@ -98,14 +101,16 @@ func importBakSessions(entries []os.DirEntry, srcDir, globalDest string, hasEven
 		imported++
 	}
 
-	return imported
+	return imported, hadCopyFailure
 }
 
 // migrateProjectSubdirs recurses into subdirectories that look like project
 // session dirs: the TS version nested project-scoped sessions under a workspace
-// slug.
-func migrateProjectSubdirs(entries []os.DirEntry, srcDir, globalDest string, projectDir func(string) string, rep *LegacyReport) int {
+// slug. It returns the count imported and whether a copy failed, for the same
+// marker contract as the other passes.
+func migrateProjectSubdirs(entries []os.DirEntry, srcDir, globalDest string, projectDir func(string) string, rep *LegacyReport) (int, bool) {
 	imported := 0
+	hadCopyFailure := false
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
@@ -130,15 +135,12 @@ func migrateProjectSubdirs(entries []os.DirEntry, srcDir, globalDest string, pro
 		if !hasSessions {
 			continue
 		}
-		n, err := migrateSubDirectory(subDir, globalDest, projectDir, rep)
-		if err != nil {
-			rep.skipRead(subDir, err)
-			continue
-		}
+		n, failed := migrateSubDirectory(subDir, globalDest, projectDir, rep)
 		imported += n
+		hadCopyFailure = hadCopyFailure || failed
 	}
 
-	return imported
+	return imported, hadCopyFailure
 }
 
 // existsUnder reports whether name exists directly under dir, resolved through
