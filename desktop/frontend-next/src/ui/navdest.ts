@@ -1,3 +1,5 @@
+import { useMemo, useSyncExternalStore } from "react";
+import { arranged, navLayout, onNavLayoutChange } from "../state/navEntries";
 import type { Section } from "./prefsnav";
 
 export type Mark = "chat" | "files" | Section;
@@ -14,3 +16,11 @@ export const DESTINATIONS: Destination[] = [
   ["memory", "记忆", "memory"],
   ["remote", "远程", "remote"],
 ];
+
+const KEYS = DESTINATIONS.map(([mark]) => mark);
+
+/** The destinations this machine chose to show, in its order. */
+export function useDestinations(): Destination[] {
+  const layout = useSyncExternalStore(onNavLayoutChange, navLayout, navLayout);
+  return useMemo(() => arranged(KEYS, layout).map((k) => DESTINATIONS.find(([mark]) => mark === k)!), [layout]);
+}

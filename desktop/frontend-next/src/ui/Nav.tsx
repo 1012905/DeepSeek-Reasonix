@@ -1,6 +1,6 @@
 import { t } from "../i18n";
 import { FeedbackBadge } from "./feedbackentry";
-import { DESTINATIONS, type Mark } from "./navdest";
+import { useDestinations, type Mark } from "./navdest";
 import { ICON } from "./prefsnav";
 import { StudioIcon } from "./StudioIcon";
 import { UpdateDot } from "./UpdateDot";
@@ -10,7 +10,7 @@ const CHAT = "M3.2 4.4a1.2 1.2 0 0 1 1.2-1.2h7.2a1.2 1.2 0 0 1 1.2 1.2v5a1.2 1.2
 
 // Every entry goes somewhere that exists. A rail of icons that open nothing is
 // the cheapest thing to draw and the most expensive thing to keep.
-const TO: [Mark, string, string | null, string?][] = [["chat", "会话", null], ...DESTINATIONS];
+const HOME: [Mark, string, string | null] = ["chat", "会话", null];
 
 const FOOT: [Mark, string, string, string][] = [
   ["account", "账号", "account", "chrome.account"],
@@ -34,6 +34,7 @@ interface Props {
 }
 
 export function Nav({ at, onGo, onFiles, onHome, onRail, onFeedback, onNew, feedbackUnread, shown }: Props) {
+  const destinations = useDestinations();
   const btn = ([key, label, sec, action]: [Mark, string, string | null, string?]) => (
     <button
       key={key}
@@ -57,7 +58,7 @@ export function Nav({ at, onGo, onFiles, onHome, onRail, onFeedback, onNew, feed
           <StudioIcon name="plus" aria-hidden="true" />
           <span className="navhint" role="tooltip">{t("新建会话")}</span>
         </button>
-        {TO.map(btn)}
+        {[HOME, ...destinations].map(btn)}
       </div>
       <div className="navgrp foot">
         <button className="navbtn" data-action="feedback.open" onClick={onFeedback}>

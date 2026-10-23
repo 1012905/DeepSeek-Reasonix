@@ -9,7 +9,7 @@ import type { RemoteHost } from "../port/remote";
 import type { Adder } from "./addws";
 import { AccountRow } from "./AccountRow";
 import { ContentMatches } from "./ContentMatches";
-import { DESTINATIONS } from "./navdest";
+import { useDestinations } from "./navdest";
 import { ICON, type Section } from "./prefsnav";
 import { RailSearch } from "./railsearch";
 import { RemoteHosts, remoteProjectKey, remoteWorkspaces } from "./RemoteHosts";
@@ -134,6 +134,7 @@ export function Sidebar({
   onError,
 }: Props) {
   const [railScope, setRailScope] = useState<"all" | "live" | "pinned" | "archived">("all");
+  const destinations = useDestinations();
   const [palette, setPalette] = useState(false);
   const [projectPicker, setProjectPicker] = useState(false);
   const [folded, setFolded] = useSidebarFolds();
@@ -268,7 +269,7 @@ export function Sidebar({
         </button>
         {!navShown && (
           <div className="studio-quicknav">
-            {DESTINATIONS.filter(([mark]) => mark !== "usage").map(([mark, label, section]) => mark === "files" ? (
+            {destinations.filter(([mark]) => mark !== "usage").map(([mark, label, section]) => mark === "files" ? (
               <button key={mark} data-action="files.open" onClick={onFiles}>
                 <span aria-hidden="true"><StudioIcon name="file" /></span><b>{t(label)}</b>
               </button>
@@ -351,7 +352,7 @@ export function Sidebar({
       </RailSearch>
       </div>
       {!navShown && <div className="railfoot">
-        <button className="studio-wallet" data-action="settings.section" data-value="usage" onClick={() => onSettings("usage")}><span aria-hidden="true"><StudioIcon name="wallet" /></span><b>{t("钱包与用量")}</b>{wallet && <small>{hideAmounts ? MASK : wallet}</small>}</button>
+        {destinations.some(([mark]) => mark === "usage") && <button className="studio-wallet" data-action="settings.section" data-value="usage" onClick={() => onSettings("usage")}><span aria-hidden="true"><StudioIcon name="wallet" /></span><b>{t("钱包与用量")}</b>{wallet && <small>{hideAmounts ? MASK : wallet}</small>}</button>}
         <button className="studio-wallet studio-feedback" data-action="feedback.open" onClick={() => onFeedback(feedbackEntryTab(feedbackUnread))}>
           <span aria-hidden="true"><StudioIcon name="feedback" /></span>
           <b>{t("发送反馈")}</b>
