@@ -33,7 +33,7 @@ export function KeysSheet() {
       hint={t("下列按键在窗口中生效；标着 ⌘ 的地方，Windows 与 Linux 上是 Ctrl。")}
     >
       {KEYS.map(([keys, what]) => (
-        <div className="lrow" key={keys + what}>
+        <div className="lrow keys-row" key={keys + what}>
           <span className="ds"><kbd>{keys}</kbd></span>
           <span className="tx"><span className="lb">{t(what)}</span></span>
         </div>
