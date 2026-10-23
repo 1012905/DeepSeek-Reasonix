@@ -1086,14 +1086,14 @@ body { background: var(--page) !important; }
 .compose:focus-within::after { border-color: #4a4e47; }
 .compose .prompt { display: none; }
 .compose .fmain { display: block; }
-.compose textarea { min-height: 48px; color: var(--text); font-size: var(--read); line-height: 1.65; }
+.compose textarea { display: block; min-height: 48px; color: var(--text); font-size: var(--read); line-height: 1.65; }
 @media (pointer: coarse) { .compose textarea { font-size: max(calc(16px * var(--fs-scale, 1)), var(--read)); } }
 .compose textarea::placeholder { color: var(--ghost); }
 .compose .fmain { position: relative; timeline-scope: --draft; }
 :root .compose .fmain textarea[data-chips] { color: transparent; caret-color: var(--text); scroll-timeline: --draft block; }
 .chipmirror {
-  position: absolute; margin: 0; border: 0; overflow: hidden; pointer-events: none;
-  color: var(--text); white-space: pre-wrap; overflow-wrap: break-word; box-sizing: content-box;
+  position: absolute; inset: 0; margin: 0; border: 0; overflow: hidden; pointer-events: none;
+  color: var(--text); white-space: pre-wrap; overflow-wrap: break-word; box-sizing: border-box;
 }
 .chipflow { animation: chipfollow linear both; animation-timeline: --draft; }
 @keyframes chipfollow { to { transform: translateY(calc(-1 * var(--travel, 0px))); } }
