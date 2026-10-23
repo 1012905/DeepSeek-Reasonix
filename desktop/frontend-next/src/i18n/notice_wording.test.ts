@@ -9,6 +9,7 @@ const PAYLOAD: Record<string, string | undefined> = {
   extension_skipped: JSON.stringify({ extension: "e", point: "tool.before" }),
   inbox_recovered: JSON.stringify({ count: 2 }),
   permission_rules_dormant: JSON.stringify({ rules: [{ list: "ask", rule: "Foo(bar)" }] }),
+  job_started: JSON.stringify({ id: "j", label: "build" }),
   job_finished: JSON.stringify({ id: "j", label: "build" }),
   job_killed: JSON.stringify({ id: "j", label: "build" }),
   job_failed: JSON.stringify({ id: "j", label: "build" }),

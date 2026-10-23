@@ -91,6 +91,7 @@ var ChineseTraditional = Messages{
 	TUIDeclinedFmt:                "已拒絕 %s %s",
 	NoticeUnappliedSteerFmt:       "引導沒有生效：這一輪在處理它之前就結束了。如果仍然需要，請再發送一次：\n%s",
 	NoticeExtSkippedFmt:           "擴充 %s 的配套背景程式沒有執行，本次在 %s 已被跳過。用 /plugins 查看並啟動它，或停用該擴充。",
+	NoticeJobStartedFmt:           "背景任務已開始：%s",
 	NoticeJobFinishedFmt:          "背景任務已結束：%s",
 	NoticeJobKilledFmt:            "背景任務已終止：%s",
 	NoticeJobFailedFmt:            "背景任務 %s 失敗，需要處理",
