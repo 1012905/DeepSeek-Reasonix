@@ -237,10 +237,10 @@ func completeV4Import(path string, s sessionv4.Session, start BranchMeta) (bool,
 // lose them. It returns the messages the copy holds afterwards, so the sidecar
 // describes the conversation that exists rather than the one in the source.
 func absorbInterruptedCopy(path string, t sessionv4.Transcript) ([]provider.Message, error) {
-	if _, err := os.Lstat(path); err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			return nil, err
-		}
+	// sessionArtifactExists is the store's reader for this question. It answers
+	// bool, so missing and unreadable look alike; a copy that is there but
+	// cannot be read still fails when it is loaded below.
+	if !sessionArtifactExists(path) {
 		sess := NewSession("")
 		sess.Messages = t.Messages
 		if err := sess.SaveIfAbsent(path); err != nil && !os.IsExist(err) {
