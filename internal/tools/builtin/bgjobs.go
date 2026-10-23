@@ -225,7 +225,7 @@ func (waitJob) Description() string {
 }
 
 func (waitJob) Schema() json.RawMessage {
-	return json.RawMessage(`{"type":"object","properties":{"job_ids":{"type":"array","items":{"type":"string"},"description":"Background job ids to wait for. Omit to wait for every currently-running job."},"timeout_seconds":{"type":"integer","description":"Optional maximum seconds to block before returning current progress. Omit to wait until the jobs finish — one long wait costs one round, where polling in short steps costs one per step.","minimum":1},"until_output_matches":{"type":"string","description":"Optional regular expression (RE2). Return early as soon as a job writes something matching it. Use it to wait once for the line you actually care about — a completion marker, or an error — instead of polling to check."}}}`)
+	return json.RawMessage(`{"type":"object","properties":{"job_ids":{"type":"array","items":{"type":"string"},"description":"Background job ids to wait for. Omit to wait for every currently-running job."},"timeout_seconds":{"type":"integer","description":"Seconds to block before returning. Every wait is capped at 300, including when this is omitted. On timeout the result carries progress; read it, then wait again.","minimum":1,"maximum":300},"until_output_matches":{"type":"string","description":"Optional regular expression (RE2). Return early as soon as a job writes something matching it. Use it to wait once for the line you actually care about — a completion marker, or an error — instead of polling to check."}}}`)
 }
 
 func (waitJob) ReadOnly() bool { return true }
@@ -254,7 +254,8 @@ func (waitJob) Execute(ctx context.Context, args json.RawMessage) (string, error
 	if !ok {
 		return "", fmt.Errorf("background jobs are not available in this context")
 	}
-	opts := jobs.WaitOptions{Timeout: time.Duration(p.TimeoutSeconds) * time.Second}
+	waitSeconds, capped := clampWaitSeconds(p.TimeoutSeconds)
+	opts := jobs.WaitOptions{Timeout: time.Duration(waitSeconds) * time.Second}
 	if emit, ok := tool.ProgressFrom(ctx); ok {
 		opts.Echo = emit
 	}
@@ -270,6 +271,12 @@ func (waitJob) Execute(ctx context.Context, args json.RawMessage) (string, error
 		return "No background jobs to wait for.", nil
 	}
 	var b strings.Builder
+	// Only a wait that actually reached the ceiling is described as having
+	// waited it. A finished job returns first, and saying otherwise would
+	// report a wait that never happened.
+	if capped && outcome == jobs.WaitTimedOut {
+		fmt.Fprintf(&b, "Waited %ds, the ceiling for one wait; ask again to keep waiting.\n\n", waitSeconds)
+	}
 	if outcome == jobs.WaitMatched {
 		b.WriteString("Returned early: a job wrote something matching until_output_matches.\n\n")
 	}
@@ -291,6 +298,22 @@ func (waitJob) Execute(ctx context.Context, args json.RawMessage) (string, error
 		}
 	}
 	return b.String(), jobsFailed(results)
+}
+
+// waitCeilingSeconds caps how long one wait may block. A bounded wait returns
+// progress the caller can act on; an unbounded one holds the turn open on a job
+// that may never finish, which is indistinguishable from a hung session.
+const waitCeilingSeconds = 300
+
+// clampWaitSeconds resolves how long one wait may block. Omitting the timeout
+// means "wait for the jobs" but not "forever": a job that never finishes then
+// holds the turn open, and the caller cannot tell that from a hung session.
+// The cap is reported rather than applied silently.
+func clampWaitSeconds(requested int) (seconds int, capped bool) {
+	if requested <= 0 || requested > waitCeilingSeconds {
+		return waitCeilingSeconds, true
+	}
+	return requested, false
 }
 
 // stillRunning states what happened while the caller waited. No thresholds and

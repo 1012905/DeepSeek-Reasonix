@@ -754,7 +754,8 @@
             "type": "array"
           },
           "timeout_seconds": {
-            "description": "Optional maximum seconds to block before returning current progress. Omit to wait until the jobs finish — one long wait costs one round, where polling in short steps costs one per step.",
+            "description": "Seconds to block before returning. Every wait is capped at 300, including when this is omitted. On timeout the result carries progress; read it, then wait again.",
+            "maximum": 300,
             "minimum": 1,
             "type": "integer"
           },
