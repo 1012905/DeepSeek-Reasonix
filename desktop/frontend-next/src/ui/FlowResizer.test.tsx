@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook } from "@testing-library/react";
 import "./testkit";
-import { barsFit, flowCeiling, flowFloor, useColumn } from "./FlowResizer";
+import { barsFit, flowCeiling, flowFloor, FlowGrips, useColumn, type Column } from "./FlowResizer";
 
 const RAIL_MIN = 232;
 const DOCK_MIN = 320;
@@ -106,5 +106,44 @@ describe("the column's remembered width", () => {
     expect(result.current.width).toBe(result.current.floor);
     // Asked for, still remembered — the clamp is about what is drawn.
     expect(result.current.dragged).toBe(100);
+  });
+});
+
+describe("the keys walk the same path the hand does", () => {
+  const column = (over: Partial<Column> = {}): Column => ({
+    width: 900, floor: 760, ceiling: 1048, rail: 300, dock: 400, dragged: 900,
+    commit: () => {},
+    ...over,
+  });
+
+  const press = (edge: "l" | "r", key: string, shiftKey = false, from = 900) => {
+    const seen: number[] = [];
+    const { container, unmount } = render(
+      <FlowGrips column={column({ width: from, commit: (w) => seen.push(w) })} />,
+    );
+    fireEvent.keyDown(container.querySelector(`.flowgrip-${edge}`)!, { key, shiftKey });
+    unmount();
+    return seen;
+  };
+
+  it("widens towards its own side on both handles", () => {
+    // Left handle, ArrowLeft: the edge travels away from the text, so it grows.
+    expect(press("l", "ArrowLeft")).toEqual([912]);
+    expect(press("l", "ArrowRight")).toEqual([888]);
+    // The right handle mirrors it — the same outward direction, the same result.
+    expect(press("r", "ArrowRight")).toEqual([912]);
+    expect(press("r", "ArrowLeft")).toEqual([888]);
+  });
+
+  it("takes a longer step with Shift and jumps to the floor with Home", () => {
+    expect(press("l", "ArrowLeft", true)).toEqual([948]);
+    expect(press("l", "Home")).toEqual([760]);
+  });
+
+  it("asks for nothing at either end rather than committing what it cannot reach", () => {
+    // Already as wide as the window allows: widening again commits nothing.
+    expect(press("l", "ArrowLeft", false, 1048)).toEqual([]);
+    // Already at the readable measure: narrowing again commits nothing.
+    expect(press("l", "ArrowRight", false, 760)).toEqual([]);
   });
 });
