@@ -1530,7 +1530,6 @@ body { background: var(--page) !important; }
 :root[data-theme="light"] .studio-settings:hover,
 :root[data-theme="light"] .studio-wallet:hover { background: var(--hair); color: var(--text); }
 :root[data-theme="light"] .rail .machrow { color: var(--text); }
-:root[data-theme="light"] .studio-wallet,
 :root[data-theme="light"] .studio-settings { color: var(--muted); }
 :root[data-theme="light"] .studio-meterrail { color: var(--ghost); }
 :root[data-theme="light"] .studio-meterrail > button { color: var(--ghost); }
@@ -2964,16 +2963,15 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 .studio-search:hover,
 .studio-quicknav button:hover { color: var(--text); background: var(--overlay); }
 
-.studio-new-task { background: var(--overlay); border-color: var(--hair); color: var(--text); }
-.studio-new-task:hover { background: color-mix(in srgb, var(--overlay) 92%, var(--text)); border-color: var(--border); color: var(--text); }
-:root[data-theme="light"] .studio-new-task,
+.studio-new-task { background: transparent; border-color: transparent; color: var(--text); }
+.studio-new-task:hover { background: var(--overlay); border-color: transparent; color: var(--text); }
 :root[data-theme="light"] .studio-session-segments { background: color-mix(in oklab, var(--overlay), var(--text) 3%); }
-.studio-search,
 .studio-section-label,
 .studio-section-label button,
-.studio-quicknav button,
-.studio-wallet,
 .studio-settings { color: var(--muted); }
+.studio-search,
+.studio-quicknav button,
+.studio-wallet { color: var(--text); }
 .studio-search kbd,
 .studio-quicknav small,
 .rail .wsmeta,
@@ -3255,10 +3253,10 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
   border-top-color: var(--hair) !important;
   color: var(--muted);
 }
-.studio-wallet { color: var(--muted); }
-.studio-wallet b { color: var(--muted); }
+.studio-wallet { color: var(--text); }
+.studio-wallet b { color: var(--text); }
 .studio-wallet small { color: var(--text); font-variant-numeric: tabular-nums; }
-.studio-wallet.studio-feedback > span, .studio-wallet.studio-feedback b { color: var(--accent-ink); }
+.studio-wallet.studio-feedback > span { color: var(--accent-ink); }
 .studio-wallet:hover { background: var(--accent-wash); color: var(--text); }
 .studio-user-foot { border-top-color: var(--hair); }
 .studio-workspace-kind { color: var(--muted); }
