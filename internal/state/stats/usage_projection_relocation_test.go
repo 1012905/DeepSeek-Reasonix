@@ -158,8 +158,8 @@ func auditedPayload(t *testing.T, r RangeStats) string {
 	if r.Tokens != 270 || r.Requests != 5 || r.Turns != 1 {
 		t.Fatalf("fixture totals = %d tokens / %d requests / %d turns, want 270 / 5 / 1", r.Tokens, r.Requests, r.Turns)
 	}
-	if len(r.Cost) != 1 || r.Cost[0].Currency != "CNY" || r.Cost[0].Amount != "3" {
-		t.Fatalf("fixture cost = %+v, want CNY 3", r.Cost)
+	if len(r.Cost) != 2 || r.Cost[0].Currency != "CNY" || r.Cost[0].Amount != "3" || r.Cost[1].Currency != "USD" || r.Cost[1].Amount != "0" {
+		t.Fatalf("fixture cost = %+v, want CNY 3 and the zero-amount USD quote", r.Cost)
 	}
 	return auditSummary(t, r)
 }
