@@ -1,10 +1,12 @@
 package control
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"reasonix/internal/base/testenv"
 	"reasonix/internal/state/sessionstore"
@@ -93,5 +95,24 @@ func TestAForgedSessionGrantInTheSidecarIsNotRestored(t *testing.T) {
 	got := second.SessionAuthorizations().Grants
 	if len(got) != 1 || got[0] != "Bash(go test:*)" {
 		t.Fatalf("restored grants = %v, want only the one the host could have recorded", got)
+	}
+}
+
+// Each change persists from its own goroutine, so an earlier one must not land
+// after a later one and bring a revoked answer back.
+func TestARevokeIsNotUndoneByAnEarlierPersistFinishingLate(t *testing.T) {
+	for i := range 60 {
+		first, path := conversationAt(t, testenv.TempDir(t))
+		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		for j := range 8 {
+			first.approval.grantSession("bash", fmt.Sprintf("go test ./p%d", j))
+		}
+		first.approval.revokeSessionGrant("")
+		time.Sleep(30 * time.Millisecond)
+		if got := sessionstore.LoadSessionGrants(path); len(got) != 0 {
+			t.Fatalf("round %d: sidecar holds %v after every grant was revoked", i, got)
+		}
 	}
 }
