@@ -16,6 +16,24 @@ func Dirs() []string {
 	return dirsFor(runtime.GOOS)
 }
 
+// Caches lists the toolchain caches a build writes through, on every platform.
+// A check that must not trust what a cache holds reads this rather than Dirs:
+// Dirs is what a jail grants, and a host that jails nothing grants nothing.
+func Caches() []string {
+	var dirs []string
+	if dir, err := os.UserCacheDir(); err == nil && dir != "" {
+		dirs = append(dirs, dir)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return dirs
+	}
+	for _, sub := range []string{".cargo", ".npm", "go"} {
+		dirs = append(dirs, filepath.Join(home, sub))
+	}
+	return dirs
+}
+
 func dirsFor(goos string) []string {
 	home, homeErr := os.UserHomeDir()
 	switch goos {

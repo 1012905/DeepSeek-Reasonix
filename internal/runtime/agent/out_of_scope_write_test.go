@@ -40,7 +40,8 @@ func TestTurnWhoseWritesFallOutsideTheWorkspaceIsNotReportedAsFinished(t *testin
 	workspace := t.TempDir()
 	// Deliberately not t.TempDir(): a temp directory is exempt from this rule,
 	// and the case being pinned is a write to a place the person meant to keep.
-	target := filepath.Join(string(filepath.Separator), "outside-watch", "Reasonix CLI.desktop")
+	// The volume comes from the host, so this is absolute on Windows too.
+	target := filepath.Join(filepath.VolumeName(workspace)+string(filepath.Separator), "outside-watch", "Reasonix CLI.desktop")
 
 	reg := tool.NewRegistry()
 	reg.Add(readProbe{})

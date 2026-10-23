@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -20,9 +21,12 @@ import (
 
 // outsideTarget is a path outside every root this host watches and outside the
 // temp directory, which is exempt from the rule under test. It is never
-// written to: the stub writer reports the write instead of performing one.
+// written to: the stub writer reports the write instead of performing one. The
+// volume comes from the host so the path is absolute on Windows too, where a
+// leading separator alone names no drive and the path would read as relative.
 func outsideTarget(name string) string {
-	return filepath.Join(string(filepath.Separator), "outside-watch", name)
+	vol := filepath.VolumeName(os.TempDir())
+	return filepath.Join(vol+string(filepath.Separator), "outside-watch", name)
 }
 
 // ordinaryTurnAgent is a workspace with a read tool and a stub writer, so a
@@ -87,12 +91,10 @@ func TestAReadOnlyInvestigationEndsClean(t *testing.T) {
 // exemption is what keeps every investigation that used a probe from ending
 // under a caveat.
 func TestAScratchWriteCarriesNoCaveat(t *testing.T) {
-	// Named explicitly rather than left to t.TempDir(): which root the suite
-	// runs under is an environment fact, and a test whose meaning depends on it
-	// passes here and fails everywhere else.
-	tempRoot := t.TempDir()
-	t.Setenv("TMPDIR", tempRoot)
-	scratch := filepath.Join(tempRoot, sessiontemp.Prefix()+"probe", "probe.go")
+	// Built from the host's own temp root rather than a variable this test sets:
+	// which names that root goes by is the host's fact on every platform, and
+	// the directory sessiontemp creates is always a direct child of it.
+	scratch := filepath.Join(os.TempDir(), sessiontemp.Prefix()+"probe", "probe.go")
 	a, _ := ordinaryTurnAgent(t,
 		testutil.Turn{ToolCalls: []provider.ToolCall{{ID: "w1", Name: "write_file", Arguments: fmt.Sprintf(`{"path":%q}`, scratch)}}},
 		testutil.Turn{Text: "探针跑完了，结论见上面。"},
@@ -193,10 +195,9 @@ func TestOutsideWriteDetailIsBounded(t *testing.T) {
 // path. A person who asks for a file under the public temp directory asked for
 // something the host cannot verify afterwards, and that has to show.
 func TestADeliverableInThePublicTempDirectoryIsNotExempt(t *testing.T) {
-	// The suite runs with TMPDIR pointed at the session scratch directory, so
-	// the public temp root is named here rather than read from the environment.
-	t.Setenv("TMPDIR", "/tmp")
-	target := filepath.Join("/tmp", "deliverable.txt")
+	// Beside the scratch directories, not inside one: the exemption names the
+	// directory sessiontemp hands out, not the root it sits in.
+	target := filepath.Join(os.TempDir(), "deliverable.txt")
 	if underScratchOrCache(target) {
 		t.Fatalf("%s is exempt; a path the host cannot verify afterwards must not be", target)
 	}
@@ -242,25 +243,32 @@ func TestTheSameReceiptsGoFromDoneToPartial(t *testing.T) {
 // resembles one. A folder a person could create under their own project must
 // not buy silence, and neither must an installed executable.
 func TestTheExemptionIsNarrowerThanALookalikePath(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("TMPDIR", filepath.Join(home, "tmp"))
+	// The host's roots are stated rather than steered through variables, which
+	// each platform spells differently; the rule under test takes them as input.
+	root := t.TempDir()
+	tempRoot := filepath.Join(root, "tmp")
+	caches := []string{filepath.Join(root, "go")}
+
 	for _, dir := range []string{
-		filepath.Join(home, "projects", "reasonix-session-tmp-backup"),
-		filepath.Join(home, "work", "deep", "reasonix-session-tmp-x"),
+		filepath.Join(root, "projects", "reasonix-session-tmp-backup"),
+		filepath.Join(tempRoot, "deep", "reasonix-session-tmp-x"),
 	} {
-		if underScratchOrCache(filepath.Join(dir, "notes.md")) {
+		if disposable(filepath.Join(dir, "notes.md"), tempRoot, caches) {
 			t.Fatalf("%s was exempt: a directory can claim the scratch name by spelling it", dir)
 		}
 	}
 
-	installed := filepath.Join(home, "go", "bin", "mytool")
-	if underScratchOrCache(installed) {
+	installed := filepath.Join(root, "go", "bin", "mytool")
+	if disposable(installed, tempRoot, caches) {
 		t.Fatalf("%s was exempt: go install puts the user's own executable there", installed)
 	}
-	cached := filepath.Join(home, "go", "pkg", "mod", "cache", "x.go")
-	if !underScratchOrCache(cached) {
+	cached := filepath.Join(root, "go", "pkg", "mod", "cache", "x.go")
+	if !disposable(cached, tempRoot, caches) {
 		t.Fatalf("%s was not exempt: a module cache is what the build writes through", cached)
+	}
+	scratch := filepath.Join(tempRoot, sessiontemp.Prefix()+"run", "probe.go")
+	if !disposable(scratch, tempRoot, caches) {
+		t.Fatalf("%s was not exempt: the directory sessiontemp hands out is the host's to spend", scratch)
 	}
 }
 

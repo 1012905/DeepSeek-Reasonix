@@ -35,21 +35,28 @@ func (a *Agent) outsideObservedWrites() []string {
 	return a.relativeUnique(outside)
 }
 
-// underScratchOrCache reports a path the host owns and disposes of: inside the
-// session's own scratch directory, or inside a toolchain cache. A public
-// temporary root is not exempt on its own — a person who asked for a file there
-// asked for something to keep, and nothing the host watches says it arrived.
+// underScratchOrCache reports a path the host disposes of on its own: inside the
+// directory this session was handed for temporary work, or inside a toolchain
+// cache. A shared temporary root is neither — a person who asked for a file
+// there asked for something to keep, and nothing the host watches says it
+// arrived.
 func underScratchOrCache(path string) bool {
+	return disposable(path, os.TempDir(), hostwrite.Caches())
+}
+
+// disposable is the rule above with the host's roots passed in, so its edges are
+// decidable without an environment that happens to sit where the rule looks.
+func disposable(path, tempRoot string, caches []string) bool {
 	if !filepath.IsAbs(path) {
 		return false
 	}
 	target := filepath.Clean(path)
-	if withoutSessionScratch(target) != target {
+	if insideSessionScratch(target, tempRoot) {
 		return true
 	}
-	for _, dir := range hostwrite.Dirs() {
+	for _, dir := range caches {
 		dir = strings.TrimSpace(dir)
-		if dir == "" || hostTempRoot(dir) {
+		if dir == "" {
 			continue
 		}
 		clean := filepath.Clean(dir)
@@ -66,31 +73,18 @@ func underScratchOrCache(path string) bool {
 	return false
 }
 
-// withoutSessionScratch drops the prefix of path through the session's scratch
-// directory, or returns path unchanged when it does not lie inside one. A
-// directory earns that name only as a direct child of a root the host uses for
-// temporary files: any directory could otherwise claim the name.
-func withoutSessionScratch(path string) string {
-	prefix := sessiontemp.Prefix()
-	for dir := path; ; dir = filepath.Dir(dir) {
-		if strings.HasPrefix(filepath.Base(dir), prefix) && hostTempRoot(filepath.Dir(dir)) {
-			return filepath.Dir(dir)
-		}
-		if parent := filepath.Dir(dir); parent == dir {
-			return path
-		}
+// insideSessionScratch reports a path under a directory sessiontemp creates:
+// directly beneath the temporary root, named with the scratch prefix. Only the
+// first component below that root is read, so a folder deeper in the tree cannot
+// earn an exemption by spelling the prefix.
+func insideSessionScratch(path, tempRoot string) bool {
+	if tempRoot == "" {
+		return false
 	}
-}
-
-// hostTempRoot reports a directory that is merely where temporary files go.
-func hostTempRoot(dir string) bool {
-	clean := filepath.Clean(dir)
-	if temp := os.TempDir(); temp != "" && clean == filepath.Clean(temp) {
-		return true
+	rel, err := filepath.Rel(filepath.Clean(tempRoot), path)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
 	}
-	switch clean {
-	case "/tmp", "/private/tmp", "/private/var/folders":
-		return true
-	}
-	return false
+	first, _, _ := strings.Cut(rel, string(filepath.Separator))
+	return strings.HasPrefix(first, sessiontemp.Prefix())
 }
