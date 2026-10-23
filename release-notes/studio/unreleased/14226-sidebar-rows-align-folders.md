@@ -1,2 +1,2 @@
-- 修复：隐藏图标栏时，侧栏上下两组行与标志都靠左对齐到项目文件夹图标，标志上下留白相等；上面几行去掉提示和快捷键文字（快捷键在悬停提示里）。关联 #14226。
-- Fixed: with the icon rail hidden, the sidebar's rows and logo line up with the project folders and the logo has equal space above and below; the top rows drop hint text and keys. Refs #14226.
+- 修复：隐藏图标栏时，侧栏各行图标对齐项目文件夹，标志首字母对齐行文字起点且上下留白相等；上面几行去掉提示和快捷键文字。关联 #14226。
+- Fixed: with the icon rail hidden, sidebar icons line up with the project folders, the logo starts where the labels start with equal space around it, and the top rows drop hint text. Refs #14226.

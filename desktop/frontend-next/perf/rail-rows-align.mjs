@@ -23,7 +23,7 @@ const check = (name, ok, detail = "") => {
 const browser = await chromium.launch();
 try {
   for (const scheme of ["light", "dark"]) {
-    const ctx = await browser.newContext({ locale: "zh-CN", colorScheme: scheme, viewport: { width: 1280, height: 900 }, reducedMotion: "reduce" });
+    const ctx = await browser.newContext({ locale: "zh-CN", colorScheme: scheme, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 4, reducedMotion: "reduce" });
     await ctx.addInitScript(() => { try { localStorage.setItem("rx-nav-rail", "off"); } catch {} });
     const page = await ctx.newPage();
     await page.goto(BASE, { waitUntil: "networkidle" });
@@ -64,6 +64,29 @@ try {
       return { above: logo.top, below: first.top - logo.bottom };
     });
     check(`${scheme}: the logo has the same space above and below it`, Math.abs(lockup.above - lockup.below) <= TOLERANCE, `above ${lockup.above}, below ${lockup.below}`);
+    const logo = await page.evaluate(() => {
+      const r = document.querySelector(".studio-brand-logo").getBoundingClientRect();
+      return { x: r.x, y: r.y, h: r.height };
+    });
+    const shot = await page.screenshot({ clip: { x: 0, y: logo.y, width: 120, height: logo.h } });
+    const inkLeft = await page.evaluate(async (b64) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${b64}`;
+      await img.decode();
+      const c = document.createElement("canvas");
+      c.width = img.width; c.height = img.height;
+      const g = c.getContext("2d");
+      g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      const bg = [d[0], d[1], d[2]];
+      for (let x = 0; x < c.width; x++) for (let y = 0; y < c.height; y++) {
+        const i = (y * c.width + x) * 4;
+        if (Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > 60) return x / (c.width / 120);
+      }
+      return null;
+    }, shot.toString("base64"));
+    const labelLeft = seen[0].text;
+    check(`${scheme}: the logo's first letter starts where the row labels start`, inkLeft !== null && Math.abs(inkLeft - labelLeft) <= TOLERANCE, `logo ink ${inkLeft}, labels ${labelLeft}`);
     const looks = new Set(seen.map((r) => r.look));
     check(`${scheme}: every row's label has one size, weight and colour`, looks.size === 1, seen.map((r) => `${r.name} ${r.look}`).join("; "));
     const fill = seen.find((r) => r.name === "新建会话")?.fill ?? "";

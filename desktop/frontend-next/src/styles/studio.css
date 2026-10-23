@@ -3986,7 +3986,7 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 .studio-brand {
   height: var(--chrome-h);
   padding-block: 0;
-  padding-left: 0;
+  padding-left: 22px;
   margin-bottom: 0;
 }
 .chrome .thbtn,
