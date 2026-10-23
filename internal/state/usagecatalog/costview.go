@@ -116,7 +116,10 @@ func viewCostSelect(view string) string {
 	}
 	currency := "CASE WHEN " + valuation + " IS NULL THEN cost_currency ELSE '" + view + "' END"
 	mode := "CASE WHEN billing_mode='" + pricing.BillingModeSubscriptionEquivalent + "' THEN '" + ModeEstimate + "' ELSE '' END"
+	// cost_currency<>'' is the whole test for "priced": a priced line whose
+	// amount is 0 is free, not unknown, and keeps its currency, its zero and
+	// its estimate flag in the money the JSONL read reports.
 	return `INSERT INTO usage_cost(day,source,model_ref,view,currency,mode,cost,estimated)
         SELECT day,source,model_ref,'` + view + `',` + currency + `,` + mode + `,SUM(COALESCE(` + valuation + `,cost)),MAX(cost_estimated)
-        FROM usage_records WHERE day=? AND cost_currency<>'' AND cost<>0 GROUP BY day,source,model_ref,` + currency + `,` + mode
+        FROM usage_records WHERE day=? AND cost_currency<>'' GROUP BY day,source,model_ref,` + currency + `,` + mode
 }

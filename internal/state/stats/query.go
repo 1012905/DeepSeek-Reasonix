@@ -374,9 +374,12 @@ func rangeStatsFromRollups(f SourceFilter, days []string, rows []usagecatalog.Ro
 			}
 			for _, entry := range row.Costs {
 				currency := pricing.NormalizeCurrency(entry.Currency)
-				if currency == "" || entry.Amount == 0 {
+				if currency == "" {
 					continue
 				}
+				// A currency with a zero amount is a priced free quote: the
+				// exact JSONL read reports {currency 0}, and so does this one,
+				// including its estimate flag.
 				dayCost.add(entry.Mode, currency, pricing.Amount(entry.Amount))
 				totalCost.add(entry.Mode, currency, pricing.Amount(entry.Amount))
 				out.CostEstimated = out.CostEstimated || (entry.Mode == "" && entry.Estimated)
