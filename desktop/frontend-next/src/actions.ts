@@ -284,6 +284,7 @@ export const ACTIONS: UIAction[] = [
   { id: "feedback.tab", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.category", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.body", kind: "view", target: "none", proof: "interaction" },
+  { id: "feedback.preview", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.name", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.contact", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.shot.pick", kind: "view", target: "none", proof: "interaction" },
