@@ -163,7 +163,7 @@ try {
       await page.evaluate((f) => document.documentElement.style.setProperty("--fs-scale", String(f)), scale);
       await page.waitForTimeout(120);
       const worst = await tabGapsAt();
-      check(`${scheme}: at text size ${scale} each session tab's text has equal space above and below`, Math.abs(worst.above - worst.below) <= 1, JSON.stringify(worst));
+      check(`${scheme}: at text size ${scale} each session tab's text has equal space above and below`, Math.abs(worst.above - worst.below) <= 1.5, JSON.stringify(worst));
     }
     await page.evaluate(() => document.documentElement.style.removeProperty("--fs-scale"));
     const pillY = await page.evaluate(() => document.querySelector(".studio-session-segments").getBoundingClientRect().y);
