@@ -1,2 +1,2 @@
-- 修复：隐藏图标栏时，侧栏各行图标对齐项目文件夹，标志首字母对齐行文字起点且上下留白相等；上面几行去掉提示和快捷键文字。关联 #14226。
-- Fixed: with the icon rail hidden, sidebar icons line up with the project folders, the logo starts where the labels start with equal space around it, and the top rows drop hint text. Refs #14226.
+- 修复：隐藏图标栏时，侧栏图标对齐项目文件夹，标志首字母对齐行文字起点；上面几行去掉提示文字；账号头像改为单一圆角方块，不再是圆套方框。关联 #14226。
+- Fixed: with the icon rail hidden, sidebar icons line up with the project folders and the logo with the labels; top rows drop hints; the account avatar is one rounded square. Refs #14226.

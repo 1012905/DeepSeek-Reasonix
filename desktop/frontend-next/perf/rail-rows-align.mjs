@@ -87,6 +87,15 @@ try {
     }, shot.toString("base64"));
     const labelLeft = seen[0].text;
     check(`${scheme}: the logo's first letter starts where the row labels start`, inkLeft !== null && Math.abs(inkLeft - labelLeft) <= TOLERANCE, `logo ink ${inkLeft}, labels ${labelLeft}`);
+    const avatar = await page.evaluate(() => {
+      const ini = document.querySelector(".studio-user-foot .ini");
+      const row = ini?.closest(".acctrow");
+      if (!ini || !row) return null;
+      const a = ini.getBoundingClientRect();
+      const r = row.getBoundingClientRect();
+      return { same: Math.abs(a.width - r.width) <= 1 && Math.abs(a.height - r.height) <= 1, radius: getComputedStyle(ini).borderRadius, rowRadius: getComputedStyle(row).borderRadius };
+    });
+    check(`${scheme}: the account avatar is one rounded square, not a circle inside another shape`, avatar !== null && avatar.same && avatar.radius === avatar.rowRadius, JSON.stringify(avatar));
     const looks = new Set(seen.map((r) => r.look));
     check(`${scheme}: every row's label has one size, weight and colour`, looks.size === 1, seen.map((r) => `${r.name} ${r.look}`).join("; "));
     const fill = seen.find((r) => r.name === "新建会话")?.fill ?? "";
