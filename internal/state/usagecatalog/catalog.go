@@ -417,7 +417,10 @@ func projectRecord(ctx context.Context, tx *sql.Tx, entry Entry) error {
         requests=requests+excluded.requests,turns=turns+excluded.turns,cost_incomplete=cost_incomplete+excluded.cost_incomplete`,
 		entry.Day, entry.Source, entry.ModelRef, entry.Provider,
 		entry.Prompt, entry.Completion, entry.Reasoning, entry.CacheHit, entry.CacheMiss, entry.Total, entry.Requests, entry.Turns, incomplete)
-	if err != nil || entry.CostCurrency == "" || entry.Cost == 0 {
+	// A currency means the line was priced; its amount may genuinely be zero
+	// (a free or zero-rate quote). Only a line with no currency carries no
+	// price at all, so only that one has no cost rows.
+	if err != nil || entry.CostCurrency == "" {
 		return err
 	}
 	estimated := 0
