@@ -1539,8 +1539,9 @@ as manual setup instead of being installed with an incomplete configuration;
 query-specific cached results remain available during a registry outage.
 
 The normal setup path is intentionally one step. Use Desktop's **Add and
-connect**, `/mcp add`, or ask Reasonix to install a package or URL. These
-explicit installs are saved to the user-global `config.toml` and are also
+connect**, `n` in the terminal `/mcp` panel, or ask Reasonix to install a
+package or URL. These explicit installs are saved to the user-global
+`config.toml` (`p` in the panel: `reasonix.toml`) and are also
 authorization: the server connects in the current session, and no second trust
 step appears now or on the next startup. Servers declared by the current
 project's `reasonix.toml` or `.mcp.json` remain in that project and are trusted
