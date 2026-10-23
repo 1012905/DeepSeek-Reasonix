@@ -3986,8 +3986,8 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 .studio-brand {
   height: var(--chrome-h);
   padding-block: 0;
-  padding-left: max(0px, 44px - var(--nav-w));
-  margin-bottom: 12px;
+  padding-left: 0;
+  margin-bottom: 0;
 }
 .chrome .thbtn,
 .chrome .top-action { min-height: 30px; }

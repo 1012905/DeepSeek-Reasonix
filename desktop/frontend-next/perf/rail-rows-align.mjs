@@ -58,6 +58,12 @@ try {
       return r ? r.x + r.width / 2 : null;
     });
     check(`${scheme}: the icons sit on the project folders' line`, folder !== null && Math.abs(spread0(seen, folder)) <= TOLERANCE, `folders ${folder}; rows ${show("icon")}`);
+    const lockup = await page.evaluate(() => {
+      const logo = document.querySelector(".studio-brand-logo").getBoundingClientRect();
+      const first = document.querySelector(".studio-new-task").getBoundingClientRect();
+      return { above: logo.top, below: first.top - logo.bottom };
+    });
+    check(`${scheme}: the logo has the same space above and below it`, Math.abs(lockup.above - lockup.below) <= TOLERANCE, `above ${lockup.above}, below ${lockup.below}`);
     const looks = new Set(seen.map((r) => r.look));
     check(`${scheme}: every row's label has one size, weight and colour`, looks.size === 1, seen.map((r) => `${r.name} ${r.look}`).join("; "));
     const fill = seen.find((r) => r.name === "新建会话")?.fill ?? "";
