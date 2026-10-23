@@ -244,7 +244,13 @@ function FlowGrip({ edge, column }: { edge: "l" | "r"; column: Column }) {
     const d = drag.current;
     if (!d) return;
     if (d.app) {
-      d.app.style.setProperty("--flow-w", `${column.width}px`);
+      // A width that was never committed has no owner on `.app`: `App` writes
+      // `--flow-w` itself only once something has been dragged. Putting a pixel
+      // value back here would leave it owned by nobody, so React would never
+      // remove it and the column would stay pinned to that width while the
+      // window was free to change around it.
+      if (column.dragged > 0) d.app.style.setProperty("--flow-w", `${column.width}px`);
+      else d.app.style.removeProperty("--flow-w");
       d.app.style.setProperty("--rail-open", `${column.rail}px`);
       d.app.style.setProperty("--dock-open", `${column.dock}px`);
     }
