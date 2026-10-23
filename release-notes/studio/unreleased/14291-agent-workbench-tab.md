@@ -1,0 +1,2 @@
+- 新增：从“子代理”面板打开子代理，会在工作台开成标签页，读内核记录的完整对话（运行中持续刷新），工具步骤可折叠、可同时开多个；找不到记录时仍用原对话框。关联 #13523。
+- Added: a sub-agent opened from the Sub-agents panel is now a Workbench tab reading the kernel's full record (live while it runs), foldable, several at once; no record keeps the dialog. Refs #13523.
