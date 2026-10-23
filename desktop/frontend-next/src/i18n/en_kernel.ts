@@ -116,6 +116,7 @@ export const EN_KERNEL: Record<string, string> = {
   "对话内容索引暂时无法回答，稍后再试": "The conversation index cannot answer right now; try again shortly",
   "已经请求停止这个后台任务，它的进程还没有退出，仍在等待": "A stop was already requested for this background job; its process has not exited yet, so it is still shutting down",
   "该条当前状态不允许此操作": "That entry's current state does not allow this",
+  "这一条可能已经跑过，重新发送可能重复执行；请先查看对话记录，或删除它": "That entry may already have run, so sending it again could repeat it. Check the transcript first, or delete it",
   "待送达已暂停，请先恢复派发再进行操作": "The pending queue is on hold - resume it first",
   "待送达条数已达上限，请先发送部分内容": "The pending queue is full - let a few go out first",
   "待送达总字数已达上限，请先发送部分内容": "The pending queue is out of room - let a few go out first",
