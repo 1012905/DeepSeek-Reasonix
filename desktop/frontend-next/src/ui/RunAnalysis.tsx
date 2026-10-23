@@ -143,7 +143,7 @@ export function RunAnalysis({ rows, availability, onSave, onBack }: {
     <div className="run-analysis" ref={root}>
       <header className="run-analysis-head">
         <span>
-          <button className="run-export run-back" type="button" aria-label={t("返回正文")} title={t("返回正文")} onClick={onBack}>
+          <button className="run-export run-back" type="button" data-action="pane.view" data-value="flow" aria-label={t("返回正文")} title={t("返回正文")} onClick={onBack}>
             <StudioIcon name="chevron" />
           </button>
           <b>{t("运行分析")}</b>
