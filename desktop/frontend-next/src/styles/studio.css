@@ -177,7 +177,7 @@ body { background: var(--page); }
   border-radius: 9px;
   background: var(--raised);
   color: var(--text);
-  font: var(--w-med) calc(12px * var(--fs-scale, 1))/1 var(--ui);
+  font: 500 calc(12px * var(--fs-scale, 1))/1 var(--ui);
   cursor: pointer;
   box-shadow: 0 1px 2px rgb(0 0 0 / .03);
   transition: background var(--m-line), border-color var(--m-line);
@@ -571,7 +571,7 @@ body { background: var(--page) !important; }
 .studio-brand { padding: 0 0 19px; gap: 9px; }
 .studio-new-task {
   height: 34px;
-  padding: 0 10px;
+  padding: 0 7px; gap: 9px;
   border-color: var(--hair);
   border-radius: 7px;
   background: var(--overlay);
@@ -585,8 +585,8 @@ body { background: var(--page) !important; }
 .studio-new-task kbd { color: var(--muted); }
 .studio-search {
   width: 100%; height: 32px; display: flex; align-items: center; gap: 9px;
-  padding: 0 9px; margin: 3px 0 10px; border: 0; border-radius: 6px;
-  background: transparent; color: var(--muted); font: 500 calc(11px * var(--fs-scale, 1))/1 var(--ui); cursor: pointer;
+  padding: 0 8px; margin: 3px 0 10px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--muted); font: 500 calc(12px * var(--fs-scale, 1))/1 var(--ui); cursor: pointer;
 }
 .studio-search:hover { color: var(--text); background: var(--overlay); }
 .studio-search > span { display: grid; place-items: center; }
@@ -609,7 +609,7 @@ body { background: var(--page) !important; }
 }
 .studio-quicknav button:hover { color: var(--text); background: var(--overlay); }
 .studio-quicknav button > span { display: grid; place-items: center; color: var(--accent); text-align: center; }
-.studio-quicknav b { min-width: 0; overflow: hidden; font: 500 calc(11px * var(--fs-scale, 1))/1.4 var(--ui); text-overflow: ellipsis; white-space: nowrap; }
+.studio-quicknav b { min-width: 0; overflow: hidden; font: 500 calc(12px * var(--fs-scale, 1))/1.4 var(--ui); text-overflow: ellipsis; white-space: nowrap; }
 .studio-new-task > .studio-label,
 .studio-search > .studio-label { min-width: 0; display: block; overflow: hidden; color: inherit; font: inherit; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .studio-quicknav small { color: var(--faint); font: 500 calc(9px * var(--fs-scale, 1))/1 var(--ui); }
@@ -1525,7 +1525,7 @@ body { background: var(--page) !important; }
 :root[data-theme="light"] .flow .tool-disclosure .dif-hd { background: var(--overlay); }
 :root[data-theme="light"] .flow .copy { color: var(--ghost); }
 :root[data-theme="light"] .flow .copy:hover { color: var(--text); }
-:root[data-theme="light"] .studio-new-task { border-color: transparent; font-weight: 590; }
+:root[data-theme="light"] .studio-new-task { border-color: transparent; }
 :root[data-theme="light"] .studio-search:hover,
 :root[data-theme="light"] .studio-settings:hover,
 :root[data-theme="light"] .studio-wallet:hover { background: var(--hair); color: var(--text); }
@@ -2152,7 +2152,7 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
   flex-direction: column;
   align-items: stretch;
   gap: 2px;
-  padding: 5px 14px 9px;
+  padding: 5px 22px 9px;
 }
 .studio-wallet {
   width: 100%;
@@ -2161,14 +2161,14 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
   grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
   gap: 7px;
-  padding: 0 8px;
+  padding: 0 7px;
   border: 0;
   border-radius: 5px;
   background: transparent;
   color: var(--muted);
   text-align: left;
   cursor: pointer;
-  font: 500 calc(11px * var(--fs-scale, 1))/1.35 var(--ui);
+  font: 500 calc(12px * var(--fs-scale, 1))/1.35 var(--ui);
 }
 .studio-wallet:hover { background: var(--raised); color: var(--text); }
 .studio-wallet b { font: inherit; }
@@ -3259,7 +3259,6 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 .studio-wallet b { color: var(--muted); }
 .studio-wallet small { color: var(--text); font-variant-numeric: tabular-nums; }
 .studio-wallet.studio-feedback > span, .studio-wallet.studio-feedback b { color: var(--accent-ink); }
-.studio-wallet.studio-feedback b { font-weight: 600; }
 .studio-wallet:hover { background: var(--accent-wash); color: var(--text); }
 .studio-user-foot { border-top-color: var(--hair); }
 .studio-workspace-kind { color: var(--muted); }
