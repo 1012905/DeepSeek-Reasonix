@@ -198,6 +198,11 @@ and selected states, while long titles truncate within the remaining width.
 - The mirror copies the textarea's computed metrics rather than restating them:
   the composer's font, zoom and line height are set in several places, and one
   missed rule shifts every chip.
+- The mirror's edges follow `.fmain` in CSS, so column transitions reflow it in
+  the same layout as the textarea rather than waiting for a resize observer.
+  The textarea is a block, leaving no inline baseline gap in that shared box.
+- The mirror's right padding includes the native textarea scrollbar's width;
+  a space-consuming scrollbar must not give the mirror an extra strip of text.
 - The chip's wash is a `box-shadow` spread, not padding: padding changes the
   width of the run and the caret lands a few pixels beside the letter it is on.
   Weight is left alone for the same reason.
