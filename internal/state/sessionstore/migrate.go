@@ -263,6 +263,16 @@ func importJsonlSessions(entries []os.DirEntry, srcDir, globalDest string, hasEv
 				if err := copySubagentArtifacts(srcDir, destDir, base); err != nil {
 					hadArtifactFailure = true
 				}
+				// The transcript lands before the sidecar that carries its
+				// meaning; a stopped run leaves it here, so finish the sidecar
+				// instead of treating the session as done.
+				wrote, err := completeBranchMetaSidecar(jsonlPath, dest)
+				if err != nil {
+					hadArtifactFailure = true
+				} else if wrote {
+					recordImportedTitle(destDir, base, summary)
+					imported++
+				}
 			}
 			continue
 		}
@@ -276,7 +286,12 @@ func importJsonlSessions(entries []os.DirEntry, srcDir, globalDest string, hasEv
 			_ = os.Chtimes(dest, srcInfo.ModTime(), srcInfo.ModTime())
 		}
 		if copyBranchMeta {
-			copyBranchMetaSidecar(jsonlPath, dest)
+			if err := copyBranchMetaSidecar(jsonlPath, dest); err != nil {
+				// The transcript is there but the session's meaning is not:
+				// leave the import incomplete so the next run finishes it.
+				hadArtifactFailure = true
+				continue
+			}
 			if err := copySubagentArtifacts(srcDir, destDir, base); err != nil {
 				hadArtifactFailure = true
 			}
@@ -716,6 +731,13 @@ func rehomeStrandedSessions(srcDir, globalDest, marker string, projectDir func(s
 			if err := copySubagentArtifacts(srcDir, destDir, base); err != nil {
 				hadCopyFailure = true
 			}
+			// The previous boot may have published the transcript and been
+			// stopped before the sidecar; finish that instead of skipping it.
+			if wrote, err := completeBranchMetaSidecar(srcPath, dest); err != nil {
+				hadCopyFailure = true
+			} else if wrote {
+				recordImportedTitle(destDir, base, summary)
+			}
 			continue // already routed on a previous boot
 		}
 		if err := transformAndCopyJsonl(srcPath, dest); err != nil {
@@ -723,7 +745,9 @@ func rehomeStrandedSessions(srcDir, globalDest, marker string, projectDir func(s
 			continue
 		}
 		_ = os.Chtimes(dest, info.ModTime(), info.ModTime()) // preserve resume ordering
-		copyBranchMetaSidecar(srcPath, dest)
+		if err := copyBranchMetaSidecar(srcPath, dest); err != nil {
+			hadCopyFailure = true
+		}
 		if err := copySubagentArtifacts(srcDir, destDir, base); err != nil {
 			hadCopyFailure = true
 		}
@@ -763,38 +787,6 @@ func strandedSessionDestDir(srcDir, srcPath, base string, projectDir func(string
 		}
 	}
 	return "", ""
-}
-
-// copyBranchMetaSidecar copies <src>.meta to <dst>.meta when present so the
-// desktop sidebar keeps the session's title, topic, and tree position. Best
-// effort: a missing or unreadable sidecar just means the session shows with a
-// generated title.
-func copyBranchMetaSidecar(srcPath, dstPath string) {
-	b, err := os.ReadFile(BranchMetaPath(srcPath))
-	if err != nil {
-		return
-	}
-	dstMeta := BranchMetaPath(dstPath)
-	if err := os.MkdirAll(filepath.Dir(dstMeta), 0o755); err != nil {
-		return
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(dstMeta), ".branch.*.tmp")
-	if err != nil {
-		return
-	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.Write(b); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
-		return
-	}
-	if err := os.Rename(tmpPath, dstMeta); err != nil {
-		os.Remove(tmpPath)
-	}
 }
 
 func copySubagentArtifacts(srcSessionDir, dstSessionDir, parentSession string) error {
