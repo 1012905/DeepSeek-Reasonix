@@ -1167,8 +1167,9 @@ OAuth client 与 token 状态保存在工作区之外、该 server 私有的 Rea
 只在用户显式浏览或安装时联网，不进入启动路径。需要 secret 或必填参数的条目只显示为手动配置，
 不会写入不完整配置；Registry 故障时可回退到同一查询的缓存结果。
 
-普通配置流程现在只有一步：使用桌面端的“添加并连接”、`/mcp add`，或直接让 Reasonix
-安装一个 package 或 URL。此类主动安装统一写入用户全局 `config.toml`，安装本身就是授权：
+普通配置流程现在只有一步：使用桌面端的“添加并连接”、终端 `/mcp` 面板的 `n`，或直接让
+Reasonix 安装一个 package 或 URL。此类主动安装写入用户全局 `config.toml`（按 `p` 写入
+`reasonix.toml`），安装本身就是授权：
 server 会在当前会话连接，现在和下次启动都不会再弹出第二套信任步骤。当前项目
 `reasonix.toml` 或 `.mcp.json` 中声明的 server 保留在项目配置中，同样默认可信，不需要额外
 启动确认。显式 deny 仍然优先；包括声明
