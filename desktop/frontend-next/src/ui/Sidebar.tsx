@@ -256,18 +256,19 @@ export function Sidebar({
         <button
           className="studio-new-task"
           data-action="session.new"
+          title="Alt N"
           onClick={() => void startConversation().catch(onError)}
         >
-          <span aria-hidden="true"><StudioIcon name="plus" /></span><b className="studio-label">{t("新建会话")}</b><kbd>Alt N</kbd>
+          <span aria-hidden="true"><StudioIcon name="plus" /></span><b className="studio-label">{t("新建会话")}</b>
         </button>
-        <button className="studio-search" data-action="workspace.search" onClick={() => setPalette(true)}>
-          <span aria-hidden="true"><StudioIcon name="search" /></span><b className="studio-label">{t("搜索与快捷操作")}</b><kbd>Ctrl K</kbd>
+        <button className="studio-search" data-action="workspace.search" title="Ctrl K" onClick={() => setPalette(true)}>
+          <span aria-hidden="true"><StudioIcon name="search" /></span><b className="studio-label">{t("搜索与快捷操作")}</b>
         </button>
         {!navShown && (
           <div className="studio-quicknav">
             <button data-action="files.open" onClick={onFiles}><span aria-hidden="true"><StudioIcon name="file" /></span><b>{t("文件")}</b></button>
-            <button data-action="settings.section" data-value="ext" onClick={() => onSettings("ext")}><span aria-hidden="true"><StudioIcon name="plug" /></span><b>{t("工具与集成")}</b><small>MCP · Skills</small></button>
-            <button data-action="settings.section" data-value="remote" onClick={() => onSettings("remote")}><span aria-hidden="true"><StudioIcon name="server" /></span><b>{t("运行环境")}</b><small>Local · SSH</small></button>
+            <button data-action="settings.section" data-value="ext" onClick={() => onSettings("ext")}><span aria-hidden="true"><StudioIcon name="plug" /></span><b>{t("工具与集成")}</b></button>
+            <button data-action="settings.section" data-value="remote" onClick={() => onSettings("remote")}><span aria-hidden="true"><StudioIcon name="server" /></span><b>{t("运行环境")}</b></button>
           </div>
         )}
         <div className="studio-session-filters" role="group" aria-label={t("会话范围")}>
