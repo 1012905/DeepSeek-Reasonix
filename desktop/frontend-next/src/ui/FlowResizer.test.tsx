@@ -74,6 +74,20 @@ describe("the two sidebars making room for the column", () => {
     expect(released).toEqual({ rail: 316, dock: 316 });
     expect(barsFit(2400, 760, 316, 316, RAIL_MIN, DOCK_MIN)).toEqual(released);
   });
+
+  it("answers for a width a hand is still holding, not only a committed one", () => {
+    // A drag asks this on every frame. Committing on release only is what let
+    // the column grow under sidebars that had not moved yet, so the answer has
+    // to exist before anything is stored.
+    localStorage.clear();
+    const { result } = renderHook(() => useColumn(316, 400, RAIL_MIN, DOCK_MIN));
+    const bars = result.current.fit(result.current.ceiling);
+    expect(bars.rail).toBeGreaterThanOrEqual(RAIL_MIN);
+    expect(bars.dock).toBeGreaterThanOrEqual(DOCK_MIN);
+    expect(bars.rail + bars.dock).toBeLessThan(316 + 400);
+    // The same rule the committed numbers obey, so committing cannot jump.
+    expect(bars).toEqual(barsFit(document.body.clientWidth, result.current.ceiling, 316, 400, RAIL_MIN, DOCK_MIN));
+  });
 });
 
 describe("the column's remembered width", () => {
@@ -109,10 +123,56 @@ describe("the column's remembered width", () => {
   });
 });
 
+describe("a drag that ends without a release", () => {
+  const into = (over: Partial<Column> = {}) => {
+    const box = document.createElement("div");
+    box.className = "app";
+    document.body.appendChild(box);
+    const column: Column = {
+      width: 760, floor: 760, ceiling: 1048, rail: 316, dock: 316, dragged: 0,
+      commit: () => {},
+      fit: (w) => barsFit(2400, w, 316, 316, RAIL_MIN, DOCK_MIN),
+      ...over,
+    };
+    render(<FlowGrips column={column} />, { container: box });
+    return box;
+  };
+
+  const grip = (box: HTMLElement) => {
+    const el = box.querySelector(".flowgrip-l") as HTMLElement;
+    el.setPointerCapture = () => {};
+    fireEvent.pointerDown(el, { button: 0, clientX: 400, pointerId: 1 });
+    return el;
+  };
+
+  it("leaves no width behind when a first drag is cancelled", () => {
+    // `App` writes `--flow-w` on `.app` only once a width has been committed.
+    // A cancelled first drag must therefore take the value away again: setting
+    // it back would leave a pixel width nobody owns, and the column would stay
+    // pinned to it while the window changed around it.
+    const box = into({ dragged: 0 });
+    const el = grip(box);
+    box.style.setProperty("--flow-w", "900px");
+    fireEvent.pointerCancel(el, { pointerId: 1 });
+    expect(box.style.getPropertyValue("--flow-w")).toBe("");
+    // The sidebars are owned by `App` from the start, so those come back.
+    expect(box.style.getPropertyValue("--rail-open")).toBe("316px");
+  });
+
+  it("puts a committed width back when a later drag is cancelled", () => {
+    const box = into({ dragged: 900, width: 900 });
+    const el = grip(box);
+    box.style.setProperty("--flow-w", "980px");
+    fireEvent.pointerCancel(el, { pointerId: 1 });
+    expect(box.style.getPropertyValue("--flow-w")).toBe("900px");
+  });
+});
+
 describe("the keys walk the same path the hand does", () => {
   const column = (over: Partial<Column> = {}): Column => ({
     width: 900, floor: 760, ceiling: 1048, rail: 300, dock: 400, dragged: 900,
     commit: () => {},
+    fit: (w) => barsFit(2400, w, 300, 400, RAIL_MIN, DOCK_MIN),
     ...over,
   });
 
