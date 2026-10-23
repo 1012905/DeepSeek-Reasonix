@@ -160,6 +160,18 @@ func TestUnreadableInboxNoticeFollowsTheUILanguage(t *testing.T) {
 	}
 }
 
+func TestACompactionNoticeFollowsTheUILanguage(t *testing.T) {
+	inChinese(t)
+	detail := event.CompactionNotice{Mode: "summarized", SourceTokens: 122525, ProjectionTokens: 61192}.Encode()
+	got := renderNotice(&Item{Code: event.NoticeCodeCompactionTelemetry, Text: "Context compacted (summarized): about 122525 -> 61192 tokens.", Detail: detail})
+	if !strings.Contains(got, "上下文已压缩（摘要压缩）：约 122525 → 61192 tokens") || strings.Contains(got, "Context compacted") {
+		t.Fatalf("compaction = %q", got)
+	}
+	if got := renderNotice(&Item{Code: event.NoticeCodeCompactionTelemetry, Text: "kernel english", Detail: "not json"}); !strings.Contains(got, "kernel english") {
+		t.Fatalf("a Detail that is not the payload must keep the kernel's text, got %q", got)
+	}
+}
+
 func TestJobNoticesFollowTheUILanguage(t *testing.T) {
 	inChinese(t)
 	detail := event.JobNotice{Kind: "bash", ID: "bash-126", Label: "make build"}.Encode()
