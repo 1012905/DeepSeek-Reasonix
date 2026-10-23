@@ -191,6 +191,7 @@ var mirroredWireTypes = []wireMirror{
 	{"internal/session/control/schedules.go", "SchedulePolicyView", tsScheduleFile, "SchedulePolicyView"},
 	{"internal/session/control/schedules.go", "ScheduleBoard", tsScheduleFile, "ScheduleBoard"},
 	{"internal/session/control/schedules.go", "ScheduleFolder", tsScheduleFile, "ScheduleFolder"},
+	{"internal/session/control/schedules.go", "ScheduleCurrent", tsScheduleFile, "ScheduleCurrent"},
 	{"internal/session/control/schedules.go", "SchedulePreview", tsScheduleFile, "SchedulePreview"},
 	{"internal/session/control/schedules.go", "SchedulePendingView", tsScheduleFile, "SchedulePendingView"},
 	{"internal/session/control/schedules.go", "ScheduleResultView", tsScheduleFile, "ScheduleResultView"},
