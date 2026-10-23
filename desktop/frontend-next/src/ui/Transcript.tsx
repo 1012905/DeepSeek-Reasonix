@@ -52,7 +52,7 @@ interface Props {
   // node you clicked. The nonce, not the id, is what makes asking twice land
   // twice; null while nothing has been asked for.
   focus: { call: string; n: number } | null;
-  find?: { id: string; nth: number; n: number } | null;
+  find?: { id: string; nth: number; n: number; mode?: { regex?: boolean; caseSensitive?: boolean } } | null;
   query?: string;
   onApprove: (itemId: string, id: string, v: ApprovalVerdict) => Promise<void>;
   onFullAccess: (itemId: string) => Promise<void>;
@@ -145,7 +145,7 @@ export function Transcript({ items, port, entering, onEntered, brought, revision
     });
   }, [scroll]);
 
-  useFindPaint(flow, hidden, query ?? "", find?.id ?? null, find?.nth ?? 0);
+  useFindPaint(flow, hidden, query ?? "", find?.id ?? null, find?.nth ?? 0, find?.mode);
 
   useEffect(() => {
     const onSelect = () => {
