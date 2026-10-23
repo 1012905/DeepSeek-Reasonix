@@ -40,6 +40,7 @@ export const NOTICE_TEXT: Record<string, string> = {
   input_refused: "会话、工作区或运行时正在切换，这条消息没能立刻发出；它已排入队列，切换结束后会自动发送，不需要重发",
   unapplied_steer: "引导没有生效：这一轮在处理它之前就结束了。如果仍然需要，请再发送一次：",
   display_currency: "费用显示币种已设为 {mode}",
+  job_started: "后台任务已开始：{name}",
   job_finished: "后台任务已结束：{name}",
   job_killed: "后台任务已终止：{name}",
   job_failed: "后台任务 {name} 失败，需要处理",

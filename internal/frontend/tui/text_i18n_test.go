@@ -167,6 +167,10 @@ func TestJobNoticesFollowTheUILanguage(t *testing.T) {
 	if !strings.Contains(got, "后台任务已结束：make build") || strings.Contains(got, "{") || strings.Contains(got, "background") {
 		t.Fatalf("finished = %q", got)
 	}
+	started := renderNotice(&Item{Code: event.NoticeCodeJobStarted, Text: "background bash started: bash-126 (make build)", Detail: detail})
+	if !strings.Contains(started, "后台任务已开始：make build") || strings.Contains(started, "background") {
+		t.Fatalf("started = %q", started)
+	}
 	bare := event.JobNotice{Kind: "bash", ID: "bash-7"}.Encode()
 	if got := renderNotice(&Item{Code: event.NoticeCodeJobKilled, Text: "english", Detail: bare}); !strings.Contains(got, "后台任务已终止：bash-7") {
 		t.Fatalf("killed = %q", got)

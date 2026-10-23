@@ -341,13 +341,16 @@ func codedNoticeText(it *Item) string {
 		if _, ok := event.DecodeInboxUnrecovered(it.Detail); ok {
 			return i18n.M.NoticeInboxUnrecovered
 		}
-	case event.NoticeCodeJobFinished, event.NoticeCodeJobKilled:
+	case event.NoticeCodeJobStarted, event.NoticeCodeJobFinished, event.NoticeCodeJobKilled:
 		if p, ok := event.DecodeJobNotice(it.Detail); ok {
 			name := p.Label
 			if name == "" {
 				name = p.ID
 			}
-			if it.Code == event.NoticeCodeJobKilled {
+			switch it.Code {
+			case event.NoticeCodeJobStarted:
+				return fmt.Sprintf(i18n.M.NoticeJobStartedFmt, name)
+			case event.NoticeCodeJobKilled:
 				return fmt.Sprintf(i18n.M.NoticeJobKilledFmt, name)
 			}
 			return fmt.Sprintf(i18n.M.NoticeJobFinishedFmt, name)

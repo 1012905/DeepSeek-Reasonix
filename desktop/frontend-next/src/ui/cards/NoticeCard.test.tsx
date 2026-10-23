@@ -221,6 +221,12 @@ describe("a background job notice", () => {
     expect(said).not.toContain("background bash");
   });
 
+  it("words a started job from its payload too, so the start is not the one English line among its siblings", () => {
+    const said = text({ code: "job_started", text: "background bash started: bash-126 (make build)", detail: payload });
+    expect(said).toBe(t("后台任务已开始：{name}", { name: "make build" }));
+    expect(said).not.toContain("background bash");
+  });
+
   it("words a stalled job from its payload: the name, the span, and what it had reported", () => {
     const said = text({ level: "warn", code: "job_stalled", text: "background bash bash-16 has been inactive for 15m0s", detail: JSON.stringify({ kind: "bash", id: "bash-16", label: "make build", quietSeconds: 900, steps: 12 }) });
     expect(said).toBe(t("后台任务 {name} 已有 {quiet} 没有活动（{work}）：可能在等某个东西，也可能卡住了；可以用 wait 或 bash_output 查看，或用 kill_shell 结束它", { name: "make build", quiet: "15m", work: t("{n} 步在静默前完成", { n: 12 }) }));

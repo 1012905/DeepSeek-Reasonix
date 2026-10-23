@@ -1,6 +1,7 @@
 import { t } from ".";
 import { elapsed } from "./format";
 
+export const JOB_STARTED = "job_started";
 export const JOB_FINISHED = "job_finished";
 export const JOB_KILLED = "job_killed";
 export const JOB_FAILED = "job_failed";
