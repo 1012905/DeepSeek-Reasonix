@@ -59,7 +59,7 @@ export function MeterRail({ tps, trail, running, speed, metrics, ctx, mcp, compa
   // The same rate the overview states: from the ledger when the kernel sends it,
   // so the meter and the card cannot disagree about one number.
   const ratio = usage && usage.requests > 0 ? rateOf(usage.cacheHit, usage.cacheMiss, usage.cacheUnknown ?? 0) : rateOf(metrics.hit, metrics.miss);
-  const cacheRate = ratio === null ? null : Math.round(ratio * 100);
+  const cacheRate = ratio === null ? null : Math.floor(ratio * 100);
   const contextPercent = ctx && ctx.window > 0 ? Math.min(100, Math.round((ctx.used / ctx.window) * 100)) : 0;
   return (
     <div className="studio-meterrail" ref={meterRef} aria-label={t("运行统计")}>
