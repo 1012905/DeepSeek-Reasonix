@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 	"testing"
-	"time"
 
 	"reasonix/internal/base/testenv"
 	"reasonix/internal/state/sessionstore"
@@ -106,11 +106,15 @@ func TestARevokeIsNotUndoneByAnEarlierPersistFinishingLate(t *testing.T) {
 		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
+		var persists sync.WaitGroup
+		first.approval.onGrantChange = func() {
+			persists.Go(first.persistSessionGrants)
+		}
 		for j := range 8 {
 			first.approval.grantSession("bash", fmt.Sprintf("go test ./p%d", j))
 		}
 		first.approval.revokeSessionGrant("")
-		time.Sleep(30 * time.Millisecond)
+		persists.Wait()
 		if got := sessionstore.LoadSessionGrants(path); len(got) != 0 {
 			t.Fatalf("round %d: sidecar holds %v after every grant was revoked", i, got)
 		}
