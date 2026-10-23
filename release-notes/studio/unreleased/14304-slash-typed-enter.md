@@ -1,0 +1,2 @@
+- 修复：输入完整命令（如 /reload）而旁边有同前缀的更长命令（如 /reload-cmd）时，回车会补全成长命令；现在完整命令排第一，回车直接发送。修复 #14302。
+- Fixed: with a command typed in full (/reload) beside longer ones sharing its name (/reload-cmd), Enter completed the longer one; the typed one is now listed first and Enter sends it. Fixes #14302.

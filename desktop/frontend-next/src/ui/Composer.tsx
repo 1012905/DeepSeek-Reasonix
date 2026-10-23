@@ -604,7 +604,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
             }
             // Tab descends into directories; Enter confirms the highlighted reference.
             // The configured modifier chord sends the draft even with a menu open.
-            if (menu.open && (e.key === "Tab" || (e.key === "Enter" && !(sendShortcut === "modifier_enter" && sendKey))) && !e.shiftKey) {
+            if (menu.open && (e.key === "Tab" || (e.key === "Enter" && !menu.typedChosen && !(sendShortcut === "modifier_enter" && sendKey))) && !e.shiftKey) {
               e.preventDefault();
               menu.accept(undefined, e.key === "Tab" ? "descend" : "confirm");
               return;
