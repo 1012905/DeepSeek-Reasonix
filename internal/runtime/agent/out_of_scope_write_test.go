@@ -12,6 +12,7 @@ import (
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/tool"
 	"reasonix/internal/runtime/agent/testutil"
+	"reasonix/internal/safety/evidence"
 	"reasonix/internal/state/sessionstore"
 )
 
@@ -67,7 +68,7 @@ func TestTurnWhoseWritesFallOutsideTheWorkspaceIsNotReportedAsFinished(t *testin
 	if len(receipt.Gaps) == 0 {
 		t.Fatalf("receipt carries no gap; a write the host cannot attribute reads as silence: %+v", receipt)
 	}
-	if !strings.Contains(receipt.Gaps[0].Detail, "Reasonix CLI.desktop") {
+	if want := filepath.Base(evidence.NormalizePath(target)); !strings.Contains(receipt.Gaps[0].Detail, want) {
 		t.Fatalf("gap detail = %q, want it to name the file the host could not place", receipt.Gaps[0].Detail)
 	}
 }

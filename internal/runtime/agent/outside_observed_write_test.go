@@ -209,7 +209,7 @@ func TestADeliverableInThePublicTempDirectoryIsNotExempt(t *testing.T) {
 	if err := a.Run(context.Background(), "把报告生成到临时目录，我等会儿去取"); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if got := a.outsideObservedWrites(); !slices.Contains(got, target) {
+	if got := a.outsideObservedWrites(); !slices.Contains(got, evidence.NormalizePath(target)) {
 		t.Fatalf("outside writes = %v, want %s: a deliverable in the public temp directory is out of sight", got, target)
 	}
 }
@@ -283,7 +283,7 @@ func TestAGrantedRootIsNotReportedAsOutOfSight(t *testing.T) {
 	inGranted := filepath.Join(granted, "out.txt")
 	f.record(inGranted)
 
-	if !slices.Contains(f.a.outsideObservedWrites(), inGranted) {
+	if !slices.Contains(f.a.outsideObservedWrites(), evidence.NormalizePath(inGranted)) {
 		t.Fatalf("without a grant %s must read as out of sight", inGranted)
 	}
 
