@@ -14,6 +14,16 @@ The declaration identifies deliverables, not verified completion.
 `present_files` 每次声明一到四个现有文件。宿主全部校验成功后才产生交付卡片；
 声明交付文件不等于验证内容正确，也不替代任务完成判定。
 
+## Settings / 设置
+
+In Studio, **Settings → Tools & permissions → AI file delivery cards** is the
+second item, below Tool approval. It saves the user configuration without
+rebuilding the running session; reopen the session to apply the change.
+
+在 Studio 的 **设置 → 工具与权限 → AI 文件交付卡片** 中修改开关。
+它是「工具批准」下方的第二项，只保存用户配置，不会重建当前运行中的会话；
+重新打开会话后生效。
+
 ## Reading / 阅读
 
 The model-facing tool is **on by default**. Existing explicit choices are preserved.
