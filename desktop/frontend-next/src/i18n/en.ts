@@ -17,6 +17,7 @@ import { EN_SETTINGS } from "./en_settings";
 import { EN_TOOL_BLURBS } from "./en_tool_blurbs";
 import { EN_PERSONA } from "./en_persona";
 import { EN_METRICS } from "./en_metrics";
+import { EN_EXPORT } from "./en_export";
 import { EN_STORAGE } from "./en_storage";
 import { EN_USAGE } from "./en_usage";
 import { EN_COMPOSER } from "./en_composer";
@@ -57,6 +58,7 @@ export const EN: Record<string, string> = {
   ...EN_COMMUNITY,
   ...EN_SPONSOR,
   ...EN_METRICS,
+  ...EN_EXPORT,
   ...EN_STORAGE,
   ...EN_USAGE,
   ...EN_COMPOSER,
