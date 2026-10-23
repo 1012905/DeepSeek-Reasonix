@@ -317,6 +317,7 @@ const SAID: Record<string, string> = {
 
   "memory.unavailable": "该会话未启用记忆",
   "memory.directory_unreadable": "无法读取记忆目录，请检查权限或存储状态后重试",
+  "memory.fact_unreadable": "这条记忆存在于磁盘上，但读取失败，已拒绝覆盖；请检查权限或存储状态后重试",
   "side.unavailable": "这个会话不支持辅助提问",
   "side.unknown": "这个辅助提问已经关闭，请重新打开",
   "side.busy": "上一个问题还在回答，请稍候再问",
