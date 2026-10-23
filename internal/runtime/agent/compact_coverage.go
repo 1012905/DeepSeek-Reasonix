@@ -86,7 +86,7 @@ func foldFacts(region []provider.Message, facts func(string) evidence.ToolFacts)
 			continue
 		}
 		failed := isErrorMessage(m)
-		rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), !failed, facts(call.Name))
+		rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.ExecutionArguments()), !failed, facts(call.Name))
 		if !failed && rec.Mutation && len(rec.Paths) > 0 {
 			for _, p := range rec.Paths {
 				if p = strings.TrimSpace(p); p != "" && !seenMut[p] {

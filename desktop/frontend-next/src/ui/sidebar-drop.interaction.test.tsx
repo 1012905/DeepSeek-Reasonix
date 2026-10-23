@@ -96,11 +96,11 @@ it("refuses multiple paths without adding only part of the drop", async () => {
   expect(add).not.toHaveBeenCalled();
 });
 
-it("ignores dropped text and links without reporting a missing folder path", () => {
+it.each(["text/plain", "text/uri-list"])("ignores %s without treating unadvertised data as a folder path", (type) => {
   const { add, open } = draw();
   clock += 1000;
   fireEvent.drop(document.querySelector(".rail")!, {
-    dataTransfer: { types: ["text/plain"], files: [], getData: () => "https://example.com" },
+    dataTransfer: { types: [type], files: [], getData: () => "https://example.com" },
   });
   expect(screen.queryByRole("alert")).toBeNull();
   expect(add).not.toHaveBeenCalled();

@@ -7,6 +7,7 @@ import "./testkit";
 import { DeckChips, type Deck } from "./DeckChips";
 import { AgentTranscript } from "./panels/AgentTranscript";
 import { NestedCall, ToolCard } from "./cards/ToolCard";
+import { openCards } from "./cards/openCards";
 import type { Task } from "./panels/Agents";
 import type { Tool } from "../port/wire";
 
@@ -119,6 +120,7 @@ it("names the model the sub-agent ran on in the header of its full record", () =
 it("names it on the nested card of the call that spawned it", () => {
   const spawned = { id: "t1", name: "task", profile: { name: "Review", model: "aigateway/model-x", effort: "high" }, durationMs: 10 } as Tool;
   render(<ToolCard tool={spawned} running={false} children={[child("c1", "x")]} />);
+  openCards();
   const ran = document.querySelector(".nest-hd .ran");
   expect(ran?.textContent).toBe("aigateway/model-x · high");
 });

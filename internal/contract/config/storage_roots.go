@@ -71,7 +71,7 @@ func storageRootTable() []storageRoot {
 			{id: RootCache, env: "REASONIX_CACHE_HOME", relocatable: true, fallback: Roots.defaultCacheDir},
 			{id: RootWorktrees, env: "", relocatable: true, fallback: Roots.defaultWorktreeDir},
 			{id: RootLocks, env: "", relocatable: false, fallback: Roots.defaultLocksDir,
-				owns: []string{"workspace-leases", "repair-mutation-locks"}},
+				owns: []string{"workspace-leases", "repair-mutation-locks", "memory-store-locks"}},
 		}
 	})
 	return rootsTable

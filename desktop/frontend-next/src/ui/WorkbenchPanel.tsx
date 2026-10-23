@@ -27,6 +27,7 @@ import { BrowserTabMenu } from "./BrowserTabMenu";
 import { WorkbenchFileMenu, type FileMenu } from "./WorkbenchFileMenu";
 import { WorkbenchSelectionMenu, type SelectionMenu } from "./WorkbenchSelectionMenu";
 import { WorkbenchGit } from "./WorkbenchGit";
+import { workspaceDrag } from "./filedrag";
 import { useGitRepos } from "./useGitRepos";
 import { WorkbenchExplorerHead } from "./WorkbenchExplorerHead";
 import { WorkbenchFileBar, type FileMode } from "./WorkbenchFileBar";
@@ -443,6 +444,7 @@ export function WorkbenchPanel({
       if (launcher && e.key === "Escape") { e.stopPropagation(); toggleLauncher(); newTab.current?.focus(); }
     }}>
       <header className="workbench-tabs">
+        {wideMode && <BrowserWideToggle {...wideMode} />}
         <div
           className="workbench-tablist"
           role="tablist"
@@ -518,8 +520,6 @@ export function WorkbenchPanel({
           </div>
         ))}
         </div>
-        {wideMode && <BrowserWideToggle {...wideMode} />}
-        {fullMode && <BrowserFullToggle {...fullMode} />}
         <TooltipButton
           className="workbench-files"
           data-action="workbench.files"
@@ -541,6 +541,7 @@ export function WorkbenchPanel({
         >
           <StudioIcon name="plus" />
         </TooltipButton>
+        {fullMode && <BrowserFullToggle {...fullMode} />}
       </header>
       {closeFailure && <div className="workbench-error workbench-close-error" role="alert">{closeFailure}</div>}
       <div className="workbench-body" data-files={showFiles && !launcher ? "" : undefined}>
@@ -681,6 +682,7 @@ export function WorkbenchPanel({
               down was invisible until someone went looking for it. */}
           <WorkbenchGit
             port={port}
+            workspaceRoot={workspaceRoot}
             changes={changes}
             repos={gitRepos.repos}
             failure={gitRepos.failure}
@@ -700,6 +702,7 @@ export function WorkbenchPanel({
                 <button
                   className="workbench-tree-row"
                   data-action-click="workbench.folder"
+                  {...workspaceDrag(workspaceRoot, row.path)}
                   data-target={row.path}
                   key={`d:${row.path}`}
                   style={{ paddingInlineStart: 8 + row.depth * 14 }}
@@ -718,6 +721,7 @@ export function WorkbenchPanel({
                 <button
                   className="workbench-tree-row"
                   data-action-click="workbench.file"
+                  {...workspaceDrag(workspaceRoot, row.path)}
                   data-target={row.path}
                   key={row.path}
                   style={{ paddingInlineStart: 8 + row.depth * 14 }}

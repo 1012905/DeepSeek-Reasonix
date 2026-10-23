@@ -86,12 +86,12 @@ reasoning_language = "auto"      # 可见思考过程语言：auto|zh|en
 # max_queued_inputs = 0              # 会话队列里等待发送的消息条数；0 = 不限制，队列的字节上限仍然生效（只认用户级配置）
 # max_subagent_steer_bytes = 16384    # 发给运行中子代理的单条指示的字节数，防止一条消息占满它的上下文；0 = 不限制（只认用户级配置）
 # max_subagent_steers_per_minute = 30  # 每分钟发给同一个运行中子代理的指示条数，用来刹住循环；0 = 不限制（只认用户级配置）
-# write_lease = "optimistic"          # 仅用户配置文件；没有声明路径的写入（bash、MCP）不再占住整个工作区，默认 strict
+# write_lease = "strict"              # 仅用户配置文件；默认 optimistic：没有声明路径的写入（bash、MCP）不占住整个工作区；strict 则让它占住整个工作区
 # write_lease_max_wait_minutes = 0    # 写入在另一个会话占着路径时最多等多少分钟，超时以 workspace.claim_timeout 失败；0（默认）= 一直等到本轮结束，建议值 120（只认用户级配置）
 # plan_approval = "auto"             # 仅用户配置文件；提交的计划不再等待批准点击，直接开始执行，对话里会留下说明，默认 ask
 # default_mode = "plan"              # 仅用户配置文件；新对话从计划模式开始（恢复的对话保持自己的模式；设置里有对应开关），默认 normal
-# subagent_claims = "optimistic"      # 仅用户配置文件；没有声明 write_paths 的子代理只占用正在写的路径，不占整个工作区，默认 strict
-# host_verification = "off"          # 仅用户配置文件；改过文件的回合不再被要求先做检查、复核和签收；交付回执仍如实写明检查了什么，默认 on
+# subagent_claims = "strict"          # 仅用户配置文件；默认 optimistic：没有声明 write_paths 的子代理只占用正在写的路径；strict 则让它占整个工作区
+# host_verification = "on"           # 仅用户配置文件；设为 on 时，改过文件的回合要先有检查、复核和签收才能结束；不设或设为 off 则不要求（不设时交付预设仍会要求）；交付回执始终如实写明检查了什么
 # compact_ratio 是唯一自动维护阈值（默认 0.85；预设 0.70/0.80/0.85）
 # max_output_tokens = 0            # 推荐：自动（DeepSeek 默认 high → 约 64K；不是无限）
 # max_output_tokens = 32768        # 普通编码 / 控制费用
@@ -275,6 +275,11 @@ reasonix report delete [ID]     # 不发送，直接删除
 `/sessions/<id>#token=...` 深链。即使会话尚未产生第一轮消息，也会延续已预留的 Session ID，
 同时继续保持“空会话不提前写 transcript”的惰性落盘行为。
 
+Studio 和 Web 界面都可以在输入框旁打开**辅助会话**，只读提问，不写入主会话。
+发送后立即显示问题，回答文字随接收逐步显示，并展示当前阶段、工具名称和耗时。
+收起面板不会中断请求；关闭面板会取消请求并丢弃该辅助会话。
+请求失败时，已收到的部分回答会标记为中断，输入内容保留，方便重试。
+
 ```bash
 cd your-project
 reasonix web
@@ -387,6 +392,34 @@ type   = "local"                  # local (-L) | remote (-R)
 bind   = "127.0.0.1:5432"
 target = "127.0.0.1:5432"
 ```
+
+Windows 电脑上的 WSL 发行版也是一台主机，写作 `kind = "wsl"` 加一个 `distro`（可用 `reasonix remote wsl list` 查看）：
+
+- 它没有地址，所以只接受目录和安装相关的字段。在它上面写 `host`、`port`、`user`、密钥、密码、
+  `proxy_jump`、`use_ssh_config` 或转发都会被拒绝。
+- 在 **设置 → 远程** 里添加：只有装了 WSL 的机器才会出现「WSL 发行版」选项，并列出它的发行版
+  （WSL 1 的发行版显示为不可选）。之后 Studio 像打开列表里其他机器一样打开它。
+- 连接需要 WSL 2，且发行版里有 `ps`
+  和 `nohup`；缺少它们的精简镜像会被拒绝，并说明缺的是哪一个。
+- 内核运行在 Studio 保持打开的一个 shell 会话里，因为会话结束时 WSL 会结束它启动的所有进程。
+  - Studio 关闭连接后，内核随发行版一起退出（空闲的发行版大约 15 秒后会被 WSL 停止）。
+  - 对话保存在磁盘上，下次连接时继续。
+  - 不会有任何东西在你不知情时让发行版一直运行。
+- 模型凭据来自发行版自己的配置（`provider = "remote"`）：在 WSL 默认的网络模式下，发行版访问不到
+  本机的回环地址，所以不共享本机的 provider。
+- 以 Windows 路径选择的目录（`C:\work\app` 或 `\\wsl.localhost\<distro>\home\me\app`）由发行版转换；
+  它看不到的目录会被拒绝。
+- 命令行下用 `reasonix remote wsl add <名字> <发行版>` 添加，之后 `remote test` 和
+  `remote connect` 的用法与 SSH 主机相同。
+  - `connect` 会一直保持会话，直到你按 Ctrl-C，内核随之停止。
+  - `status`、`forward`、`serve` 和 `fs` 仍只支持 SSH，对 WSL 机器会以
+    `remote: host is not reached over ssh` 拒绝。
+
+由 agent 自己执行的 shell 命令里，只有 `list`、`help` 和 `wsl list|test` 能运行：
+
+- 其他 `reasonix remote` 子命令在那里都会被拒绝（退出码 77），因为它们会修改主机列表或打开链接，
+  这些是人要做的事。
+- 主机会给它替 agent 运行的命令做标记，以便区分。它防的是不刻意隐藏的 agent，不是沙箱。
 
 命令行:
 
@@ -744,6 +777,10 @@ CLI/TUI 文本输入可通过 `[ui].cursor_shape` 设置光标形状，支持 `u
 | Plan 控件 | 切换 Plan 开/关 | 和 `Shift+Tab` 是同一个模式。 |
 | 协作菜单里的 Goal | 启动、查看或清除 Goal | Goal 不进入任何快捷键循环。 |
 
+Studio 会在同一浏览器或桌面配置中记住侧边栏本机和远程项目的展开、收起状态，
+包括「收起所有项目 / 展开所有项目」，重新打开后仍然保留。新项目默认展开。
+这些显示偏好仅保存在当前设备，不修改会话，也不会同步到其他客户端。
+
 #### Studio 文件附件
 
 普通本地文件（包括大型 APK）在桌面壳能取得原生路径时，直接使用路径引用。
@@ -793,22 +830,24 @@ CLI/TUI 文本输入可通过 `[ui].cursor_shape` 设置光标形状，支持 `u
 | 按键或命令 | 作用 | 说明 |
 | --- | --- | --- |
 | `Enter` | 发送当前消息 | turn 运行中输入非空内容时，会排队作为后续反馈。输入框为空时，跳回最新输出并继续跟随。 |
+| `Ctrl+Enter`、`Ctrl+S` 或 `/steer <文字>` | 给运行中的 turn 追加引导 | 引导会先持久化；turn 无法接收时，它仍作为普通的后续消息。输入框空闲时，`Ctrl+S` 和 `Enter` 一样发送消息，`Ctrl+Enter` 不做任何事。 |
 | `Shift+Enter`、`Alt+Enter` 或 `Ctrl+J` | 插入换行 | 普通 `Enter` 保留给发送/确认。 |
 | 普通 `Up` / `Down` | 回放更旧或更新的已提交提示词 | 只在光标位于输入框首行或末行时生效，多行编辑仍使用方向键。回合运行中（或队列已暂停）且有排队消息时，`Up` 改为把最新的排队消息选入输入框，见下一行的队列键。 |
 | 选中排队消息后的队列键 | 编辑、调序、删除或重试排队消息 | `Up` / `Down` 移动选择（越过最新一条会放回你的草稿）；`Alt+Up` / `Alt+Down` 调整它在队列里的位置；`Enter` 原位保存编辑；连按两次 `d` 删除（第一次只是询问，不会被当作输入），`r` 让被挡住的消息再跑一次（两者只在输入框里仍是读到的完整原文、未改动时生效，vi 命令模式下它们先于 vi 按键被队列取走；改过之后这两个字母就是普通输入）；完整原文读到之前 `Enter` 和编辑键不生效，读不出来或这条消息已经开始执行时会结束选择并还原你的草稿；`Esc` 放开。输入框为空时按 `Space` 暂停或继续队列。工作行下方最多画出三条排队消息，其余用 `/queue`（见下）查看。 |
-| `PageUp` / `PageDown` | 滚动 transcript | 不受当前聊天状态影响。 |
+| `PageUp` / `PageDown`，加 `Shift` 也可以 | 滚动 transcript | 不受当前聊天状态影响。 |
 | `Ctrl+Home` / `Ctrl+End` | 跳到 transcript 顶部或底部 | 长工具输出后很有用。 |
 | `Ctrl+L` 或 `/cls` | 只清空可见 transcript | LLM 上下文、session 文件、工具、记忆和插件都保持加载；想丢弃对话上下文时用 `/clear`。 |
 | `Esc` | 退出当前最具体的动作 | 取消运行中的 turn；否则清空非空输入，或退出 `!` shell 模式。 |
 | 空闲且输入为空时双击 `Esc` | 打开 rewind 选择器 | 和 `/rewind` 是同一个入口。 |
-| transcript 文本选择 | 复制 transcript 文本 | 应用内拖选松开后，本地会话通过可验证的系统剪贴板路径写入（macOS `pbcopy`、Linux 可用的 Wayland/X11 工具、Windows 系统剪贴板）；SSH 才回退到 OSC 52，并明确标记为回退而不是宣称原生复制成功。`Ctrl+C`/`Super+C`/`Meta+C` 或右键当前选区可再次复制。 |
+| transcript 文本选择 | 复制 transcript 文本 | 应用内拖选松开后，本地会话通过可验证的系统剪贴板路径写入（macOS `pbcopy`、Linux 可用的 Wayland/X11 工具、Windows 系统剪贴板）；SSH 才回退到 OSC 52，并明确标记为回退而不是宣称原生复制成功。`Ctrl+C`/`Super+C`/`Meta+C`/`Ctrl+Insert` 或右键当前选区可再次复制。 |
 | 没有活动选区时右键 | 在本地会话粘贴剪贴板文本 | 本地会话开启鼠标接管时，Reasonix 只读取文本并交给正常的 bracketed-paste 处理。SSH 下远端进程无法读取本机剪贴板，请使用终端粘贴快捷键；`/mouse` 可恢复终端原生右键菜单。存在活动选区时，右键仍优先复制该选区。 |
 | `/mouse` | 切换应用内鼠标接管 | 关闭后由终端处理原生拖选和右键菜单，但会失去应用内选区、滚动条和滚轮。可用 `REASONIX_DISABLE_MOUSE=1` 让每次会话默认关闭。远程（SSH）会话默认关闭，开箱即可原生选择；`REASONIX_DISABLE_MOUSE=0` 强制在任何环境下接管。 |
 | `Ctrl+C` | 复制、取消、清空或退出 | 有 transcript 活动选区时优先复制；否则取消运行中的 turn、清空非空输入，或在空输入下连按两次退出；已取消的 turn 仍在停止时再按一次也会退出。 |
 | `Ctrl+D` | 退出 TUI | 空输入且空闲时立即退出。 |
 | `Ctrl+Z` | 把 TUI 挂起到 shell | 仅 macOS 和 Linux，用 `fg` 恢复。Windows 没有作业控制，按下无效果。 |
 | `/quit` 或 `/exit` | 退出 TUI | 立即执行，运行中的 turn 也一样。直接输入 `exit`、`quit` 或 `:q` 只会作为普通消息发给模型。 |
-| 终端的文本粘贴快捷键 | 粘贴文本 | 文本保持终端原生 bracketed-paste 路径：macOS 通常是 `Cmd+V`，Linux 通常是 `Ctrl+Shift+V`，其它环境使用终端自身配置。Reasonix 只消费收到的文本粘贴事件，不会先探测图片。 |
+| 终端的文本粘贴快捷键 | 粘贴文本 | 文本保持终端原生 bracketed-paste 路径：macOS 通常是 `Cmd+V`，Linux 通常是 `Ctrl+Shift+V`，其它环境使用终端自身配置。Reasonix 只消费收到的文本粘贴事件，不会先探测图片。有的终端把 `Shift+Insert` 交给应用而不是自己粘贴，此时这个键在本地会话里读取剪贴板文本并按同样方式粘贴；SSH 下会提示改用终端的粘贴快捷键。 |
+| `Ctrl+G` | 把折叠的粘贴保存为文件 | 1000 个字符或 5 行及以上的粘贴会折叠成 `[Pasted text #N · M lines]` 标签，发送时仍是全文。`Ctrl+G` 把草稿里仍在的每个折叠粘贴存成工作区附件里的文件，标签改为 `[Pasted file #N · M lines]`；消息随后携带指向该文件的引用，而不是全文。 |
 | macOS/Linux `Ctrl+V`；Windows `Alt+V` | 粘贴剪贴板图片 | 图片粘贴是独立的应用动作。读取期间底栏显示“正在粘贴图片…”，完成后在光标处插入可编辑的 `[image #N]` 标记。 |
 | `/paste-image` | 粘贴剪贴板图片 | 与图片快捷键相同的纯图片命令入口。 |
 | 以 `!` 开头的一行 | 直接运行 shell 命令 | 命令在本地执行，不经过模型。 |
@@ -834,12 +873,12 @@ CLI/TUI 文本输入可通过 `[ui].cursor_shape` 设置光标形状，支持 `u
 | 上下文 | 按键 | 作用 |
 | --- | --- | --- |
 | 斜杠或 `@` 补全 | `Up` / `Down`、`Ctrl+P` / `Ctrl+N`、`Tab` / `Enter`、`Esc` | 移动、接受或关闭补全菜单。回合运行中按 `Esc` 还会同时停止该回合（vi 模式除外）。 |
-| 工具审批提示 | `y`/`1`、`a`/`2`、`p`/`3`、`n`/`4`、`Enter`、`Esc`、`Ctrl+C` | 允许一次、本会话允许、持久允许、拒绝、默认允许一次、拒绝，或取消当前 turn。 |
+| 工具审批提示 | `Up`/`Down` 或 `j`/`k`/`Tab`、`Enter`、`y`、`a`、`p`、`n`、数字键、`Esc`、`Ctrl+C` | 移动、回答高亮的一行（光标初始在“允许一次”）、允许一次、本会话允许、始终允许、拒绝、按位置选择一行、拒绝，或取消当前 turn。只有这次调用能这样放行时才会出现 `a` 和 `p`，所以数字跟随实际显示的行。vi 模式下 `Esc` 不作答，要用行快捷键或 `Ctrl+C`。 |
+| 计划审批提示 | `Up`/`Down` 或 `j`/`k`/`Tab`、`Enter`、`y`、`n`、`x`、数字键、`Esc` | 移动、回答高亮的一行、开始执行计划、修改计划、退出计划模式，或按位置选择一行。`Esc` 表示要求修改（vi 模式除外）。 |
 | Ask 问题卡 | `Up`/`Down` 或 `j`/`k`、`Left`/`Right` 或 `h`/`l`、`Space`、`Enter`、`1`-`9`、`Esc`、`Ctrl+C` | 导航答案/问题标签、切换多选、提交/激活、选择编号选项、关闭，或取消当前 turn。 |
 | Rewind 选择器 | `Up`/`Down` 或 `j`/`k`、`Enter`、`b`、`c`、`d`、`s`、`u`、`y`、`Esc` | 选择 turn，应用 both/conversation/code/summarize 动作；检查点只覆盖部分文件时，用 `Enter` 或 `y` 确认恢复；或返回/关闭。 |
-| 模型、provider 或 Resume 选择器 | `Up`/`Down` 或 `Ctrl+P`/`Ctrl+N`；搜索词为空时可用 `j`/`k`；输入文字过滤；`Enter`；`Esc` | 搜索、选择或关闭选择器；开始搜索后 `j`/`k` 会作为查询字符输入；`/provider` 会继续打开该 provider 的模型列表。 |
-| MCP 导入选择器 | `Up`/`Down` 或 `j`/`k`、`Space`、`Enter`、`Esc` / `Ctrl+C` | 移动、勾选服务器、导入勾选服务器，或取消。 |
-| MCP 管理器 | `Up`/`Down` 或 `j`/`k`、`Enter`、`Left`/`Right` 或 `h`/`l`、`r`、数字键、`q` / `Ctrl+C` | 导航服务器列表/详情、刷新、选择动作，或关闭。 |
+| 模型、provider 或 Resume 选择器 | `Up`/`Down` 或 `Ctrl+P`/`Ctrl+N`；搜索词为空时可用 `j`/`k`；输入文字过滤；`Enter`；`Esc` | 搜索、选择或关闭选择器；开始搜索后 `j`/`k` 会作为查询字符输入；`/provider` 会继续打开该 provider 的模型列表。在 Resume 选择器里连按两次 `Ctrl+D` 删除高亮的已保存会话：第一次只是询问，按其他任意键即撤回。 |
+| `/mcp` 面板 | `Up`/`Down` 或 `j`/`k`、`Enter`/`Right`/`l`、`Esc`/`Ctrl+C`/`Left`/`h`、`q`、`Space`、`n`、`d`、`a`、`u`、`r` | 移动；查看服务器的工具；从工具返回或关闭面板；关闭；启用或停用服务器（启用仓库声明的服务器前会先要求按 `y`）；添加服务器；删除服务器（先要求按 `y`）；登录返回 401 的服务器；授予服务器请求的额外权限；重连失败的服务器。添加时输入它的命令、URL 或配置后按 `Enter`，在审阅页用 `y`（用户）、`l`（本地）或 `p`（项目）安装，或用 `n`/`Esc` 离开；审阅页刚打开的片刻按键无效，内容长到无法完整显示的服务器不能在这里安装。 |
 | `/clear` 确认 | 方向键或 `j`/`k` / `Tab`、`Enter`、`y`、`n`、`Esc` / `Ctrl+C` | 在 Clear/Cancel 间切换、确认清空，或取消。 |
 
 模式含义：
@@ -859,6 +898,13 @@ Reasonix 管理的普通 worktree 会话统一列在原项目下，不再为隔�
 
 打开历史会话仍使用它原来的工作目录，在项目上新建会话则使用原目录。
 排序、搜索、分页、置顶和归档覆盖整个项目。
+
+旧版历史首次读取时，侧栏先显示已发现的会话，再在后台补全摘要和轮数；
+“正在读取摘要”的会话仍可直接打开。搜索尚未完成时会明确提示，暂时没有结果不代表没有历史。
+部分摘要读取失败时可以重试，其他会话仍可使用。摘要缓存保存在新版管理的目录中，不改写旧版历史。
+
+升级引起的历史搜索索引重建在后台执行。打开和读取会话时，后台读取会让出资源；
+索引尚未完成时搜索结果仍可能不完整，任务会在前台操作结束后继续。
 
 移除项目会关闭所属的空闲面板，但保留所有工作目录和会话文件。
 历史会话无需搬移，重启后直接按原项目归组；Reasonix 管理目录以外的 worktree 仍作为独立项目使用。
@@ -1085,6 +1131,9 @@ reasonix doctor capabilities --live --timeout 5s
 退出码：`0` 允许 warning/info；`1` 表示存在 `error`（或 live 启动失败）；`2` 为参数错误。与 `reasonix doctor`（provider/沙箱）以及 `reasonix plugin doctor <name>`（单个插件包）相互独立。
 
 ## 插件（MCP）
+
+缓存已声明资源能力、但服务器尚未连接时，`read_mcp_resource` 会在正常启动等待预算内等待连接。
+取消这次读取不会取消会话的后台连接尝试。
 
 Reasonix 是一个 MCP 客户端。`[[plugins]]` 的 `type` 选择传输：`stdio`（默认）启动本地子进
 程（`command`/`args`/`env`）；`http`（Streamable HTTP）连接远程 `url`，可带静态

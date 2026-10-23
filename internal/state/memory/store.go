@@ -195,6 +195,11 @@ func (s Store) Save(m Memory) (string, error) {
 func (s Store) Archive(name string) (string, error) {
 	memoryStoreMutationMu.Lock()
 	defer memoryStoreMutationMu.Unlock()
+	release, err := s.lockMutations()
+	if err != nil {
+		return "", err
+	}
+	defer release()
 	return s.archiveLocked(name)
 }
 
@@ -302,8 +307,11 @@ func (s Store) repairArchivedRef(ref string) (string, bool, error) {
 				continue
 			}
 			path := filepath.Join(dir, ".archive", entry.Name())
-			memory, ok := loadMemory(path)
-			if !ok || memory.ID != ref {
+			memory, ok, readErr := loadMemory(path)
+			// Only the id can select an archive entry, and an unreadable file's
+			// id is unknown; it is skipped here rather than guessed at. The
+			// archive's own reads still fail loudly at the directory level.
+			if readErr != nil || !ok || memory.ID != ref {
 				continue
 			}
 			lines, contains, err := indexLinesExceptIn(dir, slug(memory.Name))
@@ -443,7 +451,10 @@ func (s Store) List() ([]Memory, error) {
 			if e.IsDir() || e.Name() == indexFile || !strings.HasSuffix(e.Name(), ".md") {
 				continue
 			}
-			if m, ok := loadMemory(filepath.Join(dir, e.Name())); ok {
+			// List keeps the legacy name-based merge and returns facts only, so
+			// an unreadable file is skipped here exactly as before; ListActive is
+			// what a surface uses to name it.
+			if m, ok, readErr := loadMemory(filepath.Join(dir, e.Name())); readErr == nil && ok {
 				if m.Scope == "" {
 					m.Scope = s.scopeForDir(dir)
 				}
@@ -458,40 +469,13 @@ func (s Store) List() ([]Memory, error) {
 	return out, nil
 }
 
-// ListAll returns every active fact from both scopes without the legacy
-// name-based deduplication performed by List. Callers that understand scope can
-// use it to resolve project-over-global overrides without hiding either source.
+// ListAll returns every readable active fact from both scopes without the
+// legacy name-based deduplication performed by List. An unreadable fact file is
+// not an error here — one bad file must not hide the rest — so a surface that
+// has to name it reads ListActive instead.
 func (s Store) ListAll() ([]Memory, error) {
-	if s.Dir == "" && s.GlobalDir == "" {
-		return nil, nil
-	}
-	var out []Memory
-	for _, dir := range s.dirs() {
-		if dir == "" {
-			continue
-		}
-		entries, err := readMemoryDirectory(dir)
-		if err != nil {
-			return nil, err
-		}
-		for _, entry := range entries {
-			if entry.IsDir() || entry.Name() == indexFile || !strings.HasSuffix(entry.Name(), ".md") {
-				continue
-			}
-			memory, ok := loadMemory(filepath.Join(dir, entry.Name()))
-			if !ok {
-				continue
-			}
-			if memory.Scope == "" {
-				memory.Scope = s.scopeForDir(dir)
-			}
-			out = append(out, memory)
-		}
-	}
-	slices.SortFunc(out, func(a, b Memory) int {
-		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.Scope, b.Scope), cmp.Compare(a.ID, b.ID))
-	})
-	return out, nil
+	report, err := s.ListActive()
+	return report.Facts, err
 }
 
 // PinnedBudgetOff is the unset pinned budget. Pinned bodies do cost prefix
@@ -517,8 +501,11 @@ func (s Store) pinnedGuidance() ([]Memory, error) {
 			if e.IsDir() || e.Name() == indexFile || !strings.HasSuffix(e.Name(), ".md") {
 				continue
 			}
-			m, ok := loadMemory(filepath.Join(dir, e.Name()))
-			if !ok {
+			// A pinned fact that cannot be read contributes nothing to the
+			// stable prefix; omitting it is the only safe option here, since
+			// sending its bytes is precisely what failed. /memory lists it.
+			m, ok, readErr := loadMemory(filepath.Join(dir, e.Name()))
+			if readErr != nil || !ok {
 				continue
 			}
 			if m.Scope == "" {
@@ -622,8 +609,10 @@ func (s Store) ListArchived() ([]ArchivedMemory, error) {
 				continue
 			}
 			path := filepath.Join(dir, e.Name())
-			m, ok := loadMemory(path)
-			if !ok {
+			// An archive entry that cannot be read is skipped from the archive
+			// listing; recover() reports it when that entry is the one named.
+			m, ok, readErr := loadMemory(path)
+			if readErr != nil || !ok {
 				continue
 			}
 			if m.Scope == "" {
@@ -656,51 +645,40 @@ func archiveTimeFromName(name string) time.Time {
 	return when
 }
 
-// loadMemory parses one fact file back into a Memory. It tolerates the minimal
-// frontmatter render writes; a file without frontmatter still loads with its
-// body and a name derived from the filename.
-func loadMemory(path string) (Memory, bool) {
+// loadMemory parses one fact file back into a Memory, deriving its body and a
+// name from the filename when the frontmatter is minimal or absent. A file that
+// is present but cannot be read is a FactReadError, never (zero, false): the
+// two states have different consequences for a read, a listing, and a write.
+// ok is false only for a file that is genuinely gone.
+func loadMemory(path string) (Memory, bool, *FactReadError) {
+	if err := fault("read-fact", path); err != nil {
+		if os.IsNotExist(err) {
+			return Memory{}, false, nil
+		}
+		return Memory{}, false, &FactReadError{Path: path, Err: err}
+	}
 	b, err := fileencoding.ReadFileUTF8(path)
 	if err != nil {
-		return Memory{}, false
-	}
-	fm, body := splitFrontmatter(string(b))
-	m := Memory{
-		ID:             fm["id"],
-		Revision:       parsePositiveInt(fm["revision"]),
-		CreatedAt:      parseMemoryTime(fm["created_at"]),
-		UpdatedAt:      parseMemoryTime(fm["updated_at"]),
-		Name:           fm["name"],
-		Title:          fm["title"],
-		Description:    fm["description"],
-		Keywords:       fm["keywords"],
-		Activation:     NormalizeActivation(fm["activation"]),
-		Volatility:     NormalizeVolatility(fm["volatility"]),
-		SubjectKey:     NormalizeSubjectKey(fm["subject_key"]),
-		ExpiresAt:      parseMemoryTime(fm["expires_at"]),
-		LastVerifiedAt: parseMemoryTime(fm["last_verified_at"]),
-		Type:           persistedFactType(fm),
-		Scope:          factScopeFromFrontmatter(fm["scope"]),
-		Body:           strings.TrimSpace(body),
-	}
-	if m.Name == "" {
-		m.Name = strings.TrimSuffix(filepath.Base(path), ".md")
-	}
-	if m.ID == "" {
-		m.ID = legacyMemoryID(m.Name, legacyIdentityScope(m))
-	}
-	if m.Revision <= 0 {
-		m.Revision = 1
-	}
-	if info, err := os.Stat(path); err == nil {
-		if m.CreatedAt.IsZero() {
-			m.CreatedAt = info.ModTime().UTC()
+		if os.IsNotExist(err) {
+			// Deleted between the directory listing and this read: absence is
+			// the truth. Windows also answers this way for a regular file where
+			// a directory should be, which readMemoryDirectory already reports.
+			return Memory{}, false, nil
 		}
-		if m.UpdatedAt.IsZero() {
-			m.UpdatedAt = info.ModTime().UTC()
+		return Memory{}, false, &FactReadError{Path: path, Err: err}
+	}
+	m := parseMemory(filepath.Base(path), b)
+	if m.CreatedAt.IsZero() || m.UpdatedAt.IsZero() {
+		if info, err := os.Stat(path); err == nil {
+			if m.CreatedAt.IsZero() {
+				m.CreatedAt = info.ModTime().UTC()
+			}
+			if m.UpdatedAt.IsZero() {
+				m.UpdatedAt = info.ModTime().UTC()
+			}
 		}
 	}
-	return m, true
+	return m, true, nil
 }
 
 func legacyIdentityScope(m Memory) FactScope {

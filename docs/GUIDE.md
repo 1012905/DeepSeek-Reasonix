@@ -77,12 +77,12 @@ reasoning_language = "auto"      # visible reasoning text: auto|zh|en
 # max_queued_inputs = 0              # prompts waiting in a session's queue; 0 = no limit, the queue's byte limits still apply (user config only)
 # max_subagent_steer_bytes = 16384    # bytes in one message of guidance to a running sub-agent, which keeps one message from filling its context; 0 = no limit (user config only)
 # max_subagent_steers_per_minute = 30  # messages of guidance per minute to one running sub-agent, a stop for a loop; 0 = no limit (user config only)
-# write_lease = "optimistic"          # user file only; a writer that declares no path (bash, MCP) stops holding the whole workspace
+# write_lease = "strict"              # user file only; default optimistic: a writer that declares no path (bash, MCP) does not hold the whole workspace; strict makes it hold it
 # write_lease_max_wait_minutes = 0    # minutes a write waits behind another session's claim before it fails with workspace.claim_timeout; 0 (default) = wait as long as the turn lasts, 120 is a sensible limit (user config only)
-# subagent_claims = "optimistic"      # user file only; a sub-agent that declares no write_paths holds only the path it is writing, not the whole workspace against other sessions; default strict
+# subagent_claims = "strict"          # user file only; default optimistic: a sub-agent that declares no write_paths holds only the path it is writing; strict makes it hold the whole workspace
 # plan_approval = "auto"             # user file only; a submitted plan starts executing without the approval click, and the transcript says so; default ask
 # default_mode = "plan"              # user file only; a new conversation starts in plan mode (a resumed one keeps its own; Settings has a switch); default normal
-# host_verification = "off"          # user file only; the host stops holding a turn that changed files to a check, a review and a sign-off; the receipt still says what was checked; default on
+# host_verification = "on"           # user file only; "on" holds a turn that changed files open until a check, a review and a sign-off exist; unset or "off" does not (unset still holds them under the delivery preset); the receipt always says what was checked
 # compact_ratio = 0.85             # sole auto trigger; presets 0.70 / 0.80 / 0.85
 # max_output_tokens = 0            # recommended: automatic (DeepSeek default high → ~64K; not unlimited)
 # max_output_tokens = 32768        # ordinary coding / cost control
@@ -327,6 +327,16 @@ browser. Inside an interactive CLI session, `/web` snapshots the current session
 restores the terminal, and opens an explicit `/sessions/<id>#token=...` deep link.
 Even a never-used session keeps its reserved ID without forcing an empty
 transcript onto disk, so the first Web turn continues the same session identity.
+
+Studio and the Web UI offer **Side question** beside the composer for read-only
+questions without adding them to the main conversation.
+
+A submitted question appears immediately. Answer text streams as it arrives,
+with the current phase, tool name and elapsed time shown while it runs.
+
+Collapsing the panel keeps the request running; closing it cancels the request
+and discards that side conversation. If a request fails, partial text is marked
+interrupted and the draft remains for retry.
 
 ```bash
 cd your-project
@@ -992,6 +1002,11 @@ Composer shortcuts:
 
 Remembered projects have Move up / Move down in their project menu. Open it with the keyboard, navigate with arrows or Home/End, and use Escape to return to the trigger. Moving a project changes sidebar order without changing the launch project.
 
+Studio remembers which local and remote projects you collapse in the sidebar,
+including Collapse all / Expand all, when you reopen it in the same browser or
+desktop profile. New projects start expanded. These display choices stay on
+this device; they do not change sessions or synchronize to another client.
+
 Ordinary Reasonix-managed worktree chats appear under their original project,
 without a separate project row for each checkout. The chat header shows Local
 checkout or Worktree, with its actual working directory available on hover;
@@ -1000,6 +1015,18 @@ worktree chats also carry a sidebar marker.
 Reopening history uses that chat's working directory, while starting a chat
 from the project uses the original directory. Ordering, search, paging, pins
 and archives span the project.
+
+When reading legacy history for the first time, the sidebar shows discovered
+conversations while summaries and turn counts are filled in the background.
+Conversations marked as reading their summary can already be opened.
+
+Search indicates incomplete coverage instead of reporting a definitive empty result.
+Failed summaries can be retried without blocking other conversations. Summary
+caches live in the current version's directory; legacy history is not rewritten.
+
+History search index rebuilds after an upgrade run in the background. Background
+reads yield when a conversation is opened or read, then continue after the
+foreground operation. Search results may remain incomplete until indexing finishes.
 
 Removing the project closes its idle panes and retains every directory and
 transcript. Existing transcripts stay in place and group on restart without migration.
@@ -1076,23 +1103,24 @@ Chat and transcript shortcuts:
 | Key or command | What it does | Notes |
 | --- | --- | --- |
 | `Enter` | Sends the current message | While a turn is running, non-empty input is durably queued as a follow-up before the composer clears. On an empty composer it jumps back to the newest output and keeps following it. |
-| `Ctrl+Enter` or `/steer <text>` | Adds guidance to the active turn | The guidance is persisted first; if the turn cannot accept it, it remains a normal follow-up. |
+| `Ctrl+Enter`, `Ctrl+S`, or `/steer <text>` | Adds guidance to the active turn | The guidance is persisted first; if the turn cannot accept it, it remains a normal follow-up. On an idle composer `Ctrl+S` sends the message as `Enter` does, and `Ctrl+Enter` does nothing. |
 | `Shift+Enter`, `Alt+Enter`, or `Ctrl+J` | Inserts a newline | Plain `Enter` is reserved for send/confirm. |
 | Plain `Up` / `Down` | Recalls older or newer submitted prompts | Only from the composer's first or last line, so multi-line editing keeps the arrows. While a turn runs (or the queue is paused) and messages are queued, `Up` selects the newest queued message into the composer instead; see the queue keys below. |
 | Queue keys, with a message selected | Edit, reorder, delete or retry a queued message | `Up` / `Down` move the selection (past the newest puts your draft back); `Alt+Up` / `Alt+Down` move the message in the queue; `Enter` saves your edit in place; `d` twice deletes it (the first press only asks, and is not typed) and `r` runs a blocked one again (both only while the composer still holds the full message unedited and, in vi command mode, before the vi keys: once you edit, those letters are typed); `Enter` and the edit keys wait until the full message has been read, and a message that cannot be read, or that has already started, ends the selection and brings your draft back; `Esc` lets go. `Space` on an empty composer pauses or resumes the queue. Up to three queued messages are drawn under the working line; `/queue` (below) shows the rest. |
-| `PageUp` / `PageDown` | Scrolls the transcript | Works regardless of the current chat state. |
+| `PageUp` / `PageDown`, also with `Shift` | Scrolls the transcript | Works regardless of the current chat state. |
 | `Ctrl+Home` / `Ctrl+End` | Jumps to the top or bottom of the transcript | Useful after long tool output. |
 | `Ctrl+L` or `/cls` | Clears only the visible transcript | The LLM context, session file, tools, memory, and plugins stay loaded. Use `/clear` when you want to discard the conversation context. |
 | `Esc` | Backs out of the current action | It cancels a running turn; otherwise it clears non-empty input or leaves `!` shell mode. |
 | Double `Esc` on an empty idle composer | Opens the rewind picker | Same entry point as `/rewind`. |
-| Transcript text selection | Copies transcript text | Releasing an in-app drag writes through the verified native clipboard path in a local session (`pbcopy` on macOS, the available Wayland/X11 tool on Linux, or the Windows clipboard). SSH falls back to OSC 52 and labels the fallback instead of claiming native success. `Ctrl+C`/`Super+C`/`Meta+C` or right-clicking the active selection copies it again. |
+| Transcript text selection | Copies transcript text | Releasing an in-app drag writes through the verified native clipboard path in a local session (`pbcopy` on macOS, the available Wayland/X11 tool on Linux, or the Windows clipboard). SSH falls back to OSC 52 and labels the fallback instead of claiming native success. `Ctrl+C`/`Super+C`/`Meta+C`/`Ctrl+Insert` or right-clicking the active selection copies it again. |
 | Right-click with no active selection | Pastes clipboard text locally | In a local session with in-app mouse capture on, Reasonix reads text only and routes it through the normal bracketed-paste handling. Over SSH, use the terminal paste shortcut because the remote process cannot read the local clipboard; `/mouse` restores the terminal's native right-click menu. Right-click with an active selection still copies that selection. |
 | `/mouse` | Toggles in-app mouse capture | Off hands the mouse back to your terminal, restoring its native click-drag selection and right-click context menu, at the cost of in-app drag-select, the transcript scrollbar, and wheel-scroll. Set `REASONIX_DISABLE_MOUSE=1` to start every session with it off. Remote (SSH) sessions start with capture off so native selection works out of the box; `REASONIX_DISABLE_MOUSE=0` forces capture on everywhere. |
 | `Ctrl+C` | Copies, cancels, clears, or quits | Copies an active transcript selection first. Otherwise it cancels a running turn, clears non-empty input, or quits on a second empty-composer press. A second press while a cancelled turn is still stopping quits too. |
 | `Ctrl+D` | Quits the TUI | Immediate quit on an empty idle composer. |
 | `Ctrl+Z` | Suspends the TUI to the shell | macOS and Linux; resume it with `fg`. Windows has no job control, so the key does nothing there. |
 | `/quit` or `/exit` | Quits the TUI | Runs at once, also while a turn is running. Typing a bare `exit`, `quit` or `:q` sends it to the model as a normal message. |
-| Your terminal's text-paste shortcut | Pastes text | Text stays on the terminal's bracketed-paste path (`Cmd+V` on macOS, commonly `Ctrl+Shift+V` on Linux, and the terminal's configured shortcut elsewhere). Reasonix consumes the resulting paste event and never probes for an image first. |
+| Your terminal's text-paste shortcut | Pastes text | Text stays on the terminal's bracketed-paste path (`Cmd+V` on macOS, commonly `Ctrl+Shift+V` on Linux, and the terminal's configured shortcut elsewhere). Reasonix consumes the resulting paste event and never probes for an image first. For terminals that hand `Shift+Insert` to the app instead of pasting, that key reads the clipboard text in a local session and pastes it the same way; over SSH it says to use the terminal's paste shortcut. |
+| `Ctrl+G` | Keeps folded pastes as files | A paste of 1,000 characters or 5 lines or more is folded into a `[Pasted text #N · M lines]` label and sent whole. `Ctrl+G` stores every folded paste still in the draft as a file under the workspace's attachments and relabels it `[Pasted file #N · M lines]`; the message then carries a pointer to the file instead of the text. |
 | `Ctrl+V` on macOS/Linux; `Alt+V` on Windows | Pastes a clipboard image | Image paste is a separate application action. The footer shows `Pasting image…` while the clipboard is read, then inserts an editable `[image #N]` token at the cursor. |
 | `/paste-image` | Pastes a clipboard image | Command form of the same image-only action. |
 | A line starting with `!` | Runs a shell command directly | The command runs locally without asking the model. |
@@ -1124,12 +1152,12 @@ Picker and approval shortcuts:
 | Context | Keys | What they do |
 | --- | --- | --- |
 | Slash or `@` completion | `Up` / `Down`, `Ctrl+P` / `Ctrl+N`, `Tab` / `Enter`, `Esc` | Move, accept, or close the completion menu. While a turn is running, `Esc` also stops it, except in vi mode. |
-| Tool approval prompt | `y`/`1`, `a`/`2`, `p`/`3`, `n`/`4`, `Enter`, `Esc`, `Ctrl+C` | Allow once, allow for session, persist allow, deny, accept default allow once, deny, or cancel the turn. |
+| Tool approval prompt | `Up`/`Down` or `j`/`k`/`Tab`, `Enter`, `y`, `a`, `p`, `n`, number keys, `Esc`, `Ctrl+C` | Move, answer the highlighted row (the cursor starts on allow once), allow once, allow for this session, always allow, deny, pick a row by its position, deny, or cancel the turn. `a` and `p` are offered only when the call can be allowed that way, so the numbers follow the rows shown. In vi mode `Esc` does not answer; a row key or `Ctrl+C` does. |
+| Plan approval prompt | `Up`/`Down` or `j`/`k`/`Tab`, `Enter`, `y`, `n`, `x`, number keys, `Esc` | Move, answer the highlighted row, start executing the plan, revise it, leave plan mode, or pick a row by its position. `Esc` asks for a revision, except in vi mode. |
 | Ask question card | `Up`/`Down` or `j`/`k`, `Left`/`Right` or `h`/`l`, `Space`, `Enter`, `1`-`9`, `Esc`, `Ctrl+C` | Navigate answers/tabs, toggle multi-select answers, submit/activate, pick numbered options, dismiss, or cancel the turn. |
 | Rewind picker | `Up`/`Down` or `j`/`k`, `Enter`, `b`, `c`, `d`, `s`, `u`, `y`, `Esc` | Choose a turn, apply both/conversation/code/summarize actions, confirm with `Enter` or `y` a file restore the checkpoint covers only partly, or go back/close. |
-| Model, provider, or resume picker | `Up`/`Down` or `Ctrl+P`/`Ctrl+N`; `j`/`k` while search is empty; type to filter; `Enter`; `Esc` | Search, select an item, or close the picker. Once search input starts, `j`/`k` become query text. `/provider` opens that provider's model list. |
-| MCP import picker | `Up`/`Down` or `j`/`k`, `Space`, `Enter`, `Esc` / `Ctrl+C` | Move, select servers, import selected servers, or cancel. |
-| MCP manager | `Up`/`Down` or `j`/`k`, `Enter`, `Left`/`Right` or `h`/`l`, `r`, number keys, `q` / `Ctrl+C` | Navigate server lists/details, refresh, choose actions, or close. |
+| Model, provider, or resume picker | `Up`/`Down` or `Ctrl+P`/`Ctrl+N`; `j`/`k` while search is empty; type to filter; `Enter`; `Esc` | Search, select an item, or close the picker. Once search input starts, `j`/`k` become query text. `/provider` opens that provider's model list. In the resume picker `Ctrl+D` twice deletes the highlighted saved session: the first press only asks, and any other key takes it back. |
+| `/mcp` panel | `Up`/`Down` or `j`/`k`, `Enter`/`Right`/`l`, `Esc`/`Ctrl+C`/`Left`/`h`, `q`, `Space`, `n`, `d`, `a`, `u`, `r` | Move; show a server's tools; go back from them or close; close; enable or disable a server (enabling one the repository declares asks `y` first); add a server; remove one (asks `y` first); sign in to a server that answered 401; grant the extra access a server asks for; reconnect a failed server. To add, type its command, URL or config and press `Enter`, then on the review install it with `y` (user), `l` (local) or `p` (project), or leave with `n`/`Esc`; keys are ignored for a moment after the review opens, and a server too long to show whole cannot be installed from it. |
 | `/clear` confirmation | Arrow keys or `j`/`k` / `Tab`, `Enter`, `y`, `n`, `Esc` / `Ctrl+C` | Toggle Clear/Cancel, confirm clear, or cancel. |
 
 Mode meanings:
@@ -1455,6 +1483,10 @@ start failure); `2` is bad flags. This is separate from `reasonix doctor`
 (providers/sandbox) and `reasonix plugin doctor <name>` (one package).
 
 ## Plugins (MCP)
+
+When a cached resource capability is available before its server connects,
+`read_mcp_resource` waits within the normal startup budget. Cancelling that read
+does not cancel the session's background connection attempt.
 
 Reasonix is an MCP client. A `[[plugins]]` entry's `type` selects the transport:
 `stdio` (default) launches a local subprocess (`command`/`args`/`env`); `http`

@@ -2,6 +2,7 @@ package serve
 
 import (
 	"net/http"
+	"reasonix/internal/base/backgroundwork"
 	"reasonix/internal/state/sessionstore"
 	"strconv"
 	"unicode/utf8"
@@ -16,9 +17,10 @@ import (
 )
 
 type historyToolCall struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
+	ID                    string                          `json:"id"`
+	Name                  string                          `json:"name"`
+	Arguments             string                          `json:"arguments"`
+	ArgumentNormalization *provider.ArgumentNormalization `json:"argumentNormalization,omitempty"`
 	// What a stable proxy actually reached. Name stays the provider-visible
 	// call, so a rebuild without these draws use_capability where the live
 	// transcript drew the capability it resolved to.
@@ -135,8 +137,9 @@ func historyMessagesWith(msgs []provider.Message, attachments func(string) []eve
 				for i, tc := range m.ToolCalls {
 					calls[tc.ID] = tc
 					hm.ToolCalls[i] = historyToolCall{
-						ID: tc.ID, Name: tc.Name, Arguments: eventwire.SurfaceArgs(tc.Name, tc.ResolvedName, tc.Arguments),
-						ResolvedName: tc.ResolvedName, CapabilityID: tc.CapabilityID,
+						ID: tc.ID, Name: tc.Name, Arguments: eventwire.SurfaceArgs(tc.Name, tc.ResolvedName, tc.ExecutionArguments()),
+						ArgumentNormalization: eventwire.SurfaceArgumentNormalization(tc.Name, tc.ResolvedName, tc.ArgumentNormalization),
+						ResolvedName:          tc.ResolvedName, CapabilityID: tc.CapabilityID,
 					}
 				}
 			}
@@ -177,7 +180,14 @@ func (s *Server) projectedHistory() []historyMessage {
 	return msgs
 }
 
-func (s *Server) registerHistoryRoutes(mux *http.ServeMux) {
+func (s *Server) registerHistoryRoutes(parent *http.ServeMux) {
+	mux := http.NewServeMux()
+	foreground := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer backgroundwork.Shared.Foreground()()
+		mux.ServeHTTP(w, r)
+	})
+	parent.Handle("GET /history", foreground)
+	parent.Handle("GET /history/", foreground)
 	mux.HandleFunc("GET /history", s.history)
 	mux.HandleFunc("GET /history/tool/{id}", s.historyToolOutput)
 }

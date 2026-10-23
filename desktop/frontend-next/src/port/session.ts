@@ -1,6 +1,6 @@
 import type { ModelMode } from "./model";
 import type { CompositionSummary } from "./composition";
-import type { StoredAttachment, Via } from "./wire";
+import type { ArgumentNormalization, StoredAttachment, Via } from "./wire";
 // A conversation and the states it passes through: what is running, what it
 // cost, and the points it can be wound back to.
 // GET /history: the event stream is live-only, so a reload rebuilds from these.
@@ -49,6 +49,7 @@ export interface HistoryToolCall {
   id: string;
   name: string;
   arguments?: string;
+  argumentNormalization?: ArgumentNormalization;
   resolvedName?: string;
   capabilityId?: string;
 }

@@ -9,6 +9,7 @@ import (
 
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
+	"reasonix/internal/state/sessionstore"
 )
 
 // Summary input construction is internal to a summary transaction. The normal
@@ -195,8 +196,11 @@ func mechanicalFoldDigest(fold []provider.Message) string {
 	fmt.Fprintf(&b, "%d earlier message(s) were folded here to free context, but the automatic summary was unavailable. Ask the user if you need details from before this point.", len(fold))
 	var said []string
 	for _, m := range fold {
-		if m.Role == provider.RoleUser && !m.LocalOnly && !isCompactionSummary(m) && strings.TrimSpace(m.Content) != "" {
-			said = append(said, m.Content)
+		if m.Role != provider.RoleUser || m.LocalOnly || isCompactionSummary(m) {
+			continue
+		}
+		if text := sessionstore.UserMessageText(m); text != "" {
+			said = append(said, text)
 		}
 	}
 	if len(said) == 0 {

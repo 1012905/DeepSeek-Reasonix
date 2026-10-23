@@ -2353,6 +2353,8 @@
     background: var(--float); box-shadow: var(--shadow-float);
     animation: sheetin var(--t-panel) var(--ease-spring) both;
   }
+  .prefs-sheet[data-wide] { width: 100%; height: 100% }
+  .prefs-sheet[data-wide] .prefs-main .prefs-col { max-width: min(1200px, 100%) }
 
   @keyframes prefsin { from { opacity: 0 } to { opacity: 1 } }
   @keyframes sheetin { from { transform: translateY(14px) scale(.985) } to { transform: none } }
@@ -2435,14 +2437,15 @@
     animation: card var(--m-line) both;
   }
   .prefs-found button {
-    display: flex; align-items: baseline; gap: 9px; padding: 7px 9px;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: baseline;
+    gap: 4px 9px; flex: none; padding: 7px 9px; overflow-wrap: anywhere;
     border: 0; border-radius: var(--r-xs); background: none; text-align: left; cursor: pointer;
   }
   .prefs-found button:not(:disabled):hover { background: var(--float-hi) }
   .prefs-found button:focus-visible { outline: 2px solid var(--focus); outline-offset: -1px }
-  .prefs-found .where { flex: none; font: var(--w-reg) var(--fs-micro) var(--ui); letter-spacing: var(--track-cap); text-transform: uppercase; color: var(--faint) }
-  .prefs-found .what { flex: 1; min-width: 0; font: var(--w-med) var(--fs-ui) var(--ui); color: var(--text) }
-  .prefs-found .cost { flex: none; font: var(--w-reg) var(--fs-meta) var(--mono); color: var(--faint) }
+  .prefs-found .where { min-width: 0; font: var(--w-reg) var(--fs-micro) var(--ui); letter-spacing: var(--track-cap); text-transform: uppercase; color: var(--faint) }
+  .prefs-found .what { grid-column: 1 / -1; grid-row: 1; min-width: 0; font: var(--w-med) var(--fs-ui) var(--ui); color: var(--text) }
+  .prefs-found .cost { display: block; min-width: 0; margin-left: 0; white-space: normal; text-align: right; font: var(--w-reg) var(--fs-meta) var(--mono); color: var(--faint) }
   .prefs-found .none { margin: 0; padding: 9px; font: var(--w-reg) var(--fs-ui) var(--ui); color: var(--faint) }
 
   .apply {

@@ -1,12 +1,11 @@
 package sessionstore
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 
 	"reasonix/internal/state/sessionv4/v4fixture"
 )
@@ -19,27 +18,47 @@ func TestV4ConversationsWithoutAListingCacheAreReplayedOnce(t *testing.T) {
 	if err := os.MkdirAll(sessions, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	body := strings.Repeat("x", 4000)
-	for i := range 60 {
+	var dirs []string
+	for i := range 3 {
 		dir := s.Session(fmt.Sprintf("desktop-%024x", i+1), 3)
-		var evs []v4fixture.Event
-		for j := range 100 {
-			evs = append(evs, v4fixture.Event{Kind: "message/complete", Payload: v4fixture.Msg(fmt.Sprintf("u%d", j), "user", body)})
-			evs = append(evs, v4fixture.Event{Kind: "message/complete", Payload: v4fixture.Msg(fmt.Sprintf("a%d", j), "assistant", body)})
+		s.Batch(dir, v4fixture.Ended,
+			v4fixture.Event{Kind: "message/complete", Payload: v4fixture.Msg("u", "user", fmt.Sprintf("question %d", i))},
+			v4fixture.Event{Kind: "message/complete", Payload: v4fixture.Msg("a", "assistant", "answer")})
+		dirs = append(dirs, dir)
+	}
+	first, _ := ListSessions(sessions)
+	if len(first) != len(dirs) {
+		t.Fatalf("first listing has %d rows, want %d", len(first), len(dirs))
+	}
+	// Each log keeps its size and modification time but no longer reads: a
+	// listing that replays a conversation loses its row, one that remembered it does not.
+	for _, dir := range dirs {
+		log := filepath.Join(dir, "events.frames")
+		info, err := os.Stat(log)
+		if err != nil {
+			t.Fatal(err)
 		}
-		s.Batch(dir, v4fixture.Ended, evs...)
+		if err := os.WriteFile(log, bytes.Repeat([]byte{0}, int(info.Size())), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(log, info.ModTime(), info.ModTime()); err != nil {
+			t.Fatal(err)
+		}
 	}
-	took := func() (time.Duration, int) {
-		start := time.Now()
-		out, _ := ListSessions(sessions)
-		return time.Since(start), len(out)
+	second, _ := ListSessions(sessions)
+	if len(second) != len(first) {
+		t.Fatalf("second listing has %d rows against %d: it replayed the conversations again", len(second), len(first))
 	}
-	first, rows := took()
-	second, again := took()
-	if rows != 60 || again != 60 {
-		t.Fatalf("rows = %d then %d, want 60", rows, again)
+	previews := map[string]string{}
+	for _, row := range first {
+		previews[row.Path] = row.Preview
 	}
-	if second*5 > first {
-		t.Fatalf("second listing took %v against %v for the first: replayed again", second, first)
+	for _, row := range second {
+		if previews[row.Path] != row.Preview {
+			t.Fatalf("%s previews %q, first listing said %q", row.Path, row.Preview, previews[row.Path])
+		}
+	}
+	if entries := len(loadV4Listings(sessions).Entries); entries != len(dirs) {
+		t.Fatalf("persisted entries = %d, want %d", entries, len(dirs))
 	}
 }

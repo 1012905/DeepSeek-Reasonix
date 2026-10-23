@@ -66,6 +66,13 @@ export const ACTIONS: UIAction[] = [
   {id:"agent-preset.module-parameters",kind:"view",target:"entity",proof:"interaction"},
   {id:"agent-preset.module-add",kind:"view",target:"entity",proof:"interaction"},
   {id:"agent-preset.module-choose",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-toggle",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-select-all",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-select-group",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-clear",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-search",kind:"view",target:"entity",proof:"interaction"},
+  {id:"agent-preset.module-navigate",kind:"view",target:"none",proof:"interaction"},
+  {id:"agent-preset.module-done",kind:"view",target:"none",proof:"interaction"},
   {id:"agent-preset.module-remove",kind:"view",target:"entity",proof:"interaction"},
   {id:"agent-preset.save",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
   {id:"agent-preset.default",kind:"kernel-mutation",target:"none",proof:"authority-effect"},
@@ -91,6 +98,9 @@ export const ACTIONS: UIAction[] = [
   { id: "chrome.open-project", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "appearance.theme", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.nav-rail", kind: "view", target: "none", proof: "interaction" },
+  { id: "appearance.nav-entry-visible", kind: "view", target: "none", proof: "interaction" },
+  { id: "appearance.nav-entry-move", kind: "view", target: "none", proof: "interaction" },
+  { id: "appearance.nav-entries-reset", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.live-grace", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.legacy-sessions", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.open-session-limit", kind: "view", target: "none", proof: "interaction" },
@@ -277,6 +287,7 @@ export const ACTIONS: UIAction[] = [
   { id: "feedback.tab", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.category", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.body", kind: "view", target: "none", proof: "interaction" },
+  { id: "feedback.preview", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.name", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.contact", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.shot.pick", kind: "view", target: "none", proof: "interaction" },
@@ -306,6 +317,7 @@ export const ACTIONS: UIAction[] = [
   { id: "feedback.mine", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.logs", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "feedback.refresh", kind: "repeatable", target: "none", proof: "interaction" },
+  { id: "feedback.account-section", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.filter", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.account-link", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.account-link-confirm", kind: "kernel-mutation", target: "none", proof: "interaction" },
@@ -385,10 +397,12 @@ export const ACTIONS: UIAction[] = [
   // Taking back the innermost open thing: a popover, an inline form. One
   // intent, reached by pressing away and by Escape.
   { id: "layer.dismiss", kind: "navigation", target: "none", proof: "interaction" },
+  { id: "file-drop.finish", kind: "view", target: "none", proof: "interaction" },
   // Walking the sidebar tree. The arrows only move focus; what Enter reaches is
   // the row's own action, so this one never writes anything itself.
   { id: "tree.navigate", kind: "view", target: "none", proof: "interaction" },
   { id: "settings.close", kind: "navigation", target: "none", proof: "interaction" },
+  { id: "settings.expand", kind: "view", target: "none", proof: "interaction" },
   { id: "pane.activate", kind: "navigation", target: "none", proof: "interaction" },
   // How this session is being read. One id across a bar button and a menu row,
   // because reaching a view from the bar and from the detail menu is one intent
@@ -568,6 +582,7 @@ export const ACTIONS: UIAction[] = [
   { id: "theme.remove", kind: "destructive", target: "entity", proof: "authority-effect" },
 
   // Usage changes what report is read, not canonical session state.
+  { id: "usage.range.today", kind: "view", target: "none", proof: "interaction" },
   { id: "usage.range.start", kind: "view", target: "none", proof: "interaction" },
   { id: "usage.range.end", kind: "view", target: "none", proof: "interaction" },
   { id: "usage.range.month", kind: "view", target: "none", proof: "interaction" },
@@ -600,6 +615,10 @@ export const ACTIONS: UIAction[] = [
   { id: "appearance.reading-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.text-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.measure", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  // Dragging the column's edge is a view adjustment held on this machine,
+  // not a setting written to the kernel: it changes what is drawn, not what
+  // the transcript says.
+  { id: "appearance.reading-width", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.background", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.font", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   // Kept where the window keeps them: these are this browser's, and no kernel
@@ -702,6 +721,7 @@ export const ACTIONS: UIAction[] = [
   { id: "write-lease.max-wait", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "workbench.stage-folder", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "workbench.change-folder", kind: "view", target: "entity", proof: "interaction" },
+  { id: "workbench.more-changes", kind: "view", target: "none", proof: "interaction" },
   { id: "workbench.discard", kind: "view", target: "entity", proof: "interaction" },
   { id: "workbench.discard-confirm", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "workbench.discard-cancel", kind: "view", target: "none", proof: "interaction" },
