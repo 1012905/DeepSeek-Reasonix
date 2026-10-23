@@ -211,6 +211,26 @@ describe("a /compact notice", () => {
   });
 });
 
+describe("a finished-fold notice", () => {
+  const text = (over: Partial<Notice>) => draw({ level: "info", ...over }).querySelector(".notice-bar .t")?.textContent ?? "";
+  const payload = JSON.stringify({ mode: "summarized", source_tokens: 122525, projection_tokens: 61192, input_tokens: 40710, output_tokens: 8186, cache_hit_tokens: 256, request_count: 1, user_turns_kept: 157, user_turns_dropped: 6 });
+
+  it("is worded from its typed payload, not as a line of key=value text", () => {
+    const said = text({ code: "compaction_telemetry", text: "Context compacted (summarized): about 122525 -> 61192 tokens.", detail: payload });
+    expect(said).toContain(t("摘要压缩"));
+    expect(said).not.toContain("=");
+    expect(said).not.toContain("user_dropped");
+    expect(said).not.toContain("Context compacted");
+  });
+
+  it("leaves out the usage sentence for a fold that asked for no summary", () => {
+    const quiet = JSON.stringify({ mode: "snip", source_tokens: 9000, projection_tokens: 6000, request_count: 0 });
+    const said = text({ code: "compaction_telemetry", text: "x", detail: quiet });
+    expect(said).toContain(t("裁剪旧工具输出"));
+    expect(said).not.toContain(t("摘要请求用了 {in} 输入、{out} 输出 token，缓存命中 {hit}。", { in: "0", out: "0", hit: "0" }));
+  });
+});
+
 describe("a background job notice", () => {
   const text = (over: Partial<Notice>) => draw({ level: "info", ...over }).querySelector(".notice-bar .t")?.textContent ?? "";
   const payload = JSON.stringify({ kind: "bash", id: "bash-126", label: "make build" });

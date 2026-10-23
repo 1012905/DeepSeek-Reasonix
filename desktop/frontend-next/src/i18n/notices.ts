@@ -45,6 +45,7 @@ export const NOTICE_TEXT: Record<string, string> = {
   job_killed: "后台任务已终止：{name}",
   job_failed: "后台任务 {name} 失败，需要处理",
   job_stalled: "后台任务 {name} 已有 {quiet} 没有活动（{work}）：可能在等某个东西，也可能卡住了；可以用 wait 或 bash_output 查看，或用 kill_shell 结束它",
+  compaction_telemetry: "上下文已压缩（{how}）：约 {src} → {proj}。{usage}",
   compacted: "已压缩",
   compact_declined: "无需压缩：{why}",
   compact_failed: "压缩失败：{why}",
