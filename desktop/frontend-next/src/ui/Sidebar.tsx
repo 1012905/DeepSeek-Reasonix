@@ -265,7 +265,7 @@ export function Sidebar({
         </button>
         {!navShown && (
           <div className="studio-quicknav">
-            <button data-action="files.open" onClick={onFiles}><span aria-hidden="true"><StudioIcon name="file" /></span><b>{t("文件")}</b></button>
+            <button data-action="files.open" onClick={onFiles}><span aria-hidden="true"><StudioIcon name="file" /></span><b>{t("文件")}</b><small aria-hidden="true">Tree · Diff</small></button>
             <button data-action="settings.section" data-value="ext" onClick={() => onSettings("ext")}><span aria-hidden="true"><StudioIcon name="plug" /></span><b>{t("工具与集成")}</b><small>MCP · Skills</small></button>
             <button data-action="settings.section" data-value="remote" onClick={() => onSettings("remote")}><span aria-hidden="true"><StudioIcon name="server" /></span><b>{t("运行环境")}</b><small>Local · SSH</small></button>
           </div>

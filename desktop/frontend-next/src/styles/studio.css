@@ -571,7 +571,7 @@ body { background: var(--page) !important; }
 .studio-brand { padding: 0 0 19px; gap: 9px; }
 .studio-new-task {
   height: 34px;
-  padding: 0 7px; gap: 9px;
+  padding: 0 7px; gap: 9px; margin-left: -8px; width: calc(100% + 8px);
   border-color: var(--hair);
   border-radius: 7px;
   background: var(--overlay);
@@ -584,8 +584,8 @@ body { background: var(--page) !important; }
 .studio-search kbd { margin-left: auto; color: var(--faint); font: 500 calc(9px * var(--fs-scale, 1))/1 var(--mono); }
 .studio-new-task kbd { color: var(--muted); }
 .studio-search {
-  width: 100%; height: 32px; display: flex; align-items: center; gap: 9px;
-  padding: 0 8px; margin: 3px 0 10px; border: 0; border-radius: 6px;
+  width: calc(100% + 8px); height: 32px; display: flex; align-items: center; gap: 9px;
+  padding: 0 8px; margin: 3px 0 10px -8px; border: 0; border-radius: 6px;
   background: transparent; color: var(--muted); font: 500 calc(12px * var(--fs-scale, 1))/1 var(--ui); cursor: pointer;
 }
 .studio-search:hover { color: var(--text); background: var(--overlay); }
@@ -601,7 +601,7 @@ body { background: var(--page) !important; }
 .studio-section-label button .studio-icon { width: 13px; height: 13px; }
 .studio-section-label button:hover { color: var(--text); }
 .studio-session-label { margin-top: 13px; }
-.studio-quicknav { display: grid; gap: 1px; margin-top: -7px; }
+.studio-quicknav { display: grid; gap: 1px; margin: -7px 0 0 -8px; }
 .studio-quicknav button {
   width: 100%; height: 33px; display: grid; grid-template-columns: 18px minmax(0,1fr) auto;
   align-items: center; gap: 7px; padding: 0 7px; border: 0; border-radius: 6px;
@@ -2154,7 +2154,7 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
   padding: 5px 22px 9px;
 }
 .studio-wallet {
-  width: 100%;
+  width: calc(100% + 8px); margin-left: -8px;
   height: 32px;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) auto;

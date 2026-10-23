@@ -13,6 +13,7 @@ const ROWS = [
   ["发送反馈", ".studio-feedback"],
 ];
 const TOLERANCE = 1;
+const spread0 = (rows, at) => rows.reduce((worst, r) => (Math.abs(r.icon - at) > Math.abs(worst) ? r.icon - at : worst), 0);
 const fails = [];
 const check = (name, ok, detail = "") => {
   console.log(`${ok ? "  ok" : "FAIL"}  ${name}${detail ? "  — " + detail : ""}`);
@@ -52,6 +53,11 @@ try {
     check(`${scheme}: all ${ROWS.length} rows are drawn`, seen.length === ROWS.length, `${seen.length}`);
     check(`${scheme}: the icons share one vertical line`, spread("icon") <= TOLERANCE, `spread ${spread("icon").toFixed(1)}px — ${show("icon")}`);
     check(`${scheme}: the labels start on one vertical line`, spread("text") <= TOLERANCE, `spread ${spread("text").toFixed(1)}px — ${show("text")}`);
+    const folder = await page.evaluate(() => {
+      const r = document.querySelector(".rail .wsfolder")?.getBoundingClientRect();
+      return r ? r.x + r.width / 2 : null;
+    });
+    check(`${scheme}: the icons sit on the project folders' line`, folder !== null && Math.abs(spread0(seen, folder)) <= TOLERANCE, `folders ${folder}; rows ${show("icon")}`);
     const looks = new Set(seen.map((r) => r.look));
     check(`${scheme}: every row's label has one size, weight and colour`, looks.size === 1, seen.map((r) => `${r.name} ${r.look}`).join("; "));
     const fill = seen.find((r) => r.name === "新建会话")?.fill ?? "";
