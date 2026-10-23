@@ -935,6 +935,7 @@ export const EN: Record<string, string> = {
   "所有项目均可使用": "Available in every project",
   "写入仓库，clone 仓库的人也会获得": "Written into the repository, so whoever clones it gets it too",
   "返回": "Back",
+  "返回正文": "Back to the conversation",
   "完成": "Done",
   "仓库地址，或将文件夹拖入此处": "A repository address, or drop a folder in",
   "选文件夹": "Choose a folder",

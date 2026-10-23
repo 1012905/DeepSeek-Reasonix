@@ -506,10 +506,13 @@ body { background: var(--page) !important; }
   color: var(--faint);
   box-shadow: none;
 }
-.chrome .thbtn { width: 30px; display: grid; place-items: center; padding: 0; cursor: pointer; }
+.chrome .thbtn { min-width: 30px; display: grid; place-items: center; padding: 0; cursor: pointer; }
 .chrome .thbtn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; }
 .chrome .top-action { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; font: 500 calc(11px * var(--fs-scale, 1))/1 var(--ui); cursor: pointer; }
 .chrome .top-action svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.25; stroke-linejoin: round; }
+.chrome .thbtn.top-action { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; width: auto }
+.chrome .thbtn.top-action .view-label { white-space: nowrap }
+@media (max-width: 1180px) { .chrome .thbtn.top-action .view-label { display: none } }
 .chrome .thbtn:hover,
 .chrome .top-action:hover,
 .chrome .top-action[aria-pressed="true"] { color: var(--text); background: var(--float); border-color: var(--border); }
@@ -3436,6 +3439,7 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
   font: var(--w-med) calc(11px * var(--fs-scale, 1))/1 var(--ui);
   cursor: pointer;
 }
+.run-back { display: grid; place-items: center; padding: 0 7px } .run-back svg { rotate: 180deg }
 .run-export:hover { background: var(--raised); border-color: var(--faint); }
 .run-export:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .run-kpis {

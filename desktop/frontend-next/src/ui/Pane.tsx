@@ -561,6 +561,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
             rows={traj.rows}
             availability={traj.availability}
             onSave={(name, content) => port.saveText(name, content)}
+            onBack={() => showView("flow")}
           />
         )}
       </div>
