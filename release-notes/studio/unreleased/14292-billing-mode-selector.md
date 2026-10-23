@@ -1,2 +1,0 @@
-- 新增：连接编辑页可选“计费方式”（按量计费或订阅套餐），订阅套餐的用量会按所填价格折算成估算值单独显示，不计入实际花费。关联 #13276。
-- Added: the connection editor now has a Billing choice (pay as you go or subscription plan); a plan's usage is shown as a separate estimate at the entered prices, never as money spent. Refs #13276.
