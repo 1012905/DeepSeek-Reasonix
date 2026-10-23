@@ -185,6 +185,7 @@ jobs:
           node perf/web-access.mjs
           node perf/peers-settings.mjs
           node perf/output-cap.mjs
+          node perf/agent-run-tab.mjs
           node perf/changes-cap.mjs
           node perf/session-menu-fit.mjs
           node perf/rail-rows-typography.mjs
