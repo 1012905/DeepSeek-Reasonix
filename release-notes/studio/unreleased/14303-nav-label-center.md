@@ -1,0 +1,2 @@
+- 修复：侧栏“新建会话”“搜索”“文件”等入口里，文字比图标偏高的问题，现在文字与图标垂直居中。关联 #14266。
+- Fixed: in the sidebar destinations (New session, Search, Files, ...) the label sat higher than its icon; the two are now level. Refs #14266.
