@@ -29,8 +29,9 @@ export function useSidebarOpen<V extends string>(
     (req: SidebarOpenRequest): Promise<void> => {
       const held = req.sessionPath ? runtimes.find((rt) => rt.sessionPath === req.sessionPath) : undefined;
       if (!held) {
-        void openPane(req);
-        return Promise.resolve();
+        // The caller awaits this to know an open failed; `void` here would
+        // swallow the rejection and leave the row stuck on its old selection.
+        return openPane(req).then(() => undefined);
       }
       setActive(held.id);
       setViewRequests((requests) => ({
