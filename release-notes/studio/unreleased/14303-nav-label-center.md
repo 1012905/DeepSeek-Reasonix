@@ -1,2 +1,2 @@
-- 修复：侧栏“新建会话”“搜索”“文件”等入口里，文字比图标偏高的问题，现在文字与图标垂直居中。关联 #14266。
-- Fixed: in the sidebar destinations (New session, Search, Files, ...) the label sat higher than its icon; the two are now level. Refs #14266.
+- 修复：侧栏入口的文字比图标偏高，且“工具与权限”等图标比上面几项更粗更大；现在文字与图标居中，图标粗细大小一致。关联 #14266。
+- Fixed: sidebar labels sat higher than their icons, and the Tools/Extensions/Memory/Remote icons were bolder and larger than the others; both are now level and matched. Refs #14266.

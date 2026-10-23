@@ -275,7 +275,7 @@ export function Sidebar({
               </button>
             ) : (
               <button key={mark} data-action="settings.section" data-value={section} onClick={() => onSettings(section)}>
-                <span aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.45} strokeLinecap="round" strokeLinejoin="round">{ICON[mark as Section]}</svg></span><b>{t(label)}</b>
+                <span aria-hidden="true"><svg viewBox="0 0 16 16" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={1} strokeLinecap="round" strokeLinejoin="round">{ICON[mark as Section]}</svg></span><b>{t(label)}</b>
               </button>
             ))}
           </div>
