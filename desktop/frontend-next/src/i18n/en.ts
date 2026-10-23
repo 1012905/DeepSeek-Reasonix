@@ -73,6 +73,10 @@ export const EN: Record<string, string> = {
   "选择本地文件夹": "Choose local folder",
   "选择模型": "Choose model",
   "定位到你说的：{text}": "Jump to what you said: {text}",
+  "定位到第 {a} 至 {b} 条": "Jump to questions {a} to {b}",
+  "第 {a} 至 {b} 条": "Questions {a} to {b}",
+  "右键给这处加星标": "Right-click to star this question",
+  "右键取消这处星标": "Right-click to remove the star",
   "你的第 {n} 条消息": "Your message {n}",
   // ── 转录：卡片与流 ───────────────────────────────────────────────
   "本次会话另外允许了 {n} 项": "{n} more allowed for this session",
