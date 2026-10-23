@@ -313,6 +313,7 @@ export const ACTIONS: UIAction[] = [
   { id: "feedback.mine", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.logs", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "feedback.refresh", kind: "repeatable", target: "none", proof: "interaction" },
+  { id: "feedback.account-section", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.filter", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.account-link", kind: "view", target: "none", proof: "interaction" },
   { id: "feedback.account-link-confirm", kind: "kernel-mutation", target: "none", proof: "interaction" },
