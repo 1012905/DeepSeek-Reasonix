@@ -609,9 +609,9 @@ body { background: var(--page) !important; }
 }
 .studio-quicknav button:hover { color: var(--text); background: var(--overlay); }
 .studio-quicknav button > span { display: grid; place-items: center; color: var(--accent); text-align: center; }
-.studio-quicknav b { min-width: 0; overflow: hidden; font: 500 calc(12px * var(--fs-scale, 1))/1.4 var(--ui); text-overflow: ellipsis; white-space: nowrap; }
+.studio-quicknav b { min-width: 0; padding-top: 2px; overflow: hidden; font: 500 calc(12px * var(--fs-scale, 1))/1.4 var(--ui); text-overflow: ellipsis; white-space: nowrap; }
 .studio-new-task > .studio-label,
-.studio-search > .studio-label { min-width: 0; display: block; overflow: hidden; color: inherit; font: inherit; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.studio-search > .studio-label { min-width: 0; display: block; padding-top: 3px; overflow: hidden; color: inherit; font: inherit; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .studio-quicknav small { color: var(--faint); font: 500 calc(9px * var(--fs-scale, 1))/1 var(--ui); }
 .studio-session-filters {
   min-height: 32px; display: grid; grid-template-columns: minmax(0, 1fr);
