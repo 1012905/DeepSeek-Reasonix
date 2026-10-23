@@ -60,6 +60,18 @@ export function saidBy(it: Item): string[] {
 // cached against the object and a growing session pays only for what it grew.
 const folded = new WeakMap<Item, string>();
 
+// The same text before it was flattened to lower case: a case-sensitive search
+// and a regular expression both have to see the row as it was written.
+const exact = new WeakMap<Item, string>();
+
+function exactHaystack(it: Item): string {
+  const held = exact.get(it);
+  if (held !== undefined) return held;
+  const made = saidBy(it).filter(Boolean).join("\n");
+  exact.set(it, made);
+  return made;
+}
+
 function haystack(it: Item): string {
   const held = folded.get(it);
   if (held !== undefined) return held;
@@ -68,14 +80,52 @@ function haystack(it: Item): string {
   return made;
 }
 
-export function search(items: Item[], query: string, receipts = false): Hit[] {
-  const needle = query.trim().toLocaleLowerCase();
-  if (!needle) return [];
+/** How the query is read. Both default to off, which is the plain
+ *  case-insensitive substring search the box has always done. */
+export interface FindMode {
+  regex?: boolean;
+  caseSensitive?: boolean;
+}
+
+export function search(items: Item[], query: string, receipts = false, mode: FindMode = {}): Hit[] {
+  const text = query.trim();
+  if (!text) return [];
+
+  // Where the next hit starts, from a given offset. Written once per call so the
+  // loop below does not branch on the mode for every row.
+  let next: (hay: string, from: number) => number;
+  if (mode.regex) {
+    let re: RegExp;
+    try {
+      re = new RegExp(text, mode.caseSensitive ? "g" : "gi");
+    } catch {
+      // Half-typed parentheses are not an error worth a message: the box simply
+      // has nothing to point at yet.
+      return [];
+    }
+    next = (hay, from) => {
+      re.lastIndex = from;
+      const hit = re.exec(hay);
+      return hit ? hit.index : -1;
+    };
+  } else if (mode.caseSensitive) {
+    next = (hay, from) => hay.indexOf(text, from);
+  } else {
+    const needle = text.toLocaleLowerCase();
+    next = (hay, from) => hay.indexOf(needle, from);
+  }
+
+  const verbatim = mode.regex || mode.caseSensitive;
+  // A plain substring advances by its own length, so overlapping text is counted
+  // the way it always was ("aa" in "aaaa" is two, not three). A regular
+  // expression may match nothing at all (`^`, a lookahead), so it can only
+  // advance one position at a time or it would never move.
+  const stride = mode.regex ? 1 : text.length;
   const out: Hit[] = [];
   for (let row = 0; row < items.length; row++) {
     if (items[row].t === "receipt" && !receipts) continue;
-    const hay = haystack(items[row]);
-    for (let at = hay.indexOf(needle); at >= 0; at = hay.indexOf(needle, at + needle.length)) {
+    const hay = verbatim ? exactHaystack(items[row]) : haystack(items[row]);
+    for (let at = next(hay, 0); at >= 0; at = next(hay, at + stride)) {
       out.push({ id: items[row].id, row, at });
       if (out.length >= MAX) return out;
     }
