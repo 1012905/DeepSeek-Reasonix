@@ -1,24 +1,16 @@
 import { t } from "../i18n";
 import { FeedbackBadge } from "./feedbackentry";
-import { ICON, type Section } from "./prefsnav";
+import { DESTINATIONS, type Mark } from "./navdest";
+import { ICON } from "./prefsnav";
 import { StudioIcon } from "./StudioIcon";
 import { UpdateDot } from "./UpdateDot";
 
 // Settings entries share their destination's mark with prefsnav.
 const CHAT = "M3.2 4.4a1.2 1.2 0 0 1 1.2-1.2h7.2a1.2 1.2 0 0 1 1.2 1.2v5a1.2 1.2 0 0 1-1.2 1.2H7.2L4.4 13v-2.4a1.2 1.2 0 0 1-1.2-1.2Z";
-type Mark = "chat" | "files" | Section;
 
 // Every entry goes somewhere that exists. A rail of icons that open nothing is
 // the cheapest thing to draw and the most expensive thing to keep.
-const TO: [Mark, string, string | null, string?][] = [
-  ["chat", "会话", null],
-  ["usage", "用量", "usage"],
-  ["files", "文件", "files", "files.open"],
-  ["tools", "工具与权限", "tools"],
-  ["ext", "扩展", "ext"],
-  ["memory", "记忆", "memory"],
-  ["remote", "远程", "remote"],
-];
+const TO: [Mark, string, string | null, string?][] = [["chat", "会话", null], ...DESTINATIONS];
 
 const FOOT: [Mark, string, string, string][] = [
   ["account", "账号", "account", "chrome.account"],
