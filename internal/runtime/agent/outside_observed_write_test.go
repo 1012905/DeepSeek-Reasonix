@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"reasonix/internal/base/testenv"
 	"reasonix/internal/contract/event"
 	"reasonix/internal/contract/provider"
 	"reasonix/internal/contract/tool"
@@ -269,6 +270,30 @@ func TestTheExemptionIsNarrowerThanALookalikePath(t *testing.T) {
 	scratch := filepath.Join(tempRoot, sessiontemp.Prefix()+"run", "probe.go")
 	if !disposable(scratch, tempRoot, caches) {
 		t.Fatalf("%s was not exempt: the directory sessiontemp hands out is the host's to spend", scratch)
+	}
+}
+
+// A folder the person granted as workspace is not out of sight. The host
+// observes the granted roots and walks them with the root, so a write there is
+// work product like any other, and reporting it would caveat exactly the
+// deliveries the person widened the fence to allow.
+func TestAGrantedRootIsNotReportedAsOutOfSight(t *testing.T) {
+	f := newReceiptFixture(t)
+	granted := testenv.TempDir(t)
+	inGranted := filepath.Join(granted, "out.txt")
+	f.record(inGranted)
+
+	if !slices.Contains(f.a.outsideObservedWrites(), inGranted) {
+		t.Fatalf("without a grant %s must read as out of sight", inGranted)
+	}
+
+	f.a.extraRoots = []string{granted}
+	if got := f.a.outsideObservedWrites(); len(got) != 0 {
+		t.Fatalf("outside writes = %v, want none: a granted root is observed", got)
+	}
+	rep := f.report().WithOutsideObservedWrites(f.a.outsideObservedWrites())
+	if slices.ContainsFunc(rep.Gaps, func(g completion.Gap) bool { return g.Kind == completion.GapOutsideObservedRoot }) {
+		t.Fatalf("gaps = %+v, want no out-of-sight gap under a granted root", rep.Gaps)
 	}
 }
 
