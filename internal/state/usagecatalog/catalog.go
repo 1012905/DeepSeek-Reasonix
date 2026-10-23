@@ -605,31 +605,19 @@ func (c *Catalog) ReconcileFile(ctx context.Context, path, day string) error {
 	return nil
 }
 
-func (c *Catalog) ReconcileDir(ctx context.Context, dir string) error {
-	entries, err := os.ReadDir(dir)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
-			continue
-		}
-		day := strings.TrimSuffix(entry.Name(), ".jsonl")
-		if err := c.ReconcileFile(ctx, filepath.Join(dir, entry.Name()), day); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (c *Catalog) Ready(ctx context.Context, dir string, days []string) bool {
 	for _, day := range days {
 		path := filepath.Join(dir, day+".jsonl")
 		info, err := os.Stat(path)
 		if errors.Is(err, os.ErrNotExist) {
+			// A day file that vanished after it was indexed is not complete:
+			// rows left for it are stale, so the caller falls back to the
+			// authoritative JSONL until the reconcile forgets the file. A day
+			// never indexed keeps reading as an empty, complete day.
+			var indexed int
+			if err := c.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM usage_files WHERE path=?`, path).Scan(&indexed); err != nil || indexed != 0 {
+				return false
+			}
 			continue
 		}
 		if err != nil {
