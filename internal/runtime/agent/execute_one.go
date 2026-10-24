@@ -578,7 +578,7 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 	// check-before-write TOCTOU windows. Dynamic Economy/MCP tools are covered
 	// here after registry lookup without schema-changing wrappers.
 	// executeOne defers plan.releaseParentWrite so every return path releases.
-	if releaseParentWrite, perr := a.reserveParentWrite(plan.runTool, plan.runArgs, plan.readOnly, a.declareWritePaths(ctx, plan)); perr != nil {
+	if releaseParentWrite, perr := a.reserveToolWrite(ctx, plan.runTool, plan.runArgs, plan.readOnly, a.declareWritePaths(ctx, plan)); perr != nil {
 		out := toolOutcome{
 			output:  "blocked: " + perr.Error(),
 			blocked: true,
