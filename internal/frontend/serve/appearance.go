@@ -3,11 +3,10 @@ package serve
 
 import (
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,10 +14,6 @@ import (
 
 	"reasonix/internal/contract/config"
 )
-
-// maxWallpaperUpload bounds what a window will hold in memory to decode and
-// write. A desktop background past this is a photo nobody downscaled.
-const maxWallpaperUpload = 12 << 20
 
 // wallpaperTypes is the allowlist. The extension is derived from the type
 // rather than from a client-supplied name, so nothing decides its own path.
@@ -28,6 +23,8 @@ var wallpaperTypes = map[string]string{
 	"image/webp": ".webp",
 	"image/avif": ".avif",
 	"image/gif":  ".gif",
+	"video/mp4":  ".mp4",
+	"video/webm": ".webm",
 }
 
 func (s *Server) registerAppearanceRoutes(mux *http.ServeMux) {
@@ -68,7 +65,11 @@ type zoomRangeView struct {
 type wallpaperView struct {
 	// URL carries the content hash in its name, so the bytes at an address
 	// never change and the page needs no cache buster.
-	URL     string  `json:"url"`
+	URL string `json:"url"`
+	// Kind is "image" or "video". The page draws a picture as a background
+	// and a video as an element, and the stored name is all it could read this
+	// from otherwise; the kernel already decided it from the type.
+	Kind    string  `json:"kind"`
 	Opacity float64 `json:"opacity"`
 	Dim     float64 `json:"dim"`
 	FocusX  float64 `json:"focusX"`
@@ -93,6 +94,7 @@ func viewOf(a config.AppearanceConfig, language, width string) appearanceView {
 	if a.Wallpaper.File != "" {
 		out.Wallpaper = &wallpaperView{
 			URL:     "/appearance/wallpaper/" + a.Wallpaper.File,
+			Kind:    wallpaperKind(a.Wallpaper.File),
 			Opacity: a.Wallpaper.Opacity,
 			Dim:     a.Wallpaper.Dim,
 			FocusX:  a.Wallpaper.FocusX,
@@ -166,24 +168,14 @@ func (s *Server) saveAppearance(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, viewOf(edit.Desktop.Appearance, edit.DesktopLanguage(), edit.DesktopConversationWidth()))
 }
 
+// uploadWallpaper takes the picture as the request body, not as JSON, so the
+// kernel never holds the file: it is copied to disk as it arrives, under a name
+// derived from what is in it. The type comes in the query because the body's
+// own content type has to be the one csrfGuard admits for binary uploads.
 func (s *Server) uploadWallpaper(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, (maxWallpaperUpload/3)*4+1024)
-	var body struct {
-		Mime string `json:"mime"`
-		Data string `json:"data"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		badBody(w)
-		return
-	}
-	raw, err := base64.StdEncoding.DecodeString(body.Data)
+	name, err := storeWallpaper(r.URL.Query().Get("mime"), r.Body)
 	if err != nil {
-		refuse(w, http.StatusBadRequest, "wallpaper.not_base64", "the image data was not base64", nil)
-		return
-	}
-	name, err := writeWallpaper(body.Mime, raw)
-	if err != nil {
-		writeErr(w, http.StatusUnprocessableEntity, err)
+		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
 	edit := config.LoadForEdit(config.UserConfigPath())
@@ -231,38 +223,69 @@ func (s *Server) wallpaperAsset(w http.ResponseWriter, r *http.Request) {
 		notFound(w, "wallpaper", name)
 		return
 	}
-	raw, err := os.ReadFile(filepath.Join(appearanceDir(), name))
+	f, err := os.Open(filepath.Join(appearanceDir(), name))
+	if err != nil {
+		notFound(w, "wallpaper", name)
+		return
+	}
+	defer f.Close()
+	info, err := f.Stat()
 	if err != nil {
 		notFound(w, "wallpaper", name)
 		return
 	}
 	w.Header().Set("Content-Type", contentTypeOf(name))
 	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
-	_, _ = w.Write(raw)
+	http.ServeContent(w, r, name, info.ModTime(), f)
 }
 
-// writeWallpaper stores the bytes under a name derived from what is in them.
-func writeWallpaper(mime string, raw []byte) (string, error) {
+// storeWallpaper copies the picture to disk as it is read and names it for its
+// content. The copy is made beside the final name and renamed into place, so an
+// upload that breaks off leaves nothing behind. The only refusals left are the
+// ones about what was sent: a type nobody allows, or nothing at all.
+func storeWallpaper(mime string, r io.Reader) (string, error) {
 	ext, ok := wallpaperTypes[strings.ToLower(strings.TrimSpace(mime))]
 	if !ok {
-		return "", refusal(http.StatusUnprocessableEntity, "wallpaper.unsupported_type", errors.New("unsupported image type"), nil)
+		return "", refusal(http.StatusUnprocessableEntity, "wallpaper.unsupported_type", errors.New("unsupported wallpaper type"), nil)
 	}
-	if len(raw) == 0 {
-		return "", refusal(http.StatusUnprocessableEntity, "wallpaper.empty", errors.New("the image is empty"), nil)
-	}
-	if len(raw) > maxWallpaperUpload {
-		return "", refusal(http.StatusUnprocessableEntity, "wallpaper.too_large", fmt.Errorf("image is larger than %d MB", maxWallpaperUpload>>20), map[string]any{"limit": maxWallpaperUpload >> 20})
-	}
-	sum := sha256.Sum256(raw)
-	name := hex.EncodeToString(sum[:8]) + ext
 	dir := appearanceDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(filepath.Join(dir, name), raw, 0o644); err != nil {
+	tmp, err := os.CreateTemp(dir, ".upload-*")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(tmp.Name())
+	hash := sha256.New()
+	n, err := io.Copy(io.MultiWriter(tmp, hash), r)
+	if err != nil {
+		tmp.Close()
+		return "", err
+	}
+	if err := tmp.Close(); err != nil {
+		return "", err
+	}
+	if n == 0 {
+		return "", refusal(http.StatusUnprocessableEntity, "wallpaper.empty", errors.New("the image is empty"), nil)
+	}
+	name := hex.EncodeToString(hash.Sum(nil)[:8]) + ext
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
+		return "", err
+	}
+	if err := os.Rename(tmp.Name(), filepath.Join(dir, name)); err != nil {
 		return "", err
 	}
 	return name, nil
+}
+
+// wallpaperKind says whether a stored wallpaper is a picture or a video, by the
+// type its name was derived from.
+func wallpaperKind(name string) string {
+	if strings.HasPrefix(contentTypeOf(name), "video/") {
+		return "video"
+	}
+	return "image"
 }
 
 func contentTypeOf(name string) string {

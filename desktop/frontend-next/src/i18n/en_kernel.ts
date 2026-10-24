@@ -265,8 +265,8 @@ export const EN_KERNEL: Record<string, string> = {
   "本机没有操作系统沙箱，「关进沙箱」一档无法保存": "This machine has no OS sandbox, so the jailed mode cannot be saved",
 
   "该文件夹仍有 {n} 个打开的面板，请先关闭再移除": "This folder still has {n} open panes — close them before removing it",
-  "不支持该图片格式，请改用 PNG、JPEG、WebP、AVIF 或 GIF":
-    "That image format will not work — use PNG, JPEG, WebP, AVIF or GIF",
+  "不支持该格式，请改用图片（PNG、JPEG、WebP、AVIF、GIF）或视频（MP4、WebM）":
+    "That format is not supported; use an image (PNG, JPEG, WebP, AVIF, GIF) or a video (MP4, WebM)",
   "图片内容为空": "The image is empty",
   "压缩阈值未能保存：{detail}": "The compaction threshold was not saved: {detail}",
   "本次请求未包含阈值，未做任何修改": "The request carried no threshold, so nothing changed",
@@ -475,7 +475,6 @@ export const EN_KERNEL: Record<string, string> = {
   "已有一个迁移正在进行，请等待其完成": "A move is already running — wait for it to finish",
   "这不是有效的插件名称": "That is not a plugin name",
   "该插件未安装": "That plugin is not installed",
-  "图片数据不是 base64 编码": "The image data is not base64",
   "HTTP 上不提供 shell 命令": "Shell commands are not served over HTTP",
   "这个会话里没有这条调用的输出": "This session has no output for that call",
   "要取的输出范围不对，请重新展开这条输出": "The part of the output asked for is not valid; open the output again",
@@ -544,7 +543,6 @@ export const EN_KERNEL: Record<string, string> = {
   "余额地址必须是 http 或 https 开头的网址": "The balance address must be an http or https URL",
   "这个余额格式不在可选范围内": "That balance format is not one of the available ones",
   "额外设置中的「{path}」不能为空值（null）": "“{path}” in the extra settings cannot be null",
-  "图片过大，请压缩至 {limit} MB 以内": "That image is too large — bring it under {limit} MB",
   "{path} 不在当前工作树中，无法查看其改动": "{path} is not inside this working tree, so its changes cannot be shown",
   "无法读取该文件的改动 —— git 未返回结果": "Could not read this file's changes — git returned nothing usable",
   "无法读取本次运行的轨迹记录，因此无法确定其覆盖范围":
@@ -649,6 +647,8 @@ export const EN_KERNEL: Record<string, string> = {
     "A fetch backend did not answer; the next one in the chain was tried. See the notice for details",
   "配置的网页抓取后端无法使用，已跳过；检查用户配置里的 web_fetch_backends":
     "A configured fetch backend cannot be used and was skipped; check web_fetch_backends in your user config",
+  "这个会话创建之后，有内置工具发生了变化；它按当时记录的工具继续，模型服务商的缓存需要重新建立，第一次回复可能稍慢":
+    "A built-in tool changed after this conversation started. It continues with the tools it recorded; the model provider's cache has to be rebuilt, so the first reply may be slower.",
   "搜索后端没有返回结果，已换用链里的下一个后端；详情见通知":
     "A search backend did not answer; the next one in the chain was tried. See the notice for details",
   "配置的搜索后端无法使用，已跳过；检查用户配置里的 web_search_backends 和 searxng_url":

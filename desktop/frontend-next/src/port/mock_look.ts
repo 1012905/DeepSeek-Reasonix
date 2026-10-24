@@ -31,7 +31,7 @@ export class MockLook {
 
   // The kernel refuses with a code, so the fixture does too — otherwise the
   // path that turns a code into a sentence is never exercised in development.
-  private static readonly TYPES = ["image/png", "image/jpeg", "image/webp", "image/avif", "image/gif"];
+  private static readonly TYPES = ["image/png", "image/jpeg", "image/webp", "image/avif", "image/gif", "video/mp4", "video/webm"];
 
   // An object URL stands in for the kernel's content-addressed one.
   async uploadWallpaper(blob: Blob): Promise<Appearance> {
@@ -41,7 +41,7 @@ export class MockLook {
     }
     this.look = {
       ...this.look,
-      wallpaper: { url: URL.createObjectURL(blob), opacity: 0.5, dim: 0.55, focusX: 0.5, focusY: 0.5 },
+      wallpaper: { url: URL.createObjectURL(blob), kind: blob.type.startsWith("video/") ? "video" : "image", opacity: 0.5, dim: 0.55, focusX: 0.5, focusY: 0.5 },
     };
     return this.appearance();
   }

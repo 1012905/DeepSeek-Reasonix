@@ -1,0 +1,2 @@
+- Fixed: Planner and Guardian reads no longer refresh the executor's stale-file guard. Direct and deferred reads use each role's own record. Refs #14025, #14133.
+- 修复：Planner 和 Guardian 的读取不再刷新执行代理的过期文件保护；直接和动态读取使用各角色自己的记录。关联 #14025、#14133。
