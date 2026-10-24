@@ -11,10 +11,9 @@ const { KeyboardKeeper } = require("./keyboard");
 // a phone layout or not at all.
 const AGENT_VIEWPORT = { width: 1280, height: 900 };
 
-// How long a page may be held out of the window while its navigation runs. A
-// server that accepts the connection and never answers would otherwise keep the
-// panel blank, with nothing turning, for as long as it likes; past this the page
-// is shown again, loaded or not.
+// How long a page may be held out of the window while its navigation runs; past
+// this it is shown again loaded or not, or a server that accepts the connection
+// and never answers would keep the panel blank for as long as it likes.
 const LEAVE_LIMIT_MS = 4000;
 
 // CSS cannot clip a native view, so the page's corners are rounded here; the
@@ -29,15 +28,9 @@ const SLEPT_LIMIT = 18;
 // kept per page and said again to every session a wake builds.
 const ENABLE_SHAPE = /^[A-Za-z]+\.enable$/;
 
-// BrowserViews owns the pages the agent's browser opens in this window. Each is
-// a view on its own partition — never the session the window's credential
-// lives in. A page nobody is watching is not hidden and not moved wholly off
-// screen: Chromium lays out nothing outside the window, and a page it created
-// while its view was hidden takes no input until shown. It is kept overlapping
-// the window by one pixel in the bottom-left corner instead. A page nobody has
-// driven for a while is put to sleep whole — its renderer closed, its address
-// and a picture kept — and the next thing said to it wakes it as the same
-// target under the same targetId.
+// BrowserViews owns the pages the agent's browser opens in this window, each a
+// view on its own partition, never the session the window's credential lives in.
+// An unwatched page is parked at a one-pixel corner; an idle one sleeps whole.
 class BrowserViews {
   constructor({ win, kernelOrigin, sleepAfterMs = 15 * 60_000, sweepMs = 60_000, maxAwake = 6 }) {
     this.win = win;
@@ -51,10 +44,9 @@ class BrowserViews {
     this.shown = "";
     this.keyboard = new KeyboardKeeper({ win });
     this.inputWake = new InputWake({ win });
-    // A page whose renderer has sat untouched for sleepAfterMs is put to sleep
-    // by the sweep: overnight, the pages a driver forgot are hundreds of
-    // megabytes of renderer nobody is using. A slept page keeps its entry and
-    // its targetId, so the kernel's handle outlives the sleep.
+    // A page whose renderer has sat untouched for sleepAfterMs is slept by the
+    // sweep: a slept page keeps its entry and its targetId, so the kernel's
+    // handle outlives the sleep.
     this.sleepAfterMs = sleepAfterMs;
     this.maxAwake = maxAwake;
     this.sweeper = setInterval(() => this.sweep(), sweepMs);
@@ -105,13 +97,9 @@ class BrowserViews {
   create({ partition, url, onEvent, onClosed, onPopup, onDownload }) {
     this.guard(partition);
     const targetId = crypto.randomUUID();
-    // The cap on awake pages: a renderer is memory the Studio pays for whether
-    // anyone is watching the page or not, and a driver that forgets its pages
-    // must not be allowed to spend all of it. The least recently touched page
-    // is slept to make room — never the one the person is looking at, and the
-    // cap is skipped entirely when there is nothing that may sleep. A wake
-    // yields no room: a page the kernel asks for outranks a page it has not
-    // touched, and the next sweep brings the count back down on its own.
+    // The cap on awake pages: the least recently touched page is slept to make
+    // room — never the one the person is looking at, and never when nothing may
+    // sleep. A wake yields no room, and the next sweep brings the count down.
     let awake = 0;
     let victim = null;
     for (const [id, other] of this.entries) {
@@ -135,6 +123,7 @@ class BrowserViews {
       attached: false,
       panel: null,
       override: null,
+      emulated: null,
       scale: 1,
       lastTouch: Date.now(),
       slept: null,
@@ -142,6 +131,7 @@ class BrowserViews {
       rising: null,
       pending: new Set(),
       showing: false,
+      dialog: false,
       closed: false,
     };
     // The burial of a target is the one thing the kernel is told of, so it
@@ -163,10 +153,8 @@ class BrowserViews {
     try {
       this.spawn(entry);
     } catch (err) {
-      // A spawn that fails half-built must not leave an entry behind: a view
-      // that never was cannot be closed, and an entry nothing can bury is
-      // remembered forever. The target never happened, so the kernel is told
-      // nothing of it.
+      // A spawn that fails half-built leaves no entry behind: the target never
+      // happened, so nothing is closed and the kernel is told nothing of it.
       entry.closed = true;
       this.entries.delete(targetId);
       const contents = entry.view && entry.view.webContents;
@@ -177,11 +165,9 @@ class BrowserViews {
       targetId,
       send: (method, params) => {
         entry.lastTouch = Date.now();
-        // A slept page has no contents to take the call, and a refusal would
-        // read, to the kernel, as a page that died for no reason it could
-        // see: the page is woken first, and the call dispatched to what it
-        // comes back as. A page still rising takes the call when it has
-        // landed, for the same reason — mid-load answers the page it was.
+        // A slept page is woken first and the call dispatched to what it comes
+        // back as; a page still rising takes the call when it has landed, since
+        // mid-load answers the page it was.
         const rising = entry.slept ? this.wake(entry) : entry.rising;
         if (rising) return rising.then(() => this.dispatch(entry, method, params));
         return this.dispatch(entry, method, params);
@@ -191,8 +177,7 @@ class BrowserViews {
     };
   }
 
-  // spawn builds the view a page lives in and loads its address, with the
-  // guards, the debugger and the watchers every page has had. It runs for
+  // spawn builds the view a page lives in and loads its address. It runs for
   // create() and again for every wake, so a page that slept comes back as
   // exactly what a new page is, under the handle it never lost.
   spawn(entry) {
@@ -230,16 +215,18 @@ class BrowserViews {
       if (method === "Page.frameNavigated" && params && params.frame && !params.frame.parentId) {
         entry.mainFrame = params.frame.id;
       }
+      // The kernel enables Page at attach, so the dialog events reach the
+      // shell: a page waiting on its answer is not slept under the question.
+      if (method === "Page.javascriptDialogOpening") entry.dialog = true;
+      else if (method === "Page.javascriptDialogClosed") entry.dialog = false;
       entry.onEvent(method, params);
     });
     this.keyboard.watch(contents, () => Date.now() < entry.synthUntil);
     this.watchLoads(entry.targetId, entry);
     const gone = () => {
-      // A sleep closes the contents itself, so the death of a page asleep or
-      // going to sleep is the sleep landing, not the target dying: the kernel
-      // hears nothing of it, and the entry stays a tombstone for its next
-      // send() to raise or its close() to bury. A death reported by a view the
-      // entry has already grown out of says nothing either.
+      // A sleep closes the contents itself, so a death under it is the sleep
+      // landing, not the target dying: the entry stays a tombstone for its next
+      // send() to raise or its close() to bury.
       if (entry.sleeping) {
         entry.sleeping = false;
         return;
@@ -249,10 +236,12 @@ class BrowserViews {
     };
     contents.once("destroyed", gone);
     contents.on("render-process-gone", gone);
-    // The page loads before the window holds it: a page that finishes loading in a
-    // view already attached is given the keyboard by the platform, and the
-    // person's composition in the app page ends with it. The load's promise is
-    // what a wake waits out; a create leaves it to the kernel's own waiting.
+    // A woken page must come back laid out at the viewport the agent set, not
+    // at whatever its view happens to be while it is parked.
+    if (entry.emulated) contents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", entry.emulated).catch(() => {});
+    // The page loads before the window holds it, or the platform hands it the
+    // keyboard and ends the person's composition. The load's promise is what a
+    // wake waits out; a create leaves the waiting to the kernel.
     return contents.loadURL(entry.url).catch(() => {});
   }
 
@@ -260,9 +249,8 @@ class BrowserViews {
   // live view only; every caller has seen to the page being awake first.
   dispatch(entry, method, params) {
     // An enable-shape command is remembered as it is sent — latest parameters,
-    // first-seen order, a live set rather than an attach-time snapshot, so a
-    // domain switched on mid-session is replayed with the rest — and a domain
-    // switched off leaves the set, so the next wake does not switch it back on.
+    // first-seen order — and a domain switched off leaves the set, so the next
+    // wake does not switch it back on.
     if (ENABLE_SHAPE.test(method) || method === "Page.setLifecycleEventsEnabled") {
       const known = entry.enables.find((one) => one[0] === method);
       if (known) known[1] = params;
@@ -286,10 +274,8 @@ class BrowserViews {
   }
 
   // command is one debugger call the kernel is waiting on. A session that dies
-  // with the page never settles on its own — Electron keeps the promise open —
-  // so the calls a sleep outlives are failed here, where the page is put away,
-  // and the kernel reads an error it can retry rather than a timeout it cannot
-  // tell from a page that vanished.
+  // never settles its calls on its own, so a sleep fails them here: the kernel
+  // reads an error it can retry, not a timeout it cannot tell from a vanishing.
   command(entry, method, params) {
     return new Promise((resolve, reject) => {
       entry.pending.add(reject);
@@ -306,13 +292,11 @@ class BrowserViews {
     });
   }
 
-  // sleep puts a page away whole: its renderer is the cost of a page nobody is
-  // using, and it is closed — what is kept of the page is the address it was on
-  // and a picture to draw while it is gone. Nothing the kernel holds changes,
-  // for a targetId is a key in a map here and never leaves it, so the page's
-  // handle survives and the next thing said to it builds the view again.
+  // sleep puts a page away whole: its renderer is closed, and what is kept is
+  // the address it was on and a picture to draw while it is gone. Nothing the
+  // kernel holds changes, so its handle survives and the next call wakes it.
   async sleep(entry) {
-    if (entry.slept || entry.closed || entry.targetId === this.shown || entry.returning) return;
+    if (entry.slept || entry.closed || !this.maySleep(entry)) return;
     const contents = entry.view && entry.view.webContents;
     if (!contents) return;
     // The picture is what the window draws while the page is gone, taken the
@@ -328,11 +312,9 @@ class BrowserViews {
       picture = "";
     }
     // The page may have been shown, woken, closed, or begun a navigation while
-    // the picture was taken; a sleep that lost that race must not tear
-    // anything down. A settle pending is a navigation in flight, and a page
-    // whose navigation is killed mid-flight hangs the kernel waiting on its
-    // load.
-    if (entry.slept || entry.closed || entry.returning || entry.targetId === this.shown || !entry.view) return;
+    // the picture was taken; a sleep that lost that race must not tear anything
+    // down, and a navigation killed mid-flight hangs the kernel waiting on it.
+    if (entry.slept || entry.closed || !entry.view || !this.maySleep(entry)) return;
     entry.slept = { url, picture };
     // The calls still open on the session that is about to die are closed
     // first, as errors: the kernel hears nothing of a sleep, so no one else
@@ -353,10 +335,8 @@ class BrowserViews {
     clearTimeout(entry.returning);
     entry.returning = null;
     // The ceiling on the dead: a tombstone is only a picture and an address,
-    // but a driver that never comes back to a page leaves one behind for every
-    // page it ever opened. Past this the oldest-touched is buried whole and
-    // the kernel is told, the way a browser discards the tabs a person
-    // abandoned weeks ago.
+    // but a driver that never comes back leaves one for every page it opened.
+    // Past this the oldest-touched is buried whole and the kernel is told.
     let tombs = 0;
     let oldest = null;
     for (const other of this.entries.values()) {
@@ -368,13 +348,8 @@ class BrowserViews {
   }
 
   // wake raises a slept page: the view is built again on the address it dozed
-  // off on, the kernel's enabled domains are said again to the new debugger
-  // session, and the promise answers only once the page has loaded — a command
-  // answered against a page still loading reads the page it was, not the page
-  // it is, and the kernel could not tell the difference. A create offers the
-  // kernel a load to wait on itself; a wake owes the waiting, because the
-  // kernel believes this page was already loaded. Commands sent while the page
-  // rises all wait on the same rise.
+  // off on, its viewport and the kernel's enabled domains are said again to the
+  // new session, and the promise answers only once the page has loaded.
   wake(entry) {
     if (!entry.slept) return entry.rising || Promise.resolve();
     entry.url = entry.slept.url;
@@ -383,6 +358,9 @@ class BrowserViews {
     // is nothing for this one to answer for.
     entry.sleeping = false;
     const load = this.spawn(entry);
+    // The recorded emulation is the view-fitting state a sleep threw away;
+    // restoring it lets show() fit the panel the way it did before the sleep.
+    entry.override = entry.emulated ? { ...entry.emulated } : null;
     for (const [method, params] of entry.enables) {
       entry.view.webContents.debugger.sendCommand(method, params).catch(() => {});
     }
@@ -392,17 +370,34 @@ class BrowserViews {
     return entry.rising;
   }
 
+  // maySleep says whether a page may be put away: not while the person is looking
+  // at it, a navigation or a settle is pending, a certificate or a dialog waits,
+  // it is sounding, or DevTools is open. Downloads need no guard here.
+  maySleep(entry) {
+    if (entry.targetId === this.shown || entry.returning || entry.certificate || entry.dialog) return false;
+    const contents = entry.view && entry.view.webContents;
+    if (typeof contents?.isCurrentlyAudible === "function" && contents.isCurrentlyAudible()) return false;
+    if (typeof contents?.isDevToolsOpened === "function" && contents.isDevToolsOpened()) return false;
+    return true;
+  }
+
   // The sweep puts pages nobody has touched to sleep. One page's failure must
   // not take the timer down with it: the pages after it are still paying.
   sweep() {
     const now = Date.now();
-    for (const [id, entry] of this.entries) {
+    for (const entry of this.entries.values()) {
       try {
-        if (id === this.shown || entry.slept || entry.sleeping || entry.returning) continue;
+        if (entry.slept || entry.sleeping) continue;
         if (now - entry.lastTouch <= this.sleepAfterMs) continue;
+        if (!this.maySleep(entry)) continue;
         this.sleep(entry).catch(() => {});
       } catch {}
     }
+  }
+
+  // A preference saved while the app runs takes effect on the next sweep.
+  setSleepAfterMs(ms) {
+    this.sleepAfterMs = ms;
   }
 
   // What a test may read, and nothing more: whether a target is asleep, and
@@ -443,9 +438,8 @@ class BrowserViews {
       height: Math.round(rect.height),
     };
     // The panel reports its rectangle whenever anything in the window changes,
-    // which during a turn is constantly, and nearly always the same rectangle:
-    // re-adding the view and setting the bounds it already has is work for
-    // every one of those.
+    // nearly always the same one: re-adding the view and setting the bounds it
+    // already has is work for every one of those.
     if (this.shown === targetId && sameRect(entry.panel, at)) return;
     this.placed++;
     for (const [id, other] of this.entries) {
@@ -486,8 +480,10 @@ class BrowserViews {
 
   // emulate records the viewport a page was told to lay out in, which the view
   // is then fitted to; null is the page going back to the size of its view.
+  // The recording is what survives a sleep and comes back with the page.
   async emulate(entry, params) {
     entry.override = sized(params) ? { ...params } : null;
+    entry.emulated = sized(params) ? { ...params } : null;
     if (!entry.override) {
       entry.scale = 1;
       if (entry.panel) this.fit(entry);
@@ -521,10 +517,8 @@ class BrowserViews {
   }
 
   // A navigation that starts in an attached view takes the keyboard from the app
-  // page when it finishes, and a composition in progress there is committed as
-  // the raw letters. While the app page holds the keyboard the view is held out of
-  // the window for the length of the navigation, and put back when it ends; a
-  // person who is in the page themselves keeps it where it is.
+  // page and would commit a composition there as raw letters. While the app page
+  // holds the keyboard the view is held out of the window until it ends.
   leave(entry) {
     if (!entry.attached || this.win.isDestroyed() || this.keyboard.owner !== "app") return;
     this.win.contentView.removeChildView(entry.view);
@@ -544,9 +538,8 @@ class BrowserViews {
   }
 
   // freeze answers with a picture of the page on screen, taken before it is put
-  // away, for the window to draw in its place while something of its own is
-  // over it. Only the page already shown to the person is ever taken, and the
-  // picture goes to this window's page and nowhere else.
+  // away. Only the page already shown is ever taken, and the picture goes to
+  // this window's page and nowhere else.
   async freeze() {
     const id = this.shown;
     const entry = this.entries.get(id);
@@ -791,11 +784,9 @@ function placement(panel, emulated) {
   return { at: { x, y, width, height }, scale };
 }
 
-// Input that carries a point. The page reads it in the viewport it was told it
-// has, the view draws that viewport scaled, and a point meant for the page lands
-// where it is drawn only after the same scaling. The mouse is measured to; the
-// rest are not, and a point that silently lands elsewhere is worse than a
-// refusal, so they are refused while the page is scaled.
+// Input that carries a point lands where it is drawn only after the same scaling
+// the view was drawn at. The mouse is measured to; a point that lands elsewhere
+// silently is worse than a refusal, so the rest are refused while scaled.
 const POINTED_INPUT = new Set([
   "Input.dispatchTouchEvent",
   "Input.dispatchDragEvent",

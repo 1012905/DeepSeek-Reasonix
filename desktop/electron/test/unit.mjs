@@ -2592,6 +2592,10 @@ function sleepingViews({ sleepAfterMs = 5, sweepMs = 5, maxAwake = 6, capturePag
       this.destroyed = false;
       this.url = "about:blank";
       this.commands = [];
+      // What maySleep reads off a live page; a test flips these on the fake
+      // the helper's `created` array already hands back.
+      this.audible = false;
+      this.devTools = false;
       const contents = this;
       this.debugger = {
         attach() {},
@@ -2604,6 +2608,12 @@ function sleepingViews({ sleepAfterMs = 5, sweepMs = 5, maxAwake = 6, capturePag
           return { data: "cG5n" };
         },
       };
+    }
+    isCurrentlyAudible() {
+      return this.audible;
+    }
+    isDevToolsOpened() {
+      return this.devTools;
     }
     setWindowOpenHandler(handler) {
       this.openHandler = handler;
@@ -2876,6 +2886,71 @@ test("the nineteenth tombstone costs the oldest its place, and the kernel hears 
   assert.equal(pages[0].events.closed, 1, "the oldest tombstone was buried and the kernel told");
   assert.equal(views.asleep(pages[0].handle.targetId), null);
   assert.equal(views.entries.size, 18, "eighteen tombstones remain");
+});
+
+test("a woken page comes back at the viewport the agent set", async (t) => {
+  const { views, created, page } = sleepingViews();
+  t.after(() => views.closeAll());
+  const { handle } = page();
+  const viewport = { width: 390, height: 844, deviceScaleFactor: 0, mobile: false };
+  await handle.send("Emulation.setDeviceMetricsOverride", viewport);
+  await later(40);
+  assert.ok(views.asleep(handle.targetId));
+  await handle.send("Runtime.evaluate", { expression: "1" });
+  assert.equal(created.length, 2, "the wake built a new view");
+  const said = created[1].webContents.commands.map(([method]) => method);
+  assert.deepEqual(said, ["Emulation.setDeviceMetricsOverride", "Runtime.evaluate"], "the viewport is said again to the new session, before the command that woke the page");
+  assert.deepEqual(created[1].webContents.commands[0][1], viewport, "the parameters the agent chose are the ones replayed");
+});
+
+test("a page with a dialog open does not sleep", async (t) => {
+  const { views, created, page } = sleepingViews();
+  t.after(() => views.closeAll());
+  const { handle } = page();
+  const contents = created[0].webContents;
+  // The kernel enables Page at attach, so the dialog events reach the shell
+  // through the debugger's message stream.
+  contents.emit("debugger:message", {}, "Page.javascriptDialogOpening", { message: "really?" }, undefined);
+  await later(40);
+  assert.equal(views.asleep(handle.targetId), null, "a page waiting on its answer is not slept under the question");
+  contents.emit("debugger:message", {}, "Page.javascriptDialogClosed", { result: false }, undefined);
+  await later(40);
+  assert.ok(views.asleep(handle.targetId), "the answered dialog sleeps again");
+});
+
+test("a page awaiting a certificate decision does not sleep", async (t) => {
+  const { views, created, page } = sleepingViews();
+  t.after(() => views.closeAll());
+  const { handle } = page();
+  const contents = created[0].webContents;
+  contents.emit(
+    "certificate-error",
+    { preventDefault() {} },
+    "https://page.test/",
+    "ERR_CERT_AUTHORITY_INVALID",
+    { fingerprint: "ff:ee", subjectName: "page.test", issuerName: "nobody", validExpiry: 0 },
+    () => {},
+    true,
+  );
+  await later(40);
+  assert.ok(views.entries.get(handle.targetId).certificate, "the certificate waits on the person");
+  assert.equal(views.asleep(handle.targetId), null, "the undecided certificate holds the page awake");
+  views.entries.get(handle.targetId).certificate = null;
+  await later(40);
+  assert.ok(views.asleep(handle.targetId), "once decided, the page sleeps again");
+});
+
+test("a page playing audio does not sleep", async (t) => {
+  const { views, created, page } = sleepingViews();
+  t.after(() => views.closeAll());
+  const { handle } = page();
+  const contents = created[0].webContents;
+  contents.audible = true;
+  await later(40);
+  assert.equal(views.asleep(handle.targetId), null, "the sounding page keeps its renderer");
+  contents.audible = false;
+  await later(40);
+  assert.ok(views.asleep(handle.targetId), "the quieted page sleeps again");
 });
 
 test("rewind notice dismissal survives the desktop preference disk round trip", (t) => {
