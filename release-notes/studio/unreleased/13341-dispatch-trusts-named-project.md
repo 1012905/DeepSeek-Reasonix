@@ -1,0 +1,2 @@
+- 改进：开启「派发」后，把任务派到侧边栏里你自己的项目时，不再因该项目尚未决定信任而停在信任卡上。关联 #13341。
+- Changed: with dispatch on, a task sent to a project in your sidebar no longer stops on its trust card; folders that cannot be trusted whole still ask. Refs #13341.
