@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { act, cleanup, fireEvent, render, renderHook } from "@testing-library/react";
 import "./testkit";
-import { barsFit, flowCeiling, flowFloor, FlowGrips, useColumn, type Column } from "./FlowResizer";
+import { barsFit, flowCeiling, flowFloor, flowMin, FlowGrips, useColumn, type Column } from "./FlowResizer";
 
 const RAIL_MIN = 232;
 const DOCK_MIN = 320;
@@ -28,6 +28,16 @@ describe("the reading column's two ends", () => {
   it("never reports a floor above its ceiling, however narrow the window", () => {
     for (const room of [900, 1200, 1600, 2400, 3440]) {
       expect(flowFloor(room, RAIL_MIN, DOCK_MIN)).toBeLessThanOrEqual(flowCeiling(room, RAIL_MIN, DOCK_MIN));
+    }
+  });
+
+  it("lets a hand go narrower than the readable measure, down to 640", () => {
+    expect(flowMin(1600, RAIL_MIN, DOCK_MIN)).toBe(640);
+    expect(flowMin(2400, RAIL_MIN, DOCK_MIN)).toBe(640);
+    // On a window whose floor is already below 640, the floor wins.
+    expect(flowMin(1100, RAIL_MIN, DOCK_MIN)).toBe(flowFloor(1100, RAIL_MIN, DOCK_MIN));
+    for (const room of [400, 900, 1200, 1600, 2400]) {
+      expect(flowMin(room, RAIL_MIN, DOCK_MIN)).toBeLessThanOrEqual(flowFloor(room, RAIL_MIN, DOCK_MIN));
     }
   });
 
@@ -113,11 +123,11 @@ describe("the column's remembered width", () => {
     expect(result.current.width).toBeLessThanOrEqual(result.current.ceiling);
   });
 
-  it("keeps a remembered width below the floor from shrinking the column", () => {
+  it("keeps a remembered width below the narrowest from shrinking the column", () => {
     localStorage.clear();
     localStorage.setItem("rx-flow-w", "100");
     const { result } = renderHook(() => useColumn(316, 316, RAIL_MIN, DOCK_MIN));
-    expect(result.current.width).toBe(result.current.floor);
+    expect(result.current.width).toBe(result.current.min);
     // Asked for, still remembered — the clamp is about what is drawn.
     expect(result.current.dragged).toBe(100);
   });
@@ -129,7 +139,7 @@ describe("a drag that ends without a release", () => {
     box.className = "app";
     document.body.appendChild(box);
     const column: Column = {
-      width: 760, floor: 760, ceiling: 1048, rail: 316, dock: 316, dragged: 0,
+      width: 760, floor: 760, min: 640, ceiling: 1048, rail: 316, dock: 316, dragged: 0,
       commit: () => {},
       fit: (w) => barsFit(2400, w, 316, 316, RAIL_MIN, DOCK_MIN),
       ...over,
@@ -170,7 +180,7 @@ describe("a drag that ends without a release", () => {
 
 describe("the keys walk the same path the hand does", () => {
   const column = (over: Partial<Column> = {}): Column => ({
-    width: 900, floor: 760, ceiling: 1048, rail: 300, dock: 400, dragged: 900,
+    width: 900, floor: 760, min: 640, ceiling: 1048, rail: 300, dock: 400, dragged: 900,
     commit: () => {},
     fit: (w) => barsFit(2400, w, 300, 400, RAIL_MIN, DOCK_MIN),
     ...over,
@@ -203,7 +213,9 @@ describe("the keys walk the same path the hand does", () => {
   it("asks for nothing at either end rather than committing what it cannot reach", () => {
     // Already as wide as the window allows: widening again commits nothing.
     expect(press("l", "ArrowLeft", false, 1048)).toEqual([]);
-    // Already at the readable measure: narrowing again commits nothing.
-    expect(press("l", "ArrowRight", false, 760)).toEqual([]);
+    // Already at the narrowest: narrowing again commits nothing.
+    expect(press("l", "ArrowRight", false, 640)).toEqual([]);
+    // The readable measure is no longer the end of the road.
+    expect(press("l", "ArrowRight", false, 760)).toEqual([748]);
   });
 });

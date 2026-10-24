@@ -160,6 +160,7 @@ jobs:
           node perf/action-icons.mjs
           node perf/rowhit.mjs
           node perf/flowgrip-quiet.mjs
+          node perf/flow-narrow.mjs
           node perf/tab-pip.mjs
           node perf/context-card-hover.mjs
           node perf/sessquick.mjs

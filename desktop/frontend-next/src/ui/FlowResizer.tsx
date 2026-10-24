@@ -11,6 +11,11 @@ import { onRoomWidth } from "./viewport";
  *  its own. */
 const STANDARD = 760;
 
+/** The narrowest a hand may draw the column. It sits below the readable measure
+ *  so the width is continuous rather than two presets with a gap between them;
+ *  the readable measure stays the default and what Home returns to. */
+const NARROWEST = 640;
+
 /** Where the dragged width is remembered. It belongs to this machine's screen,
  *  like the two sidebars' own widths, so it is stored beside them rather than in
  *  the kernel's config. */
@@ -33,6 +38,11 @@ export const flowCeiling = (room: number, railMin: number, dockMin: number) =>
 export const flowFloor = (room: number, railMin: number, dockMin: number) =>
   Math.min(STANDARD, flowCeiling(room, railMin, dockMin));
 
+/** What a hand may shrink the column to: `NARROWEST`, or the floor when the
+ *  window is already narrower than that. */
+export const flowMin = (room: number, railMin: number, dockMin: number) =>
+  Math.min(NARROWEST, flowFloor(room, railMin, dockMin));
+
 /** How wide each sidebar is drawn while the column asks for `ask`.
  *
  *  They give way in proportion to the widths they were set to, down to their own
@@ -53,7 +63,10 @@ export function barsFit(room: number, ask: number, rail: number, dock: number, r
 /** The column's two ends, and what the sidebars are drawn at once it asks. */
 export interface Column {
   width: number;
+  /** The readable measure: what an untouched window draws and Home returns to. */
   floor: number;
+  /** The narrowest a drag or key press may reach. */
+  min: number;
   ceiling: number;
   rail: number;
   dock: number;
@@ -86,11 +99,12 @@ export function useColumn(railW: number, dockW: number, railMin: number, dockMin
   useEffect(() => onRoomWidth(setRoom), []);
 
   const floor = flowFloor(room, railMin, dockMin);
+  const min = flowMin(room, railMin, dockMin);
   const ceiling = flowCeiling(room, railMin, dockMin);
   // A window that shrank since the drag may leave the remembered number outside
   // the range it is now allowed; the drawn column, and the sidebars beside it,
   // both follow what is allowed rather than what was once asked for.
-  const width = dragged > 0 ? clamp(dragged, floor, ceiling) : floor;
+  const width = dragged > 0 ? clamp(dragged, min, ceiling) : floor;
   const bars = dragged > 0 ? barsFit(room, width, railW, dockW, railMin, dockMin) : { rail: railW, dock: dockW };
 
   const commit = useCallback((w: number) => {
@@ -112,8 +126,8 @@ export function useColumn(railW: number, dockW: number, railMin: number, dockMin
   // all of them and re-draw every transcript in the window on an unrelated
   // state change — the one thing the pane memo exists to prevent.
   return useMemo(
-    () => ({ width, floor, ceiling, rail: bars.rail, dock: bars.dock, dragged, commit, fit }),
-    [width, floor, ceiling, bars.rail, bars.dock, dragged, commit, fit],
+    () => ({ width, floor, min, ceiling, rail: bars.rail, dock: bars.dock, dragged, commit, fit }),
+    [width, floor, min, ceiling, bars.rail, bars.dock, dragged, commit, fit],
   );
 }
 
@@ -203,7 +217,7 @@ function FlowGrip({ edge, column }: { edge: "l" | "r"; column: Column }) {
       const dx = e.clientX - d.x0;
       // Both edges move the same number, so the column grows at both ends and
       // the pointer travels half of what it gains.
-      d.pending = clamp(d.start + (edge === "l" ? -dx : dx) * 2, column.floor, column.ceiling);
+      d.pending = clamp(d.start + (edge === "l" ? -dx : dx) * 2, column.min, column.ceiling);
       if (!raf.current) {
         raf.current = requestAnimationFrame(() => {
           raf.current = 0;
@@ -273,7 +287,7 @@ function FlowGrip({ edge, column }: { edge: "l" | "r"; column: Column }) {
       if (dir) {
         e.preventDefault();
         const grow = edge === "l" ? -dir : dir;
-        const next = clamp(column.width + grow * (e.shiftKey ? 48 : 12), column.floor, column.ceiling);
+        const next = clamp(column.width + grow * (e.shiftKey ? 48 : 12), column.min, column.ceiling);
         if (next !== column.width) column.commit(next);
         return;
       }
@@ -292,7 +306,7 @@ function FlowGrip({ edge, column }: { edge: "l" | "r"; column: Column }) {
       aria-orientation="vertical"
       aria-label={t("调整正文字宽")}
       aria-valuenow={Math.round(column.width)}
-      aria-valuemin={column.floor}
+      aria-valuemin={column.min}
       aria-valuemax={column.ceiling}
       tabIndex={0}
       data-action-pointerdown="appearance.reading-width"
