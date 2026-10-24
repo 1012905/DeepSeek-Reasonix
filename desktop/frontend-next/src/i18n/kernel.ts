@@ -177,7 +177,6 @@ const SAID: Record<string, string> = {
   "storage.move_running": "已有一个迁移正在进行，请等待其完成",
   "plugin.bad_name": "这不是有效的插件名称",
   "plugin.not_installed": "该插件未安装",
-  "wallpaper.not_base64": "图片数据不是 base64 编码",
   "shell.unavailable_over_http": "HTTP 上不提供 shell 命令",
   "roles.unknown": "不存在「{role}」这个角色",
   "roles.model_unknown": "没有已配置的模型匹配「{model}」",
@@ -447,7 +446,6 @@ const SAID: Record<string, string> = {
   // ── 壁纸 ─────────────────────────────────────────────────────────
   "wallpaper.unsupported_type": "不支持该图片格式，请改用 PNG、JPEG、WebP、AVIF 或 GIF",
   "wallpaper.empty": "图片内容为空",
-  "wallpaper.too_large": "图片过大，请压缩至 {limit} MB 以内",
 
   // ── 来不及了 ──────────────────────────────────────
   "steer.already_applied": "该条已发送给模型，无法撤回",
