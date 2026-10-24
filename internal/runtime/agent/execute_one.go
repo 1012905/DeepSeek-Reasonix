@@ -78,8 +78,9 @@ type toolCallPlan struct {
 	mutationObserved  bool
 	mutationAfterDone bool
 	// ranClean: the tool's own Execute returned no error, before tool.after ruled.
-	ranClean bool
-	executed bool
+	ranClean           bool
+	executed           bool
+	hookMayHaveMutated bool
 	// spawned collects the external origins of calls this tool made on its own
 	// account, nested or through a sub-agent; it labels a result the tool
 	// declares nothing external for.
@@ -99,12 +100,12 @@ func (p *toolCallPlan) provenanceOf(t tool.Tool, args json.RawMessage) tool.Prov
 	return own
 }
 
-// executeOne runs a single tool call. It is pure with respect to the event sink
-// — the caller emits ToolDispatch/ToolResult — so it is safe to invoke from
-// parallel goroutines. Stages: parse → policy → prepare → finish.
+// executeOne publishes resource invalidation on every exit, independently of
+// its caller's ToolDispatch/ToolResult ordering.
 func (a *Agent) executeOne(ctx context.Context, turn *turnRuntime, call provider.ToolCall) (out toolOutcome) {
 	ctx = a.withAgentContext(ctx)
 	plan := &toolCallPlan{call: call}
+	defer func() { recordWorkspaceMutation(a.svc.sink, out.workspaceMutation) }()
 	ctx = tool.WithInvoker(ctx, &nestedInvoker{a: a, turn: turn, parent: plan})
 	todosBefore := a.todoStateBefore(call)
 	defer func() { out.todoEcho = a.todoWriteEchoes(plan.call, todosBefore, out.errMsg) }()
