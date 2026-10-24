@@ -1,0 +1,2 @@
+- Long conversations load recent messages first on paging servers. Older pages preserve reading position and open controls; search reports incomplete history. Refs #14048, #14087.
+- 支持分页的服务端优先显示最近消息。读取旧页保留阅读位置和控件，搜索提示历史覆盖不完整；旧服务端保留全量加载。关联 #14048、#14087。
