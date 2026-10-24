@@ -30,7 +30,7 @@ const { BrowserProtocol } = require("./browserprotocol");
 const { BrowserViews } = require("./browserviews");
 const { startBrowserRelay } = require("./browserrelay");
 const { groundFor, themeSourceFor } = require("./ground");
-const { loadPrefs, prefsFile, registerPrefs } = require("./prefs");
+const { loadPrefs, pageSleepAfterMs, prefsFile, registerPrefs } = require("./prefs");
 const { stateFile, openWindow } = require("./windowstate");
 const { accelerationOff, shouldDisableGpu, graphicsHandler } = require("./graphics");
 const { processMemoryHandler } = require("./procmem");
@@ -231,8 +231,10 @@ cua = await startEmbedded(computerDriver, contract, text => logs.host.raw(text))
 
 // The agent's browser draws its pages as views in this window: the kernel
 // drives them through the relay, and the page decides where one is shown.
+// Idle pages sleep only once the person turns rx-page-sleep on; prefs.js owns
+// the threshold, and a save reaches the running window through onSave below.
 function hostAgentBrowser() {
-  browserViews = new BrowserViews({ win, kernelOrigin: origin });
+  browserViews = new BrowserViews({ win, kernelOrigin: origin, sleepAfterMs: pageSleepAfterMs(storedPrefs()) });
   const protocol = new BrowserProtocol({
     createView: (spec) => browserViews.create(spec),
     post: (frame) => browserRelay?.post(frame),
@@ -397,6 +399,7 @@ registerPrefs(ipcMain, () => prefsFile(app.getPath("userData")), fromWindow, () 
   followTheme();
   if (win && !win.isDestroyed()) win.setBackgroundColor(ground());
   void powerGuard?.refresh();
+  browserViews?.setSleepAfterMs(pageSleepAfterMs(storedPrefs()));
 });
 nativeTheme.on("updated", () => {
   if (win && !win.isDestroyed()) win.setBackgroundColor(ground());
