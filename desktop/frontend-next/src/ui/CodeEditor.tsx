@@ -20,6 +20,8 @@ import {
 } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { t } from "../i18n";
+import { editorTextSession } from "./workbench_editor_menu";
+import { textMenuKey, type OfferTextMenu } from "./workbench_text_menu";
 
 // Loaded per file, so opening a Go file does not pay for every other grammar.
 const LANGUAGE: Record<string, () => Promise<Extension>> = {
@@ -120,25 +122,38 @@ interface Props {
   onChange: (text: string) => void;
   onSave: () => void;
   readOnly?: boolean;
+  onTextContextMenu?: OfferTextMenu;
 }
 
 /** A file, read and edited in one place: highlighted as it is typed, with the
  *  editor's own find (Ctrl+F), go to line (Ctrl+G) and save (Ctrl+S). */
-export default function CodeEditor({ path, value, dark, onChange, onSave, readOnly = false }: Props) {
+export default function CodeEditor({ path, value, dark, onChange, onSave, readOnly = false, onTextContextMenu }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  const handlers = useRef({ onChange, onSave });
-  handlers.current = { onChange, onSave };
+  const handlers = useRef({ onChange, onSave, onTextContextMenu });
+  handlers.current = { onChange, onSave, onTextContextMenu };
   const language = useRef(new Compartment());
   const look = useRef(new Compartment());
+  const editability = useRef(new Compartment());
 
   useEffect(() => {
     if (!host.current) return;
+    const offer = (event: MouseEvent | KeyboardEvent, editor: EditorView) => {
+      if (!handlers.current.onTextContextMenu || !(event.target instanceof Node) || !editor.contentDOM.contains(event.target)) return false;
+      const session = editorTextSession(editor, () => view.current === editor);
+      if (!session.editable && !session.selected) return false;
+      handlers.current.onTextContextMenu(event, session);
+      return event.defaultPrevented;
+    };
     const editor = new EditorView({
       parent: host.current,
       state: EditorState.create({
         doc: value,
         extensions: [
+          EditorView.domEventHandlers({
+            contextmenu: offer,
+            keydown: (event, editor) => textMenuKey(event) && offer(event, editor),
+          }),
           lineNumbers(),
           foldGutter(),
           highlightActiveLine(),
@@ -165,9 +180,8 @@ export default function CodeEditor({ path, value, dark, onChange, onSave, readOn
           }),
           language.current.of([]),
           look.current.of(theme(dark)),
-          // The parent keys this component by path, and a file never changes between
-          // readable and editable while it is open, so this is read once.
-          ...(readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []),
+          EditorView.contentAttributes.of({ tabindex: "0" }),
+          editability.current.of(readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []),
         ],
       }),
     });
@@ -193,6 +207,10 @@ export default function CodeEditor({ path, value, dark, onChange, onSave, readOn
   useEffect(() => {
     view.current?.dispatch({ effects: look.current.reconfigure(theme(dark)) });
   }, [dark]);
+
+  useEffect(() => {
+    view.current?.dispatch({ effects: editability.current.reconfigure(readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []) });
+  }, [readOnly]);
 
   // A save or a reload hands back text the editor may not hold; the reader's own
   // typing arrives here as the same text and changes nothing.
