@@ -97,9 +97,9 @@ class BrowserViews {
   create({ partition, url, onEvent, onClosed, onPopup, onDownload }) {
     this.guard(partition);
     const targetId = crypto.randomUUID();
-    // The cap on awake pages: the least recently touched page is slept to make
-    // room — never the one the person is looking at, and never when nothing may
-    // sleep. A wake yields no room, and the next sweep brings the count down.
+    // The cap on awake pages obeys the same switch as the sweep — off means
+    // nothing sleeps, cap included: the least recently touched page is slept to
+    // make room, never the one the person is looking at. A wake yields no room.
     let awake = 0;
     let victim = null;
     for (const [id, other] of this.entries) {
@@ -107,7 +107,7 @@ class BrowserViews {
       awake++;
       if (id !== this.shown && !other.sleeping && !other.returning && (!victim || other.lastTouch < victim.lastTouch)) victim = other;
     }
-    if (awake >= this.maxAwake && victim) this.sleep(victim).catch(() => {});
+    if (Number.isFinite(this.sleepAfterMs) && awake >= this.maxAwake && victim) this.sleep(victim).catch(() => {});
     const entry = {
       targetId,
       partition,

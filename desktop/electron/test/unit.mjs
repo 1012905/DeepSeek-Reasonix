@@ -2753,6 +2753,26 @@ test("a third page costs the least recently touched one its renderer, never the 
   assert.equal(views.asleep(third.handle.targetId), null, "the page just created is awake");
 });
 
+test("with the setting off, the cap sleeps no page either", async (t) => {
+  const off = sleepingViews({ sleepAfterMs: Infinity, sweepMs: 5, maxAwake: 2 });
+  t.after(() => off.views.closeAll());
+  const one = off.page();
+  const two = off.page();
+  const three = off.page();
+  await later(20);
+  assert.equal(off.views.asleep(one.handle.targetId), null, "off means nothing sleeps: page one");
+  assert.equal(off.views.asleep(two.handle.targetId), null, "page two");
+  assert.equal(off.views.asleep(three.handle.targetId), null, "page three, though the cap is passed");
+  // The same cap with the setting on still sleeps the least recently touched.
+  const on = sleepingViews({ sleepAfterMs: 60_000, sweepMs: 60_000, maxAwake: 2 });
+  t.after(() => on.views.closeAll());
+  const oldest = on.page();
+  on.page();
+  on.page();
+  await later(20);
+  assert.ok(on.views.asleep(oldest.handle.targetId), "on, the least recently touched page sleeps");
+});
+
 test("the sweep never puts the page the person is looking at to sleep", async (t) => {
   const { views, page } = sleepingViews();
   t.after(() => views.closeAll());
