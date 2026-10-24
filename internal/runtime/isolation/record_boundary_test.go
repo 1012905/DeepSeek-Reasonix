@@ -269,6 +269,56 @@ func TestDurableRecordRejectsHardlinkedCandidateMarker(t *testing.T) {
 	}
 }
 
+func TestRecordDirectoryConfinesIdentityQueries(t *testing.T) {
+	root, outside := testenv.TempDir(t), testenv.TempDir(t)
+	write(t, root, "inside/kept.txt", "inside\n")
+	write(t, outside, "secret.txt", "outside\n")
+	dir, err := openRecordDirectory(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dir.root.Close()
+	if !dir.same(filepath.Join(root, "inside"), "inside") {
+		t.Fatal("bounded descendant identity was refused")
+	}
+	if _, ok := dir.local(outside); ok || dir.same(outside, ".") {
+		t.Fatal("accepted an outside identity claim")
+	}
+	if _, err := dir.root.ReadFile(filepath.Join("..", filepath.Base(outside), "secret.txt")); err == nil {
+		t.Fatal("opened namespace allowed a parent escape")
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
+		t.Skipf("symlink creation unavailable: %v", err)
+	}
+	if _, ok := dir.local(filepath.Join(root, "escape")); ok {
+		t.Fatal("accepted an outside symlink identity")
+	}
+	if _, err := dir.root.ReadFile("escape/secret.txt"); err == nil {
+		t.Fatal("opened namespace followed an outside symlink")
+	}
+}
+
+func TestDurableRecordUnderLiteralManagedDirectory(t *testing.T) {
+	repo := gitRepo(t)
+	managed := filepath.Join(testenv.TempDir(t), "managed[1]")
+	store := NewStore(managed, repo, opened(t, repo))
+	report, err := store.Execute(context.Background(), writes(map[string]string{"a.txt": "retained\n"}), repo, "work", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := idOf(t, report)
+	resumed := NewStore(managed, repo, opened(t, repo))
+	if got := resumed.Pending(); !slices.Equal(got, []string{id}) {
+		t.Fatalf("literal managed root pending = %v", got)
+	}
+	if _, err := resumed.Apply(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, repo, "a.txt"); got != "retained\n" {
+		t.Fatal(got)
+	}
+}
+
 func TestDurableRecordBindsSourceAndCandidateIdentity(t *testing.T) {
 	for _, tc := range []struct {
 		name string

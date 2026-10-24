@@ -5,116 +5,106 @@ import (
 	"path/filepath"
 	"strings"
 
-	"reasonix/internal/base/fileutil"
 	"reasonix/internal/platform/gitcmd"
 )
 
-// bindRecord treats stored paths as claims, not authority. Only the actual
-// marker slot and the store's opened repository can authorize reconstruction
-// or the legacy sweep. Rejected records remain on disk, without Git mutation.
-func (s *Store) bindRecord(mark string, d durableEntry) (durableEntry, bool) {
-	slot := filepath.Dir(mark)
-	if !regularRecord(mark) || !plainDirectory(slot) ||
-		!sameExistingDirectory(filepath.Dir(slot), s.managedRoot) ||
-		!filepath.IsAbs(d.Cand.WorktreeRoot) || !plainDirectory(d.Cand.WorktreeRoot) ||
-		!sameExistingDirectory(filepath.Dir(d.Cand.WorktreeRoot), slot) {
-		return d, false
-	}
+// bindRecord treats stored paths as claims. Every file-content read and identity
+// stat is relative to a host-opened source, common, slot or candidate directory.
+func (s *Store) bindRecord(slot *os.Root, d durableEntry) (durableEntry, bool) {
 	source := s.repo.Top()
-	if source.Verify() != nil || !sameExistingDirectory(d.Snap.RepoRoot, source.WorkTree) ||
-		!sameExistingDirectory(d.Workspace, s.workspace) {
+	if source.Verify() != nil {
 		return d, false
 	}
-	// The prefix binds both the original workspace and the candidate's tool root.
+	src, err := openRecordDirectory(source.WorkTree)
+	if err != nil {
+		return d, false
+	}
+	defer src.root.Close()
+	common, err := openRecordDirectory(source.CommonDir)
+	if err != nil {
+		return d, false
+	}
+	defer common.root.Close()
 	prefix := filepath.FromSlash(d.Snap.Prefix)
-	if filepath.IsAbs(prefix) || prefix == ".." || strings.HasPrefix(filepath.Clean(prefix), ".."+string(filepath.Separator)) ||
-		!sameExistingDirectory(filepath.Join(source.WorkTree, prefix), s.workspace) ||
-		!sameExistingDirectory(filepath.Join(d.Cand.WorktreeRoot, prefix), d.Cand.WorkspaceRoot) ||
-		!containedDirectory(source.WorkTree, s.workspace) || !containedDirectory(d.Cand.WorktreeRoot, d.Cand.WorkspaceRoot) {
+	if prefix != "" && !filepath.IsLocal(prefix) {
 		return d, false
 	}
-	if d.Snap.Repo != (gitcmd.Repo{}) && !sameRepository(d.Snap.Repo, source) {
+	if prefix == "" {
+		prefix = "."
+	}
+	sourceGitDir, ok := common.local(source.GitDir)
+	if !ok || !src.same(d.Snap.RepoRoot, ".") || !src.same(d.Workspace, prefix) ||
+		!src.same(s.workspace, prefix) || !repoFieldsMatch(d.Snap.Repo, src, common, sourceGitDir) {
 		return d, false
 	}
-	candidate, ok := linkedCandidateIdentity(d.Cand.WorktreeRoot, source)
-	if !ok || d.Cand.Repo != (gitcmd.Repo{}) && !sameRepository(d.Cand.Repo, candidate) {
+	name := filepath.Base(filepath.Clean(d.Cand.WorktreeRoot))
+	if !filepath.IsAbs(d.Cand.WorktreeRoot) || !filepath.IsLocal(name) || name == "." || !recordDirectoryEntry(slot, name) {
 		return d, false
 	}
-	// Use checked identities; no persisted record is rewritten during discovery.
-	d.Snap.Repo, d.Cand.Repo = source, candidate.Top()
+	candidateRoot, err := slot.OpenRoot(name)
+	if err != nil {
+		return d, false
+	}
+	defer candidateRoot.Close()
+	cand, err := wrapRecordDirectory(candidateRoot)
+	if err != nil || !cand.same(d.Cand.WorktreeRoot, ".") || !cand.same(d.Cand.WorkspaceRoot, prefix) {
+		return d, false
+	}
+	candidate, gitDir, ok := linkedCandidateIdentity(cand, common, sourceGitDir)
+	if !ok || !repoFieldsMatch(d.Cand.Repo, cand, common, gitDir) {
+		return d, false
+	}
+	// Use host-derived identities without rewriting the serialized record.
+	d.Workspace, d.Snap.RepoRoot, d.Snap.Repo = s.workspace, source.WorkTree, source
+	d.Cand.WorktreeRoot, d.Cand.Repo = candidateRoot.Name(), candidate
+	d.Cand.WorkspaceRoot = filepath.Join(candidateRoot.Name(), prefix)
 	return d, true
 }
 
-// A linked worktree's marker and administrative backlink establish its identity
-// without starting Git, including for old records without pinned Repo fields.
-func linkedCandidateIdentity(root string, source gitcmd.Repo) (gitcmd.Repo, bool) {
-	mark := filepath.Join(root, ".git")
-	if !regularRecord(mark) {
-		return gitcmd.Repo{}, false
+// The marker supplies a claim; the opened common directory bounds the backlink
+// read before any record-supplied administrative path is used.
+func linkedCandidateIdentity(cand, common recordDirectory, sourceGitDir string) (gitcmd.Repo, string, bool) {
+	if !recordRegularFile(cand.root, ".git") {
+		return gitcmd.Repo{}, "", false
 	}
-	raw, err := os.ReadFile(mark)
+	raw, err := cand.root.ReadFile(".git")
 	if err != nil {
-		return gitcmd.Repo{}, false
+		return gitcmd.Repo{}, "", false
 	}
 	admin, ok := strings.CutPrefix(strings.TrimSpace(string(raw)), "gitdir: ")
 	if !ok || admin == "" {
-		return gitcmd.Repo{}, false
+		return gitcmd.Repo{}, "", false
 	}
 	admin = filepath.FromSlash(admin)
 	if !filepath.IsAbs(admin) {
-		admin = filepath.Join(root, admin)
+		admin = filepath.Join(cand.root.Name(), admin)
 	}
-	back, err := os.ReadFile(filepath.Join(admin, "gitdir"))
+	local, ok := common.local(admin)
+	if !ok {
+		return gitcmd.Repo{}, "", false
+	}
+	back, err := common.root.ReadFile(filepath.Join(local, "gitdir"))
 	if err != nil {
-		return gitcmd.Repo{}, false
+		return gitcmd.Repo{}, "", false
 	}
 	backPath := filepath.FromSlash(strings.TrimSpace(string(back)))
 	if !filepath.IsAbs(backPath) {
-		backPath = filepath.Join(admin, backPath)
+		backPath = filepath.Join(common.root.Name(), local, backPath)
 	}
-	// File identity alone also accepts hard-linked .git files in different
-	// candidates. The backlink must name this directory, not merely its inode.
-	if !sameExistingDirectory(filepath.Dir(backPath), root) {
-		return gitcmd.Repo{}, false
+	// A shared .git inode is insufficient: the backlink must name this parent.
+	if !cand.same(filepath.Dir(backPath), ".") || common.same(admin, sourceGitDir) {
+		return gitcmd.Repo{}, "", false
 	}
-	repo := gitcmd.Repo{Dir: root, WorkTree: root, GitDir: admin, CommonDir: source.CommonDir}
-	return repo, repo.Verify() == nil && !sameExistingDirectory(repo.GitDir, source.GitDir)
+	repo := gitcmd.Repo{Dir: cand.root.Name(), WorkTree: cand.root.Name(),
+		GitDir: filepath.Join(common.root.Name(), local), CommonDir: common.root.Name()}
+	return repo, local, repo.Verify() == nil
 }
 
-func sameRepository(a, b gitcmd.Repo) bool {
-	return a.Verify() == nil && sameExistingDirectory(a.Dir, b.WorkTree) &&
-		sameExistingDirectory(a.WorkTree, b.WorkTree) && sameExistingDirectory(a.GitDir, b.GitDir) &&
-		sameExistingDirectory(a.CommonDir, b.CommonDir)
-}
-
-func sameExistingDirectory(a, b string) bool {
-	left, err := os.Stat(a)
-	if err != nil || !left.IsDir() {
-		return false
+func repoFieldsMatch(stored gitcmd.Repo, tree, common recordDirectory, gitDir string) bool {
+	if stored == (gitcmd.Repo{}) {
+		return true // legacy record; identity comes from the actual marker
 	}
-	right, err := os.Stat(b)
-	return err == nil && right.IsDir() && os.SameFile(left, right)
-}
-
-func plainDirectory(path string) bool {
-	info, err := os.Lstat(path)
-	return err == nil && info.IsDir() && info.Mode()&os.ModeSymlink == 0
-}
-
-func regularRecord(path string) bool {
-	info, err := os.Lstat(path)
-	return err == nil && info.Mode().IsRegular()
-}
-
-func containedDirectory(root, path string) bool {
-	root, err := fileutil.ResolveExistingPath(root)
-	if err != nil {
-		return false
-	}
-	path, err = fileutil.ResolveExistingPath(path)
-	if err != nil {
-		return false
-	}
-	rel, err := filepath.Rel(root, path)
-	return err == nil && !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	return stored.Valid() && stored.Dir != "" && tree.same(stored.Dir, ".") &&
+		tree.same(stored.WorkTree, ".") && common.same(stored.GitDir, gitDir) &&
+		common.same(stored.CommonDir, ".")
 }

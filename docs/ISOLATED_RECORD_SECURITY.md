@@ -44,6 +44,10 @@ Store；不能据此声称正常执行会产生错配。实际消费者是重启
 - The administrative backlink must name the actual candidate directory. A
   hard-linked `.git` file cannot make another candidate's backlink authoritative
   merely by sharing its file identity.
+- Marker enumeration and reads use a host-opened managed directory. Identity
+  stats and candidate/common metadata reads use scoped os.Root handles. A
+  stored administrative path is bounded to the opened common directory before
+  its backlink is read. Literal brackets in the managed path are not globs.
 - All durable consumers use this admission: pending discovery, path discovery,
   recovery for apply/discard, and the existing sweep. Invalid records are left
   byte-for-byte on disk and are not offered as recoverable results. Lookup uses
@@ -53,6 +57,10 @@ Store；不能据此声称正常执行会产生错配。实际消费者是重启
 源快照、项目子目录和候选 Git 身份均需匹配宿主身份；候选必须属于同一 common directory
 下的独立 worktree。所有磁盘消费者共用准入。拒绝的记录原样保留，不提供恢复操作；
 当前仍返回既有 unknown-ID 拒绝，专用隔离诊断留待后续批次。
+
+标记枚举和读取、身份查询、候选和公共 Git 元数据读取均使用宿主打开的目录句柄。
+记录提供的管理路径必须先限定在公共 Git 目录内，才能读取回链。现有路径解析仍会检查
+别名元数据，但不会因此获得任意内容读取权限；目录名中的括号按字面处理。
 
 ## Compatibility / 兼容
 
@@ -80,8 +88,8 @@ records are retained rather than repaired or deleted.
 - Selected unchanged behavior tests compile against the original discovery owner
   and fail there. Platform evidence and exact commands are recorded in the PR.
 
-- This is not authentication, a sandbox, an atomic directory handle,
-  cross-process settlement locking or protection against external check/use races.
+- Scoped metadata handles are not authentication, a task sandbox, transaction-wide
+  filesystem pinning, settlement locks or protection against external check/use races.
 - Pending-result expiration, first-publication loss, inspector failures, content
   snapshots, duplicate-ID reconciliation and journaling remain separate units.
 - No CodeQL alert is dismissed by this author assessment. Independent
