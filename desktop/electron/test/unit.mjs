@@ -2577,6 +2577,307 @@ test("input that carries a point is scaled with the page or refused, never sent 
   assert.equal(scaleInput("Input.insertText", { text: "x" }, 0.5).text, "x");
 });
 
+// The pages' idle sleep. Electron is faked the way the suites above fake it,
+// but richly enough that create() itself runs: a page that never went through
+// create() cannot be watched going to sleep. The module is dropped from the
+// require cache first, because the suites above have already loaded it against
+// their own bare mock, and a cached module never loads again.
+function sleepingViews({ sleepAfterMs = 5, sweepMs = 5, maxAwake = 6, capturePage, failSpawns = 0, hang = null } = {}) {
+  const { EventEmitter } = require("node:events");
+  const created = [];
+  const loads = [];
+  class FakeContents extends EventEmitter {
+    constructor() {
+      super();
+      this.destroyed = false;
+      this.url = "about:blank";
+      this.commands = [];
+      const contents = this;
+      this.debugger = {
+        attach() {},
+        on(event, fn) {
+          contents.on("debugger:" + event, fn);
+        },
+        sendCommand: async (method, params) => {
+          contents.commands.push([method, params]);
+          if (hang === method) return new Promise(() => {});
+          return { data: "cG5n" };
+        },
+      };
+    }
+    setWindowOpenHandler(handler) {
+      this.openHandler = handler;
+    }
+    loadURL(url) {
+      this.url = url;
+      loads.push(url);
+      return Promise.resolve();
+    }
+    getURL() {
+      return this.url;
+    }
+    isDestroyed() {
+      return this.destroyed;
+    }
+    close() {
+      if (this.destroyed) return;
+      this.destroyed = true;
+      this.emit("destroyed");
+    }
+    capturePage() {
+      return capturePage ? capturePage() : Promise.resolve({ isEmpty: () => false, toJPEG: () => Buffer.from("jpeg") });
+    }
+  }
+  class FakeView {
+    constructor({ webPreferences }) {
+      if (failSpawns > 0) {
+        failSpawns--;
+        throw new Error("the view would not build");
+      }
+      this.webPreferences = webPreferences;
+      this.webContents = new FakeContents();
+      created.push(this);
+    }
+    setBorderRadius() {}
+    setBounds() {}
+  }
+  const ses = Object.assign(new EventEmitter(), {
+    setPermissionRequestHandler() {},
+    setPermissionCheckHandler() {},
+    webRequest: { onBeforeRequest() {} },
+  });
+  const Module = require("node:module");
+  const load = Module._load;
+  Module._load = function (request, ...rest) {
+    if (request === "electron") return { WebContentsView: FakeView, session: { fromPartition: () => ses } };
+    return load.call(this, request, ...rest);
+  };
+  let BrowserViews;
+  try {
+    delete require.cache[require.resolve("../src/browserviews.js")];
+    ({ BrowserViews } = require("../src/browserviews.js"));
+  } finally {
+    Module._load = load;
+  }
+  const win = {
+    on() {},
+    isDestroyed: () => false,
+    isFocused: () => false,
+    webContents: Object.assign(new EventEmitter(), { isFocused: () => false }),
+    getContentBounds: () => ({ width: 1200, height: 800 }),
+    contentView: { addChildView() {}, removeChildView() {} },
+  };
+  const views = new BrowserViews({ win, kernelOrigin: "http://127.0.0.1:1", sleepAfterMs, sweepMs, maxAwake });
+  views.keepKeyboard = () => {};
+  const page = () => {
+    const events = { closed: 0, popups: [], downloads: [] };
+    const handle = views.create({
+      partition: "p" + created.length,
+      url: "https://page.test/",
+      onEvent: () => {},
+      onClosed: () => events.closed++,
+      onPopup: (to) => events.popups.push(to),
+      onDownload: (download) => events.downloads.push(download),
+    });
+    return { handle, events };
+  };
+  return { views, created, loads, page };
+}
+
+test("an idle page nobody is looking at is slept by the sweep and lives on as a tombstone", async (t) => {
+  const { views, created, page } = sleepingViews();
+  t.after(() => views.closeAll());
+  const { handle, events } = page();
+  await later(40);
+  assert.deepEqual(views.asleep(handle.targetId), { url: "https://page.test/" }, "the idle page is asleep");
+  assert.ok(views.entries.has(handle.targetId), "the entry survives as a tombstone");
+  assert.equal(views.entries.get(handle.targetId).view, null);
+  assert.match(views.entries.get(handle.targetId).slept.picture, /^data:image\/jpeg;base64,/);
+  assert.equal(created.length, 1, "no view was built for a sleep");
+  assert.equal(events.closed, 0, "the kernel is not told of a sleep");
+});
+
+test("a send to a slept page wakes it, and the call lands on the page it comes back as", async (t) => {
+  const { views, created, loads, page } = sleepingViews();
+  t.after(() => views.closeAll());
+  const { handle, events } = page();
+  await later(40);
+  assert.ok(views.asleep(handle.targetId));
+  const built = created.length;
+  await handle.send("Page.captureScreenshot", { format: "png" });
+  assert.equal(created.length, built + 1, "waking built the view again");
+  assert.equal(views.asleep(handle.targetId), null, "the page is awake");
+  assert.ok(views.entries.has(handle.targetId), "the targetId is the one the kernel holds");
+  assert.equal(loads.length, 2, "the load was kicked off again");
+  assert.equal(events.closed, 0, "a wake is not a death");
+  const contents = views.entries.get(handle.targetId).view.webContents;
+  assert.deepEqual(contents.commands.at(-1), ["Page.captureScreenshot", { format: "png" }]);
+});
+
+test("closing a slept page buries it, and the kernel hears of it exactly once", async (t) => {
+  const { views, page } = sleepingViews();
+  t.after(() => views.closeAll());
+  const { handle, events } = page();
+  await later(40);
+  assert.ok(views.asleep(handle.targetId));
+  handle.close();
+  assert.equal(events.closed, 1, "the kernel is told once");
+  handle.close();
+  assert.equal(events.closed, 1, "and only once");
+  assert.equal(views.entries.has(handle.targetId), false);
+  assert.equal(views.asleep(handle.targetId), null);
+});
+
+test("a third page costs the least recently touched one its renderer, never the one on screen", async (t) => {
+  const { views, page } = sleepingViews({ sleepAfterMs: 60_000, sweepMs: 60_000, maxAwake: 2 });
+  t.after(() => views.closeAll());
+  const first = page();
+  const second = page();
+  views.show(first.handle.targetId, { x: 0, y: 0, width: 600, height: 400 });
+  // The page on screen is made the oldest on purpose: the cap must go past it.
+  views.entries.get(first.handle.targetId).lastTouch = 1;
+  const third = page();
+  await later(20);
+  assert.ok(views.asleep(second.handle.targetId), "the second page was slept to make room");
+  assert.equal(views.asleep(first.handle.targetId), null, "the page on screen keeps its renderer");
+  assert.equal(views.asleep(third.handle.targetId), null, "the page just created is awake");
+});
+
+test("the sweep never puts the page the person is looking at to sleep", async (t) => {
+  const { views, page } = sleepingViews();
+  t.after(() => views.closeAll());
+  const shown = page();
+  views.show(shown.handle.targetId, { x: 0, y: 0, width: 600, height: 400 });
+  views.entries.get(shown.handle.targetId).lastTouch = 1;
+  await later(40);
+  assert.equal(views.asleep(shown.handle.targetId), null, "the shown page is still awake");
+  assert.ok(views.entries.get(shown.handle.targetId).view, "and its view is still there");
+});
+
+test("closeAll takes the sweep's timer with it, and a suite full of these does not hang", async () => {
+  mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
+  try {
+    const { views, page } = sleepingViews({ sleepAfterMs: 10, sweepMs: 10 });
+    page();
+    views.closeAll();
+    assert.equal(views.sweeper, null, "the timer is gone");
+    views.closeAll();
+    assert.equal(views.sweeper, null, "and a second closeAll does not mind");
+    // A page made after the closeAll has nothing left to sleep it: had the
+    // timer survived, this tick would put it to sleep.
+    const { handle } = page();
+    mock.timers.tick(60_000);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(views.asleep(handle.targetId), null, "no sweep fired after closeAll");
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("a wake replays the page's domain enables before the next command lands", async (t) => {
+  const { views, created, page } = sleepingViews();
+  t.after(() => views.closeAll());
+  const { handle } = page();
+  // What the kernel says once at attach: the domains the page's events come from.
+  await handle.send("Page.enable", {});
+  await handle.send("Page.setLifecycleEventsEnabled", { enabled: true });
+  // A domain switched on mid-session joins the set; one switched off leaves it.
+  await handle.send("Network.enable", {});
+  await handle.send("Network.disable", {});
+  await later(40);
+  assert.ok(views.asleep(handle.targetId));
+  await handle.send("Runtime.evaluate", { expression: "1" });
+  assert.equal(created.length, 2, "the wake built a new view");
+  const said = created[1].webContents.commands.map(([method]) => method);
+  assert.deepEqual(said, ["Page.enable", "Page.setLifecycleEventsEnabled", "Runtime.evaluate"], "the enables are said again, before the next command — and a domain switched off is not switched back on");
+  assert.deepEqual(created[1].webContents.commands[1][1], { enabled: true }, "the parameters the kernel chose are the ones replayed");
+  assert.equal(created[0].webContents.commands.length, 4, "nothing was replayed on the session that died");
+  assert.equal(views.asleep(handle.targetId), null);
+});
+
+test("a wake yields no room: the page asked for outranks the pages left alone", async (t) => {
+  const { views, page } = sleepingViews({ maxAwake: 2, sleepAfterMs: 60, sweepMs: 5 });
+  t.after(() => views.closeAll());
+  const first = page();
+  const second = page();
+  await later(90);
+  assert.ok(views.asleep(first.handle.targetId), "the pages slept once they idled");
+  // The kernel is using the second page when it asks for the first: the cap is
+  // a brake on creation, not a quota held against a page the kernel wants.
+  await second.handle.send("Runtime.evaluate", { expression: "1" });
+  await first.handle.send("Runtime.evaluate", { expression: "1" });
+  assert.equal(views.asleep(first.handle.targetId), null, "the asked-for page woke");
+  assert.equal(views.asleep(second.handle.targetId), null, "the page in use was not slept to make room");
+  assert.ok(views.entries.get(second.handle.targetId).view, "the page in use kept its renderer");
+});
+
+test("a command the sleep outlives is failed, not left hanging", async (t) => {
+  const { views, page } = sleepingViews({ hang: "Runtime.evaluate" });
+  t.after(() => views.closeAll());
+  const { handle } = page();
+  // A session that dies never settles its open calls on its own; the kernel
+  // hears nothing of a sleep, so the sleep itself must answer them. The
+  // failure is held from the moment it is asked, so an early rejection is
+  // never an unhandled one.
+  const asked = handle.send("Runtime.evaluate", { expression: "1" });
+  const held = asked.then(
+    () => "resolved",
+    (err) => err,
+  );
+  await later(40);
+  assert.ok(views.asleep(handle.targetId));
+  const outcome = await held;
+  assert.match(String(outcome && outcome.message), /went to sleep/);
+});
+
+test("a navigation that begins while the picture is taken keeps the page awake", async (t) => {
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  let taken = 0;
+  const { views, page } = sleepingViews({ capturePage: () => { taken++; return held; } });
+  t.after(() => views.closeAll());
+  const { handle } = page();
+  const entry = views.entries.get(handle.targetId);
+  for (let waited = 0; waited < 40 && taken === 0; waited++) await later(5);
+  assert.ok(taken > 0, "the sweep is mid-capture, the picture never coming");
+  // A navigation starts the only way leave() is reached for one: the page is
+  // attached and the app page holds the keyboard, so it is held out of the
+  // window with a settle pending.
+  views.keyboard.owner = "app";
+  entry.attached = true;
+  views.leave(entry);
+  assert.ok(entry.returning, "the settle is pending");
+  release({ isEmpty: () => false, toJPEG: () => Buffer.from("jpeg") });
+  await later(20);
+  assert.equal(views.asleep(handle.targetId), null, "the page was not slept mid-flight");
+  assert.ok(views.entries.get(handle.targetId).view, "and its view is still there");
+});
+
+test("a spawn that fails leaves no entry behind", (t) => {
+  const { views } = sleepingViews({ failSpawns: 1 });
+  t.after(() => views.closeAll());
+  let closed = 0;
+  assert.throws(
+    () => views.create({ partition: "p0", url: "https://page.test/", onEvent: () => {}, onClosed: () => closed++, onPopup: () => {}, onDownload: () => {} }),
+    /would not build/,
+  );
+  assert.equal(closed, 0, "the kernel is told nothing of a target it never had");
+  assert.equal(views.entries.size, 0, "and no entry is left behind");
+});
+
+test("the nineteenth tombstone costs the oldest its place, and the kernel hears it", async (t) => {
+  const { views, page } = sleepingViews({ maxAwake: 32 });
+  t.after(() => views.closeAll());
+  const pages = [];
+  for (let i = 0; i < 19; i++) pages.push(page());
+  await later(60);
+  assert.ok(views.asleep(pages[18].handle.targetId), "the pages slept");
+  assert.ok(views.asleep(pages[1].handle.targetId), "the younger tombstones keep their place");
+  assert.equal(pages[0].events.closed, 1, "the oldest tombstone was buried and the kernel told");
+  assert.equal(views.asleep(pages[0].handle.targetId), null);
+  assert.equal(views.entries.size, 18, "eighteen tombstones remain");
+});
+
 test("rewind notice dismissal survives the desktop preference disk round trip", (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rewind-notice-prefs-"));
   const file = path.join(dir, "prefs.json");

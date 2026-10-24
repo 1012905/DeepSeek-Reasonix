@@ -231,8 +231,9 @@ cua = await startEmbedded(computerDriver, contract, text => logs.host.raw(text))
 
 // The agent's browser draws its pages as views in this window: the kernel
 // drives them through the relay, and the page decides where one is shown.
+// REASONIX_NO_PAGE_SLEEP is the way back: an idle page then never sleeps.
 function hostAgentBrowser() {
-  browserViews = new BrowserViews({ win, kernelOrigin: origin });
+  browserViews = new BrowserViews({ win, kernelOrigin: origin, sleepAfterMs: process.env.REASONIX_NO_PAGE_SLEEP ? Infinity : undefined });
   const protocol = new BrowserProtocol({
     createView: (spec) => browserViews.create(spec),
     post: (frame) => browserRelay?.post(frame),
