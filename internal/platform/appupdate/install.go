@@ -72,7 +72,9 @@ type readyMove struct {
 func (s *installState) begin(target string) (context.Context, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.progress.Running() {
+	// done stays non-nil until prepare has cleaned up a cancelled move. Its
+	// finish would otherwise cancel this move's context and discard its bytes.
+	if s.progress.Running() || s.done != nil {
 		return nil, false
 	}
 	ctx, cancel := context.WithCancelCause(context.Background())

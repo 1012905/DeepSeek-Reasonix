@@ -127,3 +127,54 @@ func TestACancelledPrepareDiscardsWhatItFetched(t *testing.T) {
 		}
 	}
 }
+
+// A cancelled move owns the slot until its cleanup closes done. Starting a new
+// move there would let the old prepare cancel the new context and discard the
+// bytes the new download wrote.
+func TestANewMoveWaitsForTheCancelledOneToCleanUp(t *testing.T) {
+	var s installState
+	if _, ok := s.begin("2.21.0"); !ok {
+		t.Fatal("begin refused an idle slot")
+	}
+	cancel, done, ok := s.abandon("2.21.0")
+	if !ok {
+		t.Fatal("abandon refused a running download")
+	}
+	cancel(errInstallCancelled)
+	if _, ok := s.begin("2.22.0"); ok {
+		t.Fatal("a new move began while the cancelled one was still cleaning up")
+	}
+	s.finish()
+	<-done
+	if _, ok := s.begin("2.22.0"); !ok {
+		t.Fatal("the slot stayed claimed after the cancellation cleaned up")
+	}
+	s.finish()
+}
+
+// The same window through the public surface: StartInstall answers
+// ErrInstallInFlight until the cancelled move has cleaned up, then accepts.
+func TestStartInstallIsRefusedWhileCancelCleansUp(t *testing.T) {
+	c, _ := owned(t, "2.20.0")
+	install := update.Install{Layout: update.Layout{Root: t.TempDir()}}
+	if _, ok := c.install.begin("2.21.0"); !ok {
+		t.Fatal("begin refused an idle slot")
+	}
+	cancel, done, ok := c.install.abandon("2.21.0")
+	if !ok {
+		t.Fatal("abandon refused a running download")
+	}
+	cancel(errInstallCancelled)
+	if err := c.StartInstall(install, "2.22.0"); !errors.Is(err, ErrInstallInFlight) {
+		t.Fatalf("start during cleanup = %v, want ErrInstallInFlight", err)
+	}
+	c.install.finish()
+	<-done
+	if err := c.StartInstall(install, "2.22.0"); err != nil {
+		t.Fatalf("start after cleanup = %v", err)
+	}
+	if cancel, done, ok := c.install.abandon("2.22.0"); ok {
+		cancel(errInstallCancelled)
+		<-done
+	}
+}
