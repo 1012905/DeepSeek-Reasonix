@@ -428,6 +428,9 @@ and selected states, while long titles truncate within the remaining width.
   timeline, not a scroll listener; without one it stays at opacity 0, which is
   today's hard edge. The `@supports` guard is load-bearing — a zero-duration
   animation would otherwise pin it visible.
+- The reading column's grips draw nothing at rest and appear under the pointer, on keyboard focus and while
+  dragging. A line standing in an empty conversation reads as a rendering fault; the 7px hit area and the
+  `col-resize` cursor are what say the edge moves, so the grip stays reachable without being drawn.
 - The reading column is centred rather than right-aligned. Before the column had
   a ceiling the two were the same thing; once it narrowed they parted, and at
   1920 a right-aligned column leaves four hundred pixels on the left while the
