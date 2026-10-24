@@ -475,7 +475,6 @@ export const EN_KERNEL: Record<string, string> = {
   "已有一个迁移正在进行，请等待其完成": "A move is already running — wait for it to finish",
   "这不是有效的插件名称": "That is not a plugin name",
   "该插件未安装": "That plugin is not installed",
-  "图片数据不是 base64 编码": "The image data is not base64",
   "HTTP 上不提供 shell 命令": "Shell commands are not served over HTTP",
   "这个会话里没有这条调用的输出": "This session has no output for that call",
   "要取的输出范围不对，请重新展开这条输出": "The part of the output asked for is not valid; open the output again",
@@ -544,7 +543,6 @@ export const EN_KERNEL: Record<string, string> = {
   "余额地址必须是 http 或 https 开头的网址": "The balance address must be an http or https URL",
   "这个余额格式不在可选范围内": "That balance format is not one of the available ones",
   "额外设置中的「{path}」不能为空值（null）": "“{path}” in the extra settings cannot be null",
-  "图片过大，请压缩至 {limit} MB 以内": "That image is too large — bring it under {limit} MB",
   "{path} 不在当前工作树中，无法查看其改动": "{path} is not inside this working tree, so its changes cannot be shown",
   "无法读取该文件的改动 —— git 未返回结果": "Could not read this file's changes — git returned nothing usable",
   "无法读取本次运行的轨迹记录，因此无法确定其覆盖范围":
