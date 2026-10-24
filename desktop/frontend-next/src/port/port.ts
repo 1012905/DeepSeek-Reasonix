@@ -458,9 +458,9 @@ export interface AgentPort extends WorkspacePreviewPort {
   studioLogs(): Promise<StudioLogs>;
   // Installs a published version, forward or back — the same call either way,
   // because a rollback that took a second code path would be the less-tested
-  // one. Resolves only on failure: a success ends with the process handing over
-  // to the build it just installed.
+  // one. Answered once the download is under way, not when it is installed.
   goToVersion(version: string): Promise<void>;
+  cancelVersion(version: string): Promise<void>; // discards what that download wrote
   // Installs the release goToVersion left verified and waiting, and restarts
   // into it. Refused with update.restart_busy while work runs here, unless
   // force says the person has seen that.

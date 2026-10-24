@@ -795,6 +795,7 @@ const SAID: Record<string, string> = {
   "update.install_rejected": "本次版本切换未能启动：{detail}",
   "update.restart_busy": "有 {n} 项任务正在运行，重启会中断它们",
   "update.nothing_ready": "没有已下载好的版本可供重启安装，请重新点击安装",
+  "update.nothing_to_cancel": "没有正在下载的版本可供取消，可能已经完成或已停止",
 
   "loopback.host_rejected": "该请求未发往 Studio 监听的地址，已被拒绝",
   "loopback.origin_rejected": "该页面不属于 Studio，无法对其操作",
