@@ -516,7 +516,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
       <LiveWork.Provider value={live}>
       <NewAnswerAnchor.Provider value={marker ? newAnswerAt : null}>
       <Transcript port={port}
-        scope={rt.sessionPath || rt.id}
+        scope={rt.sessionPath}
         onSettings={onSettings}
         brought={brought}
         foldWork={foldWork}
