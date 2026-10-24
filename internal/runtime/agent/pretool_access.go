@@ -38,6 +38,7 @@ func (a *Agent) preToolUse(ctx context.Context, plan *toolCallPlan) (toolOutcome
 		})
 	}
 	// Resolved proxy calls use the concrete target name and arguments.
+	plan.hookMayHaveMutated = toolHooksMayMutateWorkspace(a.svc.hooks)
 	if block, msg := a.svc.hooks.PreToolUse(ctx, plan.permName, plan.permArgs); block {
 		if msg == "" {
 			msg = "blocked by a PreToolUse hook"
