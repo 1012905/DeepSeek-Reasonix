@@ -170,7 +170,11 @@ func (s *Store) lookup(id string) (*Entry, error) {
 	e, ok := s.entries[id]
 	s.mu.Unlock()
 	if !ok {
-		e, ok = s.recover(id)
+		recovered, err := s.recover(id)
+		if err != nil {
+			return nil, tool.Refusal{Code: CodeUnavailable, Message: err.Error()}
+		}
+		e, ok = recovered, recovered != nil
 	}
 	if !ok {
 		pending := s.Pending()
