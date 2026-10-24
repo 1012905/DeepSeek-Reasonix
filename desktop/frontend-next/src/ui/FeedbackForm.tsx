@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { t } from "../i18n";
 import { systemLabel } from "./osname";
 import { memoryLines } from "./memoryrows";
@@ -153,7 +153,9 @@ export function FeedbackForm({ port, pasteRoot, active, onMine, onClose, onFile,
 
   const zone = useFileDrop((d) => void add(d.files), setOver);
 
-  useEffect(() => {
+  // Layout phase, so the listener exists in the same commit that draws the form:
+  // a paste in the frame after the form appears is taken, not dropped.
+  useLayoutEffect(() => {
     const root = pasteRoot.current;
     if (!root || !active || phase !== "editing" || !limits) return;
     return listenAction(root, "paste", {
