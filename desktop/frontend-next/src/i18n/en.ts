@@ -1197,6 +1197,8 @@ export const EN: Record<string, string> = {
     "Palettes install under themes/ in the memory directory, one theme.json per folder. A palette sets surfaces, accent, corner radii and type; the status colours (success, warning, failure) are unaffected.",
   "导入主题…": "Import theme…",
   "正在导入…": "Importing…",
+  "从会话文件导入": "Import from a session file",
+  "选择会话文件…": "Choose a session file…",
   "打开主题目录": "Open themes folder",
   "阅读": "Read",
   "设置需要一个打开的会话。请先在左栏添加一个文件夹。": "Settings need an open session. Add a folder in the sidebar first.",
