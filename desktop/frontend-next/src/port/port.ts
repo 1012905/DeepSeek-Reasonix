@@ -570,8 +570,8 @@ export interface AgentPort extends WorkspacePreviewPort {
    *  could not be read. That one refuses, with a code saying which failure. */
   balance(): Promise<WalletReading | null>;
   history(): Promise<HistoryMessage[]>;
-  // The kernel's canonical task list. The plan panel answers to it and does not
-  // restate it.
+  historyPage?(cursor?: string): Promise<import("./session").HistoryPage>;
+  // The plan panel renders this canonical task list without reconstructing it.
   todos(): Promise<HostTodo[]>;
   // One entry per user turn, oldest first. files is how many the writer tools
   // touched that turn — zero is normal and means there is nothing to restore.
