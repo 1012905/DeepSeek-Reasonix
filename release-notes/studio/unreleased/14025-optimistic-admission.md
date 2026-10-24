@@ -1,0 +1,2 @@
+- Fixed: optimistic task/fleet file writes honor live sibling claims, including dynamically resolved local tools; disjoint writes stay available. Refs #14025, #14133.
+- 修复：乐观 task/fleet 的文件写入会检查兄弟任务占用，包含动态本地工具；不相交写入仍可并行。关联 #14025、#14133。
