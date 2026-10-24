@@ -168,3 +168,17 @@ func readDirUnder(dir, name string) ([]os.DirEntry, error) {
 	defer f.Close()
 	return f.ReadDir(-1)
 }
+
+// sameDirPath reports whether two directory paths resolve to the same location.
+func sameDirPath(a, b string) bool {
+	ca, cb := filepath.Clean(a), filepath.Clean(b)
+	if ca == cb {
+		return true
+	}
+	if aa, err := filepath.Abs(ca); err == nil {
+		if bb, err := filepath.Abs(cb); err == nil {
+			return aa == bb
+		}
+	}
+	return false
+}

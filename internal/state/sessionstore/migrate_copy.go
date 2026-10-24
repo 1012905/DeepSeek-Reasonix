@@ -32,3 +32,25 @@ func linkFileNoReplace(src, dst string) error {
 	}
 	return nil
 }
+
+// completeBranchMetaSidecar finishes a transcript whose sidecar an interrupted
+// import never published. It reports whether it wrote one. A sidecar that is
+// already there — readable or not — is never rewritten, so the ordinary retry of
+// a finished session copies nothing, and a corrupt sidecar is not clobbered by a
+// source that has one too.
+func completeBranchMetaSidecar(srcPath, dstPath string) (bool, error) {
+	// LoadBranchMeta is the pre-existing reader: ok means the sidecar is there,
+	// an error means it exists but cannot be trusted, and only ok == false with
+	// no error means there is nothing to preserve.
+	_, ok, err := LoadBranchMeta(dstPath)
+	if err != nil {
+		return false, err
+	}
+	if ok {
+		return false, nil
+	}
+	if err := copyBranchMetaSidecar(srcPath, dstPath); err != nil {
+		return false, err
+	}
+	return true, nil
+}
