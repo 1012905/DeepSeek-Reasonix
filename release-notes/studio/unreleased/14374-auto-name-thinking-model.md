@@ -1,2 +1,0 @@
-- 修复：自动命名时标题模型不听「关闭思考」、把输出额度都花在思考上时，程序会放宽额度重试一次，而不是直接失败让你去换模型。关联 #14374。
-- Fixed: when the title model ignores the request to think less and spends its whole output budget thinking, automatic naming asks once more with room for the title instead of failing. Refs #14374.

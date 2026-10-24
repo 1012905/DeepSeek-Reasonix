@@ -1,2 +1,0 @@
-- Fixed: temporary Git inspection failures after restart retain an isolated result's files and ID, so path discovery, apply or discard can retry when Git returns. Refs #14025, #14133.
-- 修复：重启后 Git 暂时不可用时保留隔离结果的文件和 ID；Git 恢复后可重新查询、应用或丢弃。关联 #14025、#14133。

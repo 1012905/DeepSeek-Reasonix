@@ -1,2 +1,0 @@
-- 修复：设置「存储」里「导入原生会话」那张卡片不再露出浏览器自带的文件选择框，和旁边「找回旧版会话」一样用应用风格的按钮。关联 #14378。
-- Fixed: the "Import a native session" card in Settings → Storage no longer shows the browser's own file input; it uses the same app-styled button as the legacy-sessions card beside it. Refs #14378.
