@@ -1,2 +1,0 @@
-- 改进：壁纸不再有 12 MB 的大小上限，原样使用你选的图片；上传改为边收边写入磁盘，读取支持分段，大文件不再占满内存。关联 #13980。
-- Improved: wallpapers have no 12 MB limit and are used as chosen; the upload is written to disk as it arrives and the file is served in ranges, so a large one no longer fills memory. Refs #13980.

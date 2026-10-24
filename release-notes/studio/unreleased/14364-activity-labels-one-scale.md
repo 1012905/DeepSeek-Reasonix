@@ -1,2 +1,0 @@
-- 修复：执行过程那一行的「N 项运行中」「N 项失败」「N 项操作」和标题现在字号、字重一致（原先分别是 11px/650、9.5px/500、10px/450，旁边标题是 11px/500）。关联 #14364。
-- Fixed: the running / failed / action counts on the activity line now share the title's size and weight (they were 11px/650, 9.5px/500 and 10px/450 beside an 11px/500 title). Refs #14364.

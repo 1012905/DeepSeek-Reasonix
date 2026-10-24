@@ -1,2 +1,0 @@
-- 修复：用智能体预设建的会话，升级后因内置工具变化不再变成只能查看；它按当时记录的工具继续，并提示一次。关联 #14360。
-- Fixed: a conversation bound to an Agent preset no longer turns read-only after an upgrade changes a built-in tool; it continues with the tools it recorded and says so once. Refs #14360.

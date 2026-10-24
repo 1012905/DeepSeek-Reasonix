@@ -1,2 +1,0 @@
-- Added an optional history API with bounded pages, stable positions and cross-page tool context. Existing clients keep full-history reads; the incremental UI ships separately. Refs #14048, #14087.
-- 新增可选历史接口，按页读取正文并保留稳定消息位置和跨页工具上下文。现有客户端继续全量读取，渐进界面单独交付。关联 #14048、#14087。

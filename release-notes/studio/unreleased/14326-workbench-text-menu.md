@@ -1,2 +1,0 @@
-- 修复：工作台右键菜单合并编辑操作与“加入对话”；阅读和只读视图不显示修改操作，未选中文字时不显示引用。关联 #14326。
-- Fixed: workbench text menus combine editing and Add to conversation, respect read-only views and selection, and preserve keyboard focus and editor undo/redo. Refs #14326.
