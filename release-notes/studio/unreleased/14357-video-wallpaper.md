@@ -1,0 +1,2 @@
+- 新增：壁纸可以选 MP4 或 WebM 视频，作为静音循环的动态壁纸；窗口隐藏或失焦、系统减弱动效或设置里选了精简效果时停在第一帧。关联 #14357。
+- Added: a wallpaper can be an MP4 or WebM video, played muted and looping; it stays on its first frame while the window is hidden or unfocused, under reduced motion or reduced effects. Refs #14357.
