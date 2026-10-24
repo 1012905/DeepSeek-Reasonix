@@ -90,6 +90,9 @@ export interface Appearance {
 export interface Wallpaper {
   // Content-addressed, so the bytes at this address never change.
   url: string;
+  // A picture is drawn as the window's background, a video as an element
+  // behind it; the kernel decides which from the type it was uploaded as.
+  kind: "image" | "video";
   opacity: number;
   dim: number;
   focusX: number;

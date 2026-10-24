@@ -129,3 +129,31 @@ func TestCSRFGuardAdmitsBinaryWallpaperOnlyAtItsRoute(t *testing.T) {
 		}
 	}
 }
+
+func TestVideoWallpapersAreAdmittedAndNamedAsVideo(t *testing.T) {
+	for _, c := range []struct{ mime, ext, kind string }{
+		{"video/mp4", ".mp4", "video"},
+		{"video/webm", ".webm", "video"},
+		{"image/webp", ".webp", "image"},
+	} {
+		t.Setenv("REASONIX_HOME", testenv.TempDir(t))
+		rec := uploadWallpaperBody(t, "/appearance/wallpaper?mime="+c.mime, strings.NewReader("a stand-in for "+c.mime))
+		var view struct {
+			Wallpaper *struct {
+				URL  string `json:"url"`
+				Kind string `json:"kind"`
+			} `json:"wallpaper"`
+		}
+		if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &view) != nil || view.Wallpaper == nil {
+			t.Fatalf("%s: %d %s", c.mime, rec.Code, rec.Body.String())
+		}
+		if !strings.HasSuffix(view.Wallpaper.URL, c.ext) || view.Wallpaper.Kind != c.kind {
+			t.Errorf("%s stored as %s kind %q, want %s kind %q", c.mime, view.Wallpaper.URL, view.Wallpaper.Kind, c.ext, c.kind)
+		}
+		get := httptest.NewRecorder()
+		wallpaperMux().ServeHTTP(get, httptest.NewRequest(http.MethodGet, view.Wallpaper.URL, nil))
+		if get.Code != http.StatusOK || get.Header().Get("Content-Type") != c.mime {
+			t.Errorf("%s served as %d %q", c.mime, get.Code, get.Header().Get("Content-Type"))
+		}
+	}
+}

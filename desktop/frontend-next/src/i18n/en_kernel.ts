@@ -265,8 +265,8 @@ export const EN_KERNEL: Record<string, string> = {
   "本机没有操作系统沙箱，「关进沙箱」一档无法保存": "This machine has no OS sandbox, so the jailed mode cannot be saved",
 
   "该文件夹仍有 {n} 个打开的面板，请先关闭再移除": "This folder still has {n} open panes — close them before removing it",
-  "不支持该图片格式，请改用 PNG、JPEG、WebP、AVIF 或 GIF":
-    "That image format will not work — use PNG, JPEG, WebP, AVIF or GIF",
+  "不支持该格式，请改用图片（PNG、JPEG、WebP、AVIF、GIF）或视频（MP4、WebM）":
+    "That format is not supported; use an image (PNG, JPEG, WebP, AVIF, GIF) or a video (MP4, WebM)",
   "图片内容为空": "The image is empty",
   "压缩阈值未能保存：{detail}": "The compaction threshold was not saved: {detail}",
   "本次请求未包含阈值，未做任何修改": "The request carried no threshold, so nothing changed",

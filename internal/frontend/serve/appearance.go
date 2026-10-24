@@ -23,6 +23,8 @@ var wallpaperTypes = map[string]string{
 	"image/webp": ".webp",
 	"image/avif": ".avif",
 	"image/gif":  ".gif",
+	"video/mp4":  ".mp4",
+	"video/webm": ".webm",
 }
 
 func (s *Server) registerAppearanceRoutes(mux *http.ServeMux) {
@@ -63,7 +65,11 @@ type zoomRangeView struct {
 type wallpaperView struct {
 	// URL carries the content hash in its name, so the bytes at an address
 	// never change and the page needs no cache buster.
-	URL     string  `json:"url"`
+	URL string `json:"url"`
+	// Kind is "image" or "video". The page draws a picture as a background
+	// and a video as an element, and the stored name is all it could read this
+	// from otherwise; the kernel already decided it from the type.
+	Kind    string  `json:"kind"`
 	Opacity float64 `json:"opacity"`
 	Dim     float64 `json:"dim"`
 	FocusX  float64 `json:"focusX"`
@@ -88,6 +94,7 @@ func viewOf(a config.AppearanceConfig, language, width string) appearanceView {
 	if a.Wallpaper.File != "" {
 		out.Wallpaper = &wallpaperView{
 			URL:     "/appearance/wallpaper/" + a.Wallpaper.File,
+			Kind:    wallpaperKind(a.Wallpaper.File),
 			Opacity: a.Wallpaper.Opacity,
 			Dim:     a.Wallpaper.Dim,
 			FocusX:  a.Wallpaper.FocusX,
@@ -239,7 +246,7 @@ func (s *Server) wallpaperAsset(w http.ResponseWriter, r *http.Request) {
 func storeWallpaper(mime string, r io.Reader) (string, error) {
 	ext, ok := wallpaperTypes[strings.ToLower(strings.TrimSpace(mime))]
 	if !ok {
-		return "", refusal(http.StatusUnprocessableEntity, "wallpaper.unsupported_type", errors.New("unsupported image type"), nil)
+		return "", refusal(http.StatusUnprocessableEntity, "wallpaper.unsupported_type", errors.New("unsupported wallpaper type"), nil)
 	}
 	dir := appearanceDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -270,6 +277,15 @@ func storeWallpaper(mime string, r io.Reader) (string, error) {
 		return "", err
 	}
 	return name, nil
+}
+
+// wallpaperKind says whether a stored wallpaper is a picture or a video, by the
+// type its name was derived from.
+func wallpaperKind(name string) string {
+	if strings.HasPrefix(contentTypeOf(name), "video/") {
+		return "video"
+	}
+	return "image"
 }
 
 func contentTypeOf(name string) string {

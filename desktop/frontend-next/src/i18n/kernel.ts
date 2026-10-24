@@ -444,7 +444,7 @@ const SAID: Record<string, string> = {
   "remote.auth_failed": "{host} 不接受该凭据。请更换密钥，或在设置中填写正确的环境变量名。",
 
   // ── 壁纸 ─────────────────────────────────────────────────────────
-  "wallpaper.unsupported_type": "不支持该图片格式，请改用 PNG、JPEG、WebP、AVIF 或 GIF",
+  "wallpaper.unsupported_type": "不支持该格式，请改用图片（PNG、JPEG、WebP、AVIF、GIF）或视频（MP4、WebM）",
   "wallpaper.empty": "图片内容为空",
 
   // ── 来不及了 ──────────────────────────────────────
