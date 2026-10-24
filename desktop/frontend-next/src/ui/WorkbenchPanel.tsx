@@ -35,7 +35,6 @@ import { OpenWithMenu } from "./OpenWithMenu";
 import type { HubPort } from "../port/hub";
 import { useHtmlPreview } from "./useHtmlPreview";
 import { setShowsHiddenFiles, showsHiddenFiles } from "../state/prefs";
-import { BrowserWideToggle } from "./BrowserWideToggle";
 import { BrowserFullToggle } from "./BrowserFullToggle";
 import { documentView, sourceView } from "./document/registry";
 import { TooltipButton } from "./TooltipButton";
@@ -70,7 +69,6 @@ export function WorkbenchPanel({
   onExternal,
   onAddToChat,
   onQuoteSelection,
-  wideMode,
   fullMode,
   fileRequest,
   agentRequest,
@@ -104,7 +102,6 @@ export function WorkbenchPanel({
   onAddToChat?: (reference: string) => void;
   // Text selected in an open file, with the file it came from, on its way to the composer.
   onQuoteSelection?: (text: string, path: string) => void;
-  wideMode?: { wide: boolean; onToggle: () => void };
   fullMode?: { full: boolean; onToggle: () => void };
   fileRequest?: { path: string; consumed?: () => void };
   agentRequest?: AgentRequest;
@@ -450,7 +447,6 @@ export function WorkbenchPanel({
       if (launcher && e.key === "Escape") { e.stopPropagation(); toggleLauncher(); newTab.current?.focus(); }
     }}>
       <header className="workbench-tabs">
-        {wideMode && <BrowserWideToggle {...wideMode} />}
         <div
           className="workbench-tablist"
           role="tablist"

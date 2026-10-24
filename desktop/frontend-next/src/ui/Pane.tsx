@@ -55,7 +55,7 @@ import { RunAnalysis } from "./RunAnalysis";
 import { useBrowserTabs } from "./BrowserPanel";
 import { useRevealAgentPages, useRevealBrowserOpen } from "./browserreveal";
 import { WorkbenchPanel } from "./WorkbenchPanel";
-import { useBrowserWide } from "./browserwide";
+import { useBrowserFull } from "./browserfull";
 import { refreshTodos } from "../state/restore";
 import { speedOf } from "./speed";
 import { RuntimeBar } from "./RuntimeBar";
@@ -459,7 +459,7 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
   // Chinese literals that the reducer had written — a translation key deciding
   // whether the run reads as moving.
   const blocked = hasPendingDecision(status);
-  const browserSize = useBrowserWide(docked, active && visible, blocked);
+  const browserSize = useBrowserFull(docked, active && visible, blocked);
   const run = runState({ blocked, running, hasItems: s.items.length > 0, terminal: s.terminal });
   const cost = s.metrics.coverage === "none" ? NO_COST : s.metrics.cost;
   const contextPercent = ctx && ctx.window > 0 ? Math.min(100, Math.round((ctx.used / ctx.window) * 100)) : null;
@@ -581,7 +581,6 @@ function PaneView({ port, hub, rt, title, active, visible, sideHost, side, onFoc
             fileRequest={conversationFiles.request}
             agentRequest={agentRuns.request}
             tabs={pages}
-            wideMode={docked ? { wide: browserSize.size === "wide", onToggle: browserSize.toggle } : undefined}
             fullMode={docked ? { full: browserSize.size === "full", onToggle: browserSize.toggleFull } : undefined}
             manual={manualBrowser}
             shown={visible && workbench}

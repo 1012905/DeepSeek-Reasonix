@@ -949,7 +949,6 @@ export const EN: Record<string, string> = {
   "搜索会话": "Search conversations",
   "在提问之间移动": "Move between your questions",
   "工作台全屏": "Workbench full screen",
-  "工作台加宽": "Widen the workbench",
   "缩小 / 放大 / 复原界面": "Make the interface smaller / larger / its default size",
   "发送（发送键设为修饰键 + Enter 时）": "Send when the send key is set to the modifier plus Enter",
   "发送，或用 Shift 换行": "Send, or a new line with Shift",
