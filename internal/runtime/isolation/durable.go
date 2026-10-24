@@ -3,6 +3,7 @@ package isolation
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -70,9 +71,9 @@ func (s *Store) durableIDs() []string {
 	return ids
 }
 
-// recover rebuilds a result from its worktree. One whose worktree no longer
-// holds a change is removed rather than offered.
-func (s *Store) recover(id string) (*Entry, bool) {
+// recover rebuilds a result from its worktree. Inspection errors retain the
+// result for retry; a successfully inspected empty result is removed.
+func (s *Store) recover(id string) (*Entry, error) {
 	for _, d := range s.durable() {
 		if d.ID != id {
 			continue
@@ -83,17 +84,20 @@ func (s *Store) recover(id string) (*Entry, bool) {
 		if err == nil && len(changes) > 0 {
 			e.Stats, err = worktree.DiffStat(ctx, e.Snap, tree, changes)
 		}
-		if err != nil || len(changes) == 0 {
+		if err != nil {
+			return nil, fmt.Errorf("inspect isolated result %s; files retained: %w", id, err)
+		}
+		if len(changes) == 0 {
 			s.remove(ctx, e)
-			return nil, false
+			return nil, nil
 		}
 		e.Tree, e.Changes = tree, changes
 		s.mu.Lock()
 		s.entries[e.ID] = e
 		s.mu.Unlock()
-		return e, true
+		return e, nil
 	}
-	return nil, false
+	return nil, nil
 }
 
 // SweepExpired removes this workspace's results nobody settled within maxAge.

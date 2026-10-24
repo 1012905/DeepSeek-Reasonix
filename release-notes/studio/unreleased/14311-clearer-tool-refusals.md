@@ -1,0 +1,2 @@
+- 改进：工具参数缺必填项、待办列表规则不符、diff 证据被拒时，报错会直接给出一份合法示例或改用 files 证据的出路，模型不必靠试错。关联 #14311。
+- Improved: a tool call missing a required field, a todo list breaking a rule, and a diff citation for command-made changes now show a valid example or the files-evidence way out. Refs #14311.

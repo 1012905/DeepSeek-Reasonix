@@ -1,5 +1,4 @@
 import { SseHttp } from "./sse_http";
-import { base64Of, guardUpload, tooLarge, UPLOAD_LIMIT_MB } from "./upload";
 import type { Appearance } from "./port";
 
 // The appearance half of the port. Chained the way the fixture's faces are, so
@@ -25,13 +24,19 @@ export class SseLook extends SseHttp {
     });
   }
 
-  // JSON, not raw bytes: csrfGuard admits nothing else, which is what stops a
-  // cross-site form from posting here at all.
-  // JSON, not raw bytes: csrfGuard admits nothing else, which is what stops a
-  // cross-site form from posting here at all.
+  // The picture goes up as the request body, so neither side holds a copy of it
+  // beyond what the browser already has: the kernel writes it to disk as it
+  // arrives. octet-stream is the one binary type csrfGuard admits (it needs a
+  // preflight a cross-site page cannot get), so the real type rides in the query.
   async uploadWallpaper(blob: Blob) {
-    guardUpload(blob.size, UPLOAD_LIMIT_MB.wallpaper, tooLarge("wallpaper.too_large", "limit"));
-    return this.post0<Appearance>("/appearance/wallpaper", { mime: blob.type, data: await base64Of(blob) });
+    const res = await fetch(this.base + "/appearance/wallpaper?mime=" + encodeURIComponent(blob.type), {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream" },
+      credentials: "same-origin",
+      body: blob,
+    });
+    if (!res.ok) await SseHttp.fail("/appearance/wallpaper", res);
+    return (await res.json()) as Appearance;
   }
   clearWallpaper() {
     return this.del("/appearance/wallpaper");
