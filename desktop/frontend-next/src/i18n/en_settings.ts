@@ -863,6 +863,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "下载完整安装包": "Download the full installer",
   "重启以完成安装": "Restart to finish",
   "已下载，待重启": "Downloaded, waiting for a restart",
+  "取消下载": "Cancel download",
+  "已取消下载": "Download cancelled",
   "正在安装…": "Installing…",
   "正在重启到新版本…": "Restarting into the new version…",
   "安装失败": "Install failed",
