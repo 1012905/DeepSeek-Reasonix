@@ -1,13 +1,18 @@
 ---
-owner: @Oliver-Rui
-status: proposed
+owner: @esengine
+backup: @SivanCola
+author: @Oliver-Rui
+status: active
+reviewed: 2026-10-24
 ---
 
 # First run without a picked workspace
 
 Status: proposed. Nothing in this document is shipped unless §8 says so. It lives under `docs/design/` so the product-doc retrieval corpus (`docs/*.md`) cannot present it to a model as a feature.
 
-Reference: how MiMo Desktop (observed 2026-10-24 on a machine running it) handles the same three first-run decisions — connect a model, pick a workspace, start a session. Its behaviour below is read off installed artifacts (config schema, directory layout, state store), not source; the mapping onto this repository in §6 is grounded in source.
+Reference: how MiMo Desktop (observed 2026-10-24 on a machine running it) handles the same three first-run decisions — connect a model, pick a workspace, start a session.
+
+Its behaviour below is read off installed artifacts (config schema, directory layout, state store), not source; the mapping onto this repository in §6 is grounded in source.
 
 ## 1. The problem
 
@@ -19,9 +24,13 @@ Studio's first launch asks three things at once, and only one of them is honestl
 | Start a session | the composer is reachable as soon as the workbench opens | yes |
 | Pick a workspace | `pickLaunchWorkspace(cwd, appExe, remembered, home)` — with nothing remembered, the first pane's root is the **user's home directory** | no |
 
-The fallback chain in `cmd/reasonix-studio-host/launchroot.go` is careful about *which* cwd it trusts — a Start-menu launch inherits the install directory, and taking that as a project "puts the app's own folder in the sidebar again after every removal" — but its last resort is the home directory. That folder was never chosen as a project. It is broad, it is sensitive, and it is not represented in the sidebar as anything the user picked, so a session running there reads as a temporary session: not in the user's project, scoped to a folder they did not choose, and removing it does not stick.
+The fallback chain in `cmd/reasonix-studio-host/launchroot.go` is careful about *which* cwd it trusts — a Start-menu launch inherits the install directory, and taking that as a project "puts the app's own folder in the sidebar again after every removal" — but its last resort is the home directory.
 
-Everything else is already in place for a decoupled first run. Session transcripts persist in the global store (`SessionDir()` = `<user state>/sessions`), so a session without a chosen project is not lost. Each logical session already owns a private scratch directory (`SessionTemp`, rotated per session, deleted when it ends, surfaced to the model as `$TMPDIR`). Provider setup already refuses to block. The workspace is the last coupled decision.
+That folder was never chosen as a project. It is broad, it is sensitive, and it is not represented in the sidebar as anything the user picked, so a session running there reads as a temporary session: not in the user's project, scoped to a folder they did not choose, and removing it does not stick.
+
+Everything else is already in place for a decoupled first run. Session transcripts persist in the global store (`SessionDir()` = `<user state>/sessions`), so a session without a chosen project is not lost.
+
+Each logical session already owns a private scratch directory (`SessionTemp`, rotated per session, deleted when it ends, surfaced to the model as `$TMPDIR`). Provider setup already refuses to block. The workspace is the last coupled decision.
 
 ## 2. What MiMo does instead
 
