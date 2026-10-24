@@ -29,6 +29,10 @@ the transaction-library PR #14368. It is not independent security approval.
 各路径来自现有宿主解析的仓库身份或新建的私有临时目录。新命令仍经现有 Git
 驱动执行；参数不作为 shell 脚本拼接。真实索引和 refs 不参与私有索引重建。
 
+The existing driver disables Git hooks/fsmonitor and submodule recursion for
+`read-tree`. The extra invocations inherit that policy. Index rebuilding and
+rehashing add work; this slice makes no capture-latency improvement claim.
+
 ## Rules and failure / 规则与失败
 
 1. The copied index MUST first preserve its staged tree, including explicitly
@@ -60,6 +64,9 @@ the transaction-library PR #14368. It is not independent security approval.
 3. The complete worktree race suite covers neighbouring creation, cancellation,
    filtering, relative roots, application and rollback behavior. Platform and
    broader assembly results are reported separately in the PR.
+4. `TestApplyRejectsStatCacheHiddenSourceEdit` reproduces an actual stale
+   candidate overwriting a hidden user edit with the old code. The repair
+   returns `ErrWorkspaceMoved` and keeps the user's bytes.
 
 回归先证明旧实现在真实 Git 仓库中捕获旧内容，再验证修复后内容、忽略文件、
 索引及 HEAD 均符合预期。其他平台和装配层结论按各自实际测试结果记录。
