@@ -31,7 +31,8 @@ interface Props {
   flow: RefObject<HTMLDivElement | null>;
   onJump: (mark: RailMark) => void;
   /** Which conversation these marks belong to. Stars are stored per conversation,
-   *  because the same position in two conversations is two different questions. */
+   *  because the same position in two conversations is two different questions.
+   *  Empty until the conversation is saved: its stars are then kept in memory. */
   scope: string;
   // Only the transcript on screen answers the keys; a pane on another tab keeps
   // its rail but must not fight for them.
@@ -70,6 +71,7 @@ function bookmarkKey(scope: string) {
 }
 
 function loadBookmarks(scope: string): Set<string> {
+  if (!scope) return new Set();
   try {
     const raw = localStorage.getItem(bookmarkKey(scope));
     const list = raw ? (JSON.parse(raw) as unknown) : [];
@@ -80,6 +82,7 @@ function loadBookmarks(scope: string): Set<string> {
 }
 
 function saveBookmarks(scope: string, marks: Set<string>) {
+  if (!scope) return;
   try {
     localStorage.setItem(bookmarkKey(scope), JSON.stringify([...marks]));
   } catch {
@@ -157,7 +160,19 @@ export function Rail({ marks, total, scroll, flow, onJump, bound, scope }: Props
   // Which questions the reader starred. Kept by message id so folding the rail
   // around them cannot lose one.
   const [stars, setStars] = useState<Set<string>>(() => loadBookmarks(scope));
-  useEffect(() => setStars(loadBookmarks(scope)), [scope]);
+  const starScope = useRef(scope);
+  useEffect(() => {
+    const from = starScope.current;
+    starScope.current = scope;
+    if (from === scope) return;
+    setStars((prev) => {
+      // The first save names the conversation the stars were placed in.
+      if (from || !scope || prev.size === 0) return loadBookmarks(scope);
+      const next = new Set([...loadBookmarks(scope), ...prev]);
+      saveBookmarks(scope, next);
+      return next;
+    });
+  }, [scope]);
   const star = useCallback((msgIndex: number | undefined) => {
     if (msgIndex === undefined) return;
     const key = String(msgIndex);

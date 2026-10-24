@@ -99,10 +99,12 @@ describe("a star belongs to the question, not the row id", () => {
       scrollHeight: { configurable: true, value: 2400 },
       scrollTop: { configurable: true, writable: true, value: 0 },
     });
-    return render(
+    const rail = (s: string) => (
       <Rail marks={marks} total={marks.length} scroll={{ current: root }} flow={{ current: flow }}
-        onJump={vi.fn()} bound scope={scope} />,
+        onJump={vi.fn()} bound scope={s} />
     );
+    const view = render(rail(scope));
+    return Object.assign(view, { rescope: (s: string) => view.rerender(rail(s)) });
   };
 
   it("keeps the star on the same question after a remount with fresh ids", async () => {
@@ -142,5 +144,44 @@ describe("a star belongs to the question, not the row id", () => {
     const again = draw([mark("j1", 1, "第一条", 2), mark("j2", 2, "第二条", 3)], "s1");
     await waitFor(() => expect(again.getAllByRole("button")[0].getAttribute("data-starred")).toBe(""));
     expect(again.getAllByRole("button")[1].getAttribute("data-starred")).toBeNull();
+  });
+
+  it("keeps a star placed before the conversation's first save", async () => {
+    localStorage.clear();
+    const view = draw(two("i1", "i2"), "");
+    fireEvent.contextMenu(view.getAllByRole("button")[0]);
+    await waitFor(() => expect(view.getAllByRole("button")[0].getAttribute("data-starred")).toBe(""));
+
+    view.rescope("s1");
+    await waitFor(() => expect(view.getAllByRole("button")[0].getAttribute("data-starred")).toBe(""));
+    view.unmount();
+
+    const again = draw(two("j1", "j2"), "s1");
+    await waitFor(() => expect(again.getAllByRole("button")[0].getAttribute("data-starred")).toBe(""));
+    expect(again.getAllByRole("button")[1].getAttribute("data-starred")).toBeNull();
+  });
+
+  it("does not hand an unsaved conversation's stars to the next one", async () => {
+    localStorage.clear();
+    const first = draw(two("i1", "i2"), "");
+    fireEvent.contextMenu(first.getAllByRole("button")[0]);
+    await waitFor(() => expect(first.getAllByRole("button")[0].getAttribute("data-starred")).toBe(""));
+    first.unmount();
+
+    const next = draw(two("i1", "i2"), "");
+    expect(next.getAllByRole("button")[0].getAttribute("data-starred")).toBeNull();
+  });
+
+  it("opening a saved conversation from an unstarred draft keeps that conversation's stars", async () => {
+    localStorage.clear();
+    const saved = draw(two("i1", "i2"), "s1");
+    fireEvent.contextMenu(saved.getAllByRole("button")[1]);
+    await waitFor(() => expect(saved.getAllByRole("button")[1].getAttribute("data-starred")).toBe(""));
+    saved.unmount();
+
+    const view = draw(two("j1", "j2"), "");
+    view.rescope("s1");
+    await waitFor(() => expect(view.getAllByRole("button")[1].getAttribute("data-starred")).toBe(""));
+    expect(view.getAllByRole("button")[0].getAttribute("data-starred")).toBeNull();
   });
 });

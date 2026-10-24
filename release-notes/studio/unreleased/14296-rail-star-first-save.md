@@ -1,0 +1,2 @@
+- 修复：新对话第一次保存前在右侧提问细条上加的书签，保存后不再消失；也不会在重启后出现在另一段还没保存的新对话里。关联 #14296。
+- Fixed: a question starred in the rail before a new conversation is first saved stays starred once it is saved, and no longer reappears in another unsaved conversation after a restart. Refs #14296.
