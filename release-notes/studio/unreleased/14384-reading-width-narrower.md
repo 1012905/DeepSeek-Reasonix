@@ -1,0 +1,2 @@
+- 改进：正文字宽现在可以连续拖到 640px，不再停在「适宜阅读」的 760px；按 Home 或不拖动时仍是 760px。关联 #14384。
+- Changed: the reading column can now be dragged continuously down to 640px instead of stopping at the 760px readable measure; Home and an untouched window still give 760px. Refs #14384.
