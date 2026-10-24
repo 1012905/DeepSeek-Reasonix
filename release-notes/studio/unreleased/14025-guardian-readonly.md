@@ -1,0 +1,2 @@
+- Fixed: Guardian's deferred calls enforce read-only execution on actual targets. Writers and declared host mutations are refused; executor approvals still work. Refs #14025, #14133.
+- 修复：Guardian 仍可读取文件并批准执行代理的操作，但其自身的 `use_capability` 调用现在对真实目标执行只读检查，拒绝写入及已声明的宿主变更。关联 #14025、#14133。
