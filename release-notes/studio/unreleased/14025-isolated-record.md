@@ -1,0 +1,2 @@
+- Fixed: isolated-result recovery checks managed paths and repository identity. Mismatched records remain on disk and cannot trigger cleanup or apply. Refs #14025, #14133.
+- 修复：隔离结果恢复前核对托管目录、源仓库和候选 worktree 身份。错配、复制或符号链接重定向的记录保留并拒绝操作；正常旧记录和子目录项目保持兼容。关联 #14025、#14133。

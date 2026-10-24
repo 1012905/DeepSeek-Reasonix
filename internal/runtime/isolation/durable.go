@@ -58,6 +58,10 @@ func (s *Store) durable() []durableEntry {
 		if json.Unmarshal(raw, &d) != nil || d.ID == "" || !sameDir(d.Workspace, s.workspace) {
 			continue
 		}
+		d, ok := s.bindRecord(mark, d)
+		if !ok {
+			continue
+		}
 		out = append(out, d)
 	}
 	return out
