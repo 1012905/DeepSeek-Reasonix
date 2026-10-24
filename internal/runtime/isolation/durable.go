@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -47,20 +48,43 @@ func forget(e *Entry) { _ = os.Remove(entryPath(e.Cand)) }
 // workspace. A result from another workspace is never offered here: applying
 // it would write into that workspace from this one.
 func (s *Store) durable() []durableEntry {
-	marks, _ := filepath.Glob(filepath.Join(s.managedRoot, "*", entryFile))
+	managed, err := os.OpenRoot(s.managedRoot)
+	if err != nil {
+		return nil
+	}
+	defer managed.Close()
+	entries, err := fs.ReadDir(managed.FS(), ".")
+	if err != nil {
+		return nil
+	}
 	var out []durableEntry
-	for _, mark := range marks {
-		raw, err := os.ReadFile(mark)
+	for _, entry := range entries {
+		if !entry.IsDir() || !recordDirectoryEntry(managed, entry.Name()) {
+			continue
+		}
+		slot, err := managed.OpenRoot(entry.Name())
 		if err != nil {
 			continue
 		}
-		var d durableEntry
-		if json.Unmarshal(raw, &d) != nil || d.ID == "" || !sameDir(d.Workspace, s.workspace) {
-			continue
+		d, ok := s.readRecord(slot)
+		slot.Close()
+		if ok {
+			out = append(out, d)
 		}
-		out = append(out, d)
 	}
 	return out
+}
+
+func (s *Store) readRecord(slot *os.Root) (durableEntry, bool) {
+	if !recordRegularFile(slot, entryFile) {
+		return durableEntry{}, false
+	}
+	raw, err := slot.ReadFile(entryFile)
+	var d durableEntry
+	if err != nil || json.Unmarshal(raw, &d) != nil || d.ID == "" {
+		return d, false
+	}
+	return s.bindRecord(slot, d)
 }
 
 func (s *Store) durableIDs() []string {
@@ -113,16 +137,4 @@ func (s *Store) SweepExpired(ctx context.Context, maxAge time.Duration) {
 		}
 		s.remove(ctx, &Entry{ID: d.ID, Snap: d.Snap, Cand: d.Cand})
 	}
-}
-
-// sameDir compares two directories by what they resolve to: a temp dir under
-// /var and its /private/var spelling are one place.
-func sameDir(a, b string) bool {
-	resolve := func(p string) string {
-		if r, err := filepath.EvalSymlinks(p); err == nil {
-			return r
-		}
-		return filepath.Clean(p)
-	}
-	return a != "" && b != "" && resolve(a) == resolve(b)
 }
