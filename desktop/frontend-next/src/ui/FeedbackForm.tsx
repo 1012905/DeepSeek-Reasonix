@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { t } from "../i18n";
 import { systemLabel } from "./osname";
 import { memoryLines } from "./memoryrows";
@@ -14,6 +14,7 @@ import { FeedbackShot } from "./FeedbackShot";
 import { LazyMarkdown } from "./LazyMarkdown";
 import { admit, megabytes, payload, readShot, REFUSED_LABEL, type Refused, type Shot } from "./feedbackshots";
 import { useFileDrop } from "./filedrop";
+import { listenAction } from "./listen";
 
 export const SECURITY_URL = "https://github.com/esengine/DeepSeek-Reasonix/security/policy";
 export const DISCUSSIONS_URL = "https://github.com/esengine/DeepSeek-Reasonix/discussions";
@@ -34,13 +35,15 @@ function uuid(): string {
 
 interface Props {
   port: AgentPort;
+  pasteRoot: RefObject<HTMLElement | null>;
+  active: boolean;
   onMine: () => void;
   onClose: () => void;
   onFile: (url: string) => void;
   onConceal: (hidden: boolean) => void;
 }
 
-export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props) {
+export function FeedbackForm({ port, pasteRoot, active, onMine, onClose, onFile, onConceal }: Props) {
   const [env, setEnv] = useState<FeedbackEnv | null>(null);
   const [shellMemory, setShellMemory] = useState<FeedbackProcessMemory[]>([]);
   const [envFailure, setEnvFailure] = useState<FeedbackFailure | null>(null);
@@ -150,16 +153,23 @@ export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props
 
   const zone = useFileDrop((d) => void add(d.files), setOver);
 
-  const takePaste = (e: { clipboardData: DataTransfer | null; preventDefault(): void }) => {
-    const data = e.clipboardData;
-    if (!data) return;
-    const offered = [...data.files, ...[...(data.items ?? [])].flatMap((i) => (i.kind === "file" ? [i.getAsFile()] : []))];
-    const images = offered.filter((f): f is File => f !== null && f.type.startsWith("image/"));
-    const files = images.filter((f, i) => images.findIndex((g) => g.name === f.name && g.size === f.size && g.type === f.type) === i);
-    if (files.length === 0) return;
-    e.preventDefault();
-    void add(files);
-  };
+  useEffect(() => {
+    const root = pasteRoot.current;
+    if (!root || !active || phase !== "editing" || !limits) return;
+    return listenAction(root, "paste", {
+      action: "feedback.shot.add",
+      listener: (event) => {
+        const data = (event as ClipboardEvent).clipboardData;
+        if (!data) return;
+        const offered = [...data.files, ...[...(data.items ?? [])].flatMap((i) => (i.kind === "file" ? [i.getAsFile()] : []))];
+        const images = offered.filter((f): f is File => f !== null && f.type.startsWith("image/"));
+        const files = images.filter((f, i) => images.findIndex((g) => g.name === f.name && g.size === f.size && g.type === f.type) === i);
+        if (files.length === 0) return;
+        event.preventDefault();
+        void add(files);
+      },
+    });
+  }, [pasteRoot, active, phase, limits, add]);
 
   const bytes = useMemo(() => encoder.encode(body).length, [body]);
   const nameChars = [...name.trim()].length;
@@ -253,10 +263,8 @@ export function FeedbackForm({ port, onMine, onClose, onFile, onConceal }: Props
       data-over={over ? "" : undefined}
       aria-busy={sending}
       noValidate
-      data-action-paste="feedback.shot.add"
       data-action-submit="feedback.send"
       tabIndex={-1}
-      onPaste={takePaste}
       onSubmit={(e) => {
         e.preventDefault();
         void send();
