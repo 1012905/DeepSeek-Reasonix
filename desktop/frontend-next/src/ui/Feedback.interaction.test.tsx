@@ -224,21 +224,62 @@ describe("screenshots", () => {
     expect(text.defaultPrevented).toBe(false);
   });
 
-  it("keeps focus on the form when a blank part of it is clicked, so a paste still reaches it, and takes an image the clipboard offers only as an item", async () => {
+  it("takes an image offered only as a clipboard item", async () => {
     setup();
     await ready();
     const form = document.querySelector("form")!;
-    await userEvent.click(form.querySelector("h3")!);
-    expect(document.activeElement).toBe(form);
 
     const item = new Event("paste", { bubbles: true, cancelable: true }) as Event & { clipboardData: unknown };
     const shot = png("item.png");
     item.clipboardData = { files: [], items: [{ kind: "file", type: "image/png", getAsFile: () => shot }], getData: () => "" };
     await act(async () => {
-      (document.activeElement as HTMLElement).dispatchEvent(item);
+      form.dispatchEvent(item);
     });
     expect(await screen.findByAltText("item.png")).toBeTruthy();
     expect(item.defaultPrevented).toBe(true);
+  });
+
+  it.each(["heading", "tab"])("attaches a dialog paste from the %s without duplicating it", async (target) => {
+    setup();
+    await ready();
+    await userEvent.click(screen.getByRole("tab", { name: "我的反馈" }));
+    await userEvent.click(screen.getByRole("tab", { name: "发送反馈" }));
+    const node = target === "heading" ? document.querySelector("#fbk-title")! : document.activeElement!;
+    fireEvent.paste(node, { clipboardData: { files: [png("dialog.png")] } });
+    expect(await screen.findByAltText("dialog.png")).toBeTruthy();
+    expect(heldDraft().shots.map((s) => s.name)).toEqual(["dialog.png"]);
+  });
+
+  it("does not route a paste on My feedback into the hidden report", async () => {
+    setup();
+    await ready();
+    await userEvent.click(screen.getByRole("tab", { name: "我的反馈" }));
+    fireEvent.paste(document.activeElement!, { clipboardData: { files: [png("hidden.png")] } });
+    await userEvent.click(screen.getByRole("tab", { name: "发送反馈" }));
+    expect(heldDraft().shots).toEqual([]);
+    expect(screen.queryByAltText("hidden.png")).toBeNull();
+  });
+
+  it("ignores paste during send and after success, and restores it after failure", async () => {
+    const { port } = setup();
+    let reject!: (error: Error) => void;
+    vi.spyOn(port, "sendFeedback").mockImplementationOnce(() => new Promise((_, no) => { reject = no; }));
+    await fill();
+    await userEvent.click(send());
+    const paste = (file: string) => fireEvent.paste(document.querySelector("#fbk-title")!, { clipboardData: { files: [png(file)] } });
+    expect(paste("sending.png")).toBe(true);
+    await act(async () => reject(new Error("offline")));
+    await screen.findByRole("alert");
+    expect(heldDraft().shots).toEqual([]);
+    paste("retry.png");
+    expect(await screen.findByAltText("retry.png")).toBeTruthy();
+    await userEvent.click(send());
+    await screen.findByText("已收到你的反馈");
+    expect(paste("sent.png")).toBe(true);
+    await userEvent.click(screen.getByRole("button", { name: "再写一条" }));
+    expect(heldDraft().shots).toEqual([]);
+    paste("fresh.png");
+    expect(await screen.findByAltText("fresh.png")).toBeTruthy();
   });
 
   it("takes files dropped on the form", async () => {
