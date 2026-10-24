@@ -13,7 +13,7 @@ import (
 // request does — the compiler and tsc each see only a literal, so a path this
 // package never registered answers 404. One direction: a route with no caller
 // is not a fault, since the CLI and the setup page reach some of them, while a
-// call with no route must declare a supported fallback.
+// call with no route always is.
 func TestFrontendCallsOnlyPathsThisPackageServes(t *testing.T) {
 	front := filepath.Join("..", "..", "..", "desktop", "frontend-next", "src", "port")
 	entries, err := os.ReadDir(front)
@@ -41,7 +41,7 @@ func TestFrontendCallsOnlyPathsThisPackageServes(t *testing.T) {
 				continue
 			}
 			checked++
-			if !frontendRouteSupported(served, name, path) {
+			if !servedBy(served, path) {
 				missing = append(missing, name+" calls "+path)
 			}
 		}
@@ -58,41 +58,6 @@ func TestFrontendCallsOnlyPathsThisPackageServes(t *testing.T) {
 	}
 	if len(served) < 60 {
 		t.Fatalf("only %d routes were read; registration no longer states its paths where this can see them", len(served))
-	}
-}
-
-func frontendRouteSupported(served [][]string, file, path string) bool {
-	// Paging is optional across server versions; useHistoryPages falls back to
-	// /history only on an unsupported endpoint (useHistoryPages.http.test.tsx).
-	if file == "sse.ts" && path == "/history/page" {
-		return servedBy(served, "/history")
-	}
-	return servedBy(served, path)
-}
-
-func TestFrontendOptionalRouteRequiresItsFallback(t *testing.T) {
-	for _, tt := range []struct {
-		name, file, path string
-		routes           []string
-		want             bool
-	}{
-		{"old server", "sse.ts", "/history/page", []string{"/history"}, true},
-		{"new server", "sse.ts", "/history/page", []string{"/history", "/history/page"}, true},
-		{"missing fallback", "sse.ts", "/history/page", []string{"/history/page"}, false},
-		{"misspelled page", "sse.ts", "/history/pages", []string{"/history"}, false},
-		{"other caller", "sse_workspace.ts", "/history/page", []string{"/history"}, false},
-		{"missing required route", "sse.ts", "/status", []string{"/history"}, false},
-		{"registered required route", "sse.ts", "/status", []string{"/status"}, true},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			var routes [][]string
-			for _, path := range tt.routes {
-				routes = append(routes, segments(path))
-			}
-			if got := frontendRouteSupported(routes, tt.file, tt.path); got != tt.want {
-				t.Fatalf("route support = %v, want %v", got, tt.want)
-			}
-		})
 	}
 }
 
