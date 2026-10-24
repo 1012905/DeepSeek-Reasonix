@@ -15,7 +15,7 @@ const { offerCleanup, ownBundle } = require("../src/legacy.js");
 const { stripPackageGrants, readReport, unpaintedWindowCause } = require("../src/packagegrants.js");
 const { groundFor, themeSourceFor, GROUND } = require("../src/ground.js");
 const { folderAnswer } = require("../src/folderpanel.js");
-const { pick, loadPrefs, savePrefs, registerPrefs } = require("../src/prefs.js");
+const { pick, loadPrefs, savePrefs, registerPrefs, PAGE_SLEEP_MS, pageSleepAfterMs } = require("../src/prefs.js");
 
 const TOKEN = "a".repeat(64);
 const line = (over) => JSON.stringify({ version: 1, origin: "http://127.0.0.1:8080", token: TOKEN, ...over });
@@ -2903,6 +2903,25 @@ test("a woken page comes back at the viewport the agent set", async (t) => {
   assert.deepEqual(created[1].webContents.commands[0][1], viewport, "the parameters the agent chose are the ones replayed");
 });
 
+test("a woken page's viewport is fitted into its panel again, at the scale it had before the sleep", async (t) => {
+  const { views, created, page } = sleepingViews({ sleepAfterMs: 60_000, sweepMs: 60_000 });
+  t.after(() => views.closeAll());
+  const { handle } = page();
+  await handle.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, mobile: true });
+  const rect = { x: 0, y: 0, width: 195, height: 422 };
+  views.show(handle.targetId, rect);
+  const overrides = (which) => created[which].webContents.commands.filter(([m]) => m === "Emulation.setDeviceMetricsOverride");
+  const fitted = overrides(0).at(-1);
+  assert.equal(fitted[1].scale, 0.5, "the show fitted the phone viewport into the panel with a scale");
+  views.hide();
+  await views.sleep(views.entries.get(handle.targetId));
+  assert.ok(views.asleep(handle.targetId), "the page slept");
+  await handle.send("Runtime.evaluate", { expression: "1" });
+  assert.equal(created.length, 2, "the wake built a new view");
+  views.show(handle.targetId, rect);
+  assert.deepEqual(overrides(1).at(-1), fitted, "the new session gets the same viewport and scale the show sent before the sleep");
+});
+
 test("a page with a dialog open does not sleep", async (t) => {
   const { views, created, page } = sleepingViews();
   t.after(() => views.closeAll());
@@ -2960,6 +2979,22 @@ test("rewind notice dismissal survives the desktop preference disk round trip", 
   const record = { "rx-rewind-notice-dismissed:tx-saved": "1" };
   savePrefs(file, record);
   assert.deepEqual(loadPrefs(file), record);
+});
+
+test("the page-sleep preference round-trips through the desktop preference file", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "page-sleep-prefs-"));
+  const file = path.join(dir, "prefs.json");
+  t.after(() => { fs.rmSync(file, { force: true }); fs.rmdirSync(dir); });
+  savePrefs(file, { "rx-page-sleep": "on" });
+  assert.deepEqual(loadPrefs(file), { "rx-page-sleep": "on" });
+  savePrefs(file, { "rx-lang": "en" });
+  assert.deepEqual(loadPrefs(file), { "rx-lang": "en" }, "a key the page no longer holds is dropped");
+});
+
+test("the shell reads the sleep threshold from the preference", () => {
+  assert.equal(pageSleepAfterMs({}), Infinity, "off until the person turns it on");
+  assert.equal(pageSleepAfterMs({ "rx-page-sleep": "on" }), PAGE_SLEEP_MS);
+  assert.equal(pageSleepAfterMs({ "rx-page-sleep": "garbage" }), Infinity);
 });
 
 const { setUnreadBadge } = require("../src/badge.js");
