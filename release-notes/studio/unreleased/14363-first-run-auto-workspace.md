@@ -1,0 +1,2 @@
+- 改进：没有选过项目也没有记住的项目时，首次启动不再打开用户主目录，而是打开应用自己管理的一个小目录；它不会被记成项目。关联 #14363。
+- Improved: with no chosen or remembered project, a first launch opens a small folder the app owns instead of your home directory, and that folder is never remembered as a project. Refs #14363.
