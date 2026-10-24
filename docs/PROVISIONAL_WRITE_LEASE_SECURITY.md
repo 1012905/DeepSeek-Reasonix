@@ -26,6 +26,10 @@ cannot acquire B even though this call never entered a hook or Execute.
 - The existing workspacelease Owner keeps a retained extent and a set of
   identified provisional calls. An unset extent differs from the existing
   empty-path representation of the whole workspace.
+- Active retention and retention parked for a user are separate. Aborting a
+  call cannot retake parked files or expire an unrelated same-run user wait.
+- Run generations end when the last participating run ends, independently of
+  physical claim release. A late expired grant cleans its provisional contribution.
 - PreparePaths admits the entire normalized set through the existing registrar.
   Retain runs before possibly writing PreToolUse hooks and concrete execution;
   success, failure and partial execution then preserve legacy run retention.
@@ -40,6 +44,10 @@ cannot acquire B even though this call never entered a hook or Execute.
 - A completed callback cannot affect a new run. Suspended calls keep their own
   identities; resume restores the current union without promoting provisional
   paths to retained paths or resurrecting an already aborted call.
+- The restoration's temporary hold remains live until the original caller is
+  reheld, preventing a release gap during that transfer.
+- A pending user wait is reconciled when a writer or restoration finishes.
+  With no writing call left, retained paths are parked instead of kept active.
 - An expired restoration returns ErrHoldEnded. Repeated restoration/cleanup returns the
   same outcome, including failures, instead of falsely reporting success.
 - Registrar waits close on acquisition or refusal. Completed cleanup clears

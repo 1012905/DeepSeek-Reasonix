@@ -572,3 +572,254 @@ func TestPreparedRegistrarWaitClosesForCleanupAndRefusedUpgrade(t *testing.T) {
 		})
 	}
 }
+
+func TestPreparedAbortPreservesAnUnrelatedLiveUserWait(t *testing.T) {
+	a, b, _ := yieldPair(t)
+	a.BeginRun()
+	b.BeginRun()
+	_, p := prepareCall(t, a, []string{"pending"})
+	resume := a.Yield(t.Context())
+	if err := p.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	requireClaim(t, b, []string{"pending"}, false)
+	if _, err := resume(t.Context()); err != nil {
+		t.Fatalf("aborting another call expired a live user wait: %v", err)
+	}
+}
+
+func TestPreparedAbortDoesNotRetakePathsParkedForAUser(t *testing.T) {
+	for _, whole := range []bool{false, true} {
+		t.Run(map[bool]string{false: "named", true: "whole"}[whole], func(t *testing.T) {
+			a, b, _ := yieldPair(t)
+			a.BeginRun()
+			b.BeginRun()
+			if err := a.AcquirePaths(t.Context(), []string{"parked"}); err != nil {
+				t.Fatal(err)
+			}
+			resume := a.Yield(t.Context())
+			if !whole {
+				requireClaim(t, b, []string{"parked"}, false)
+			}
+			paths := []string{"pending"}
+			if whole {
+				paths = nil
+			}
+			_, p := prepareCall(t, a, paths)
+			if err := p.Close(t.Context()); err != nil {
+				t.Fatalf("cleanup tried to retake a parked write: %v", err)
+			}
+			if whole {
+				requireClaim(t, b, []string{"parked"}, false)
+			}
+			requireClaim(t, b, []string{"pending"}, false)
+			b.EndRun()
+			if _, err := resume(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			b.BeginRun()
+			requireClaim(t, b, []string{"parked"}, true)
+		})
+	}
+}
+
+func TestPreparedQueuedInAnEndedRunCannotPinTheNextRun(t *testing.T) {
+	withWaitGrace(t, time.Nanosecond)
+	root, locks := t.TempDir(), t.TempDir()
+	waiting := make(chan struct{})
+	var once sync.Once
+	a, err := New(root, locks, func(w Wait) {
+		if w.Outcome == WaitBegan {
+			once.Do(func() { close(waiting) })
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := New(root, locks, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.BeginRun()
+	b.BeginRun()
+	defer a.EndRun()
+	defer b.EndRun()
+	if err := b.AcquirePaths(t.Context(), []string{"held"}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, p, err := a.PreparePaths(ctx, []string{"held"})
+		if p != nil {
+			_ = p.Close(context.Background())
+		}
+		done <- err
+	}()
+	select {
+	case <-waiting:
+	case <-ctx.Done():
+		t.Fatal("preparation never queued")
+	}
+	a.EndRun()
+	a.BeginRun()
+	b.EndRun()
+	if err := <-done; !errors.Is(err, ErrHoldEnded) {
+		t.Fatalf("old preparation entered a new run: %v", err)
+	}
+	b.BeginRun()
+	requireClaim(t, b, []string{"held"}, false)
+}
+
+func TestPreparedAbortPreservesAParkedWholeExtent(t *testing.T) {
+	a, b, _ := yieldPair(t)
+	a.BeginRun()
+	b.BeginRun()
+	if err := a.AcquireWrite(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	resume := a.Yield(t.Context())
+	_, p := prepareCall(t, a, []string{"pending"})
+	if err := p.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	requireClaim(t, b, []string{"outside_pending"}, false)
+	requireClaim(t, b, []string{"pending"}, false)
+	b.EndRun()
+	if _, err := resume(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	b.BeginRun()
+	requireClaim(t, b, []string{"outside_pending"}, true)
+}
+
+func TestPreparedStandaloneCallCanYieldWithoutARun(t *testing.T) {
+	a, b, _ := yieldPair(t)
+	b.BeginRun()
+	ctx, p := prepareCall(t, a, []string{"pending"})
+	resume := a.Yield(ctx)
+	requireClaim(t, b, []string{"pending"}, false)
+	b.EndRun()
+	if _, err := resume(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	b.BeginRun()
+	requireClaim(t, b, []string{"pending"}, false)
+}
+
+func TestPendingUserWaitParksRetentionWhenTheLastWriterEnds(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		t.Run(map[bool]string{false: "prepared", true: "legacy"}[legacy], func(t *testing.T) {
+			a, b, _ := yieldPair(t)
+			a.BeginRun()
+			b.BeginRun()
+			var end func()
+			if legacy {
+				_, closeHold, err := a.HoldPaths(t.Context(), []string{"written"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				end = closeHold
+			} else {
+				_, p := prepareCall(t, a, []string{"written"})
+				p.Retain()
+				end = func() {
+					if err := p.Close(t.Context()); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			resume := a.Yield(t.Context())
+			end()
+			requireClaim(t, b, []string{"written"}, false)
+			b.EndRun()
+			if _, err := resume(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			b.BeginRun()
+			requireClaim(t, b, []string{"written"}, true)
+		})
+	}
+}
+
+func TestUserWaitArrivingDuringRestorationStaysYielded(t *testing.T) {
+	withWaitGrace(t, time.Nanosecond)
+	root, locks := t.TempDir(), t.TempDir()
+	waiting := make(chan struct{})
+	var once sync.Once
+	a, err := New(root, locks, func(w Wait) {
+		if w.Outcome == WaitBegan {
+			once.Do(func() { close(waiting) })
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := New(root, locks, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.BeginRun()
+	b.BeginRun()
+	defer a.EndRun()
+	defer b.EndRun()
+	if err := a.AcquirePaths(t.Context(), []string{"written"}); err != nil {
+		t.Fatal(err)
+	}
+	first := a.Yield(t.Context())
+	if err := b.AcquirePaths(t.Context(), []string{"written"}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, err := first(ctx); done <- err }()
+	select {
+	case <-waiting:
+	case <-ctx.Done():
+		t.Fatal("restoration never queued")
+	}
+	second := a.Yield(t.Context())
+	b.EndRun()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	b.BeginRun()
+	requireClaim(t, b, []string{"written"}, false)
+	b.EndRun()
+	if _, err := second(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEndedRunRetentionCannotPinAPathInTheNextRun(t *testing.T) {
+	for _, retainedBeforeEnd := range []bool{false, true} {
+		t.Run(map[bool]string{false: "late_retain", true: "retained_before_end"}[retainedBeforeEnd], func(t *testing.T) {
+			a, b, _ := yieldPair(t)
+			a.BeginRun()
+			b.BeginRun()
+			_, old := prepareCall(t, a, []string{"old"})
+			if retainedBeforeEnd {
+				old.Retain()
+			}
+			a.EndRun()
+			a.BeginRun()
+			_, current := prepareCall(t, a, []string{"current"})
+			if !retainedBeforeEnd {
+				old.Retain()
+			}
+			if err := old.Close(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			requireClaim(t, b, []string{"old"}, false)
+			requireClaim(t, b, []string{"current"}, true)
+			if err := current.Close(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}

@@ -56,11 +56,17 @@ func (o *Owner) PreparePaths(ctx context.Context, paths []string) (context.Conte
 	if o == nil {
 		return ctx, nil, nil
 	}
-	h := &callHold{owner: o}
+	h := o.newCall(false)
 	if err := o.acquire(ctx, paths, h); err != nil {
 		return ctx, nil, err
 	}
 	return context.WithValue(ctx, callKey{}, h), &PreparedCall{hold: h}, nil
+}
+
+func (o *Owner) newCall(retained bool) *callHold {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return &callHold{owner: o, retained: retained, generation: o.holds.generation}
 }
 
 func (o *Owner) registerCallLocked(h *callHold, paths []string) {
@@ -94,16 +100,35 @@ func (p *PreparedCall) Retain() {
 	o := h.owner
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	if _, present := o.holds.calls[h]; present && !h.done && !h.retained {
+	if _, present := o.holds.calls[h]; present && !h.done && !h.retained && h.generation == o.holds.generation {
 		h.retained = true
-		o.holds.retained.add(h.paths)
+		if h.live {
+			o.holds.retained.add(h.paths)
+		} else {
+			o.holds.parkedRetained.add(h.paths)
+		}
 	}
 }
 
 func (o *Owner) callExtentLocked() leaseExtent {
 	extent := o.holds.retained
 	for h := range o.holds.calls {
-		extent.add(h.paths)
+		if h.live {
+			extent.add(h.paths)
+		}
+	}
+	return extent
+}
+
+func (o *Owner) restoreExtentLocked() leaseExtent {
+	extent := o.holds.retained
+	if o.holds.parkedRetained.set {
+		extent.add(o.holds.parkedRetained.paths)
+	}
+	for h := range o.holds.calls {
+		if !h.done && h.generation == o.holds.generation {
+			extent.add(h.paths)
+		}
 	}
 	return extent
 }
@@ -114,9 +139,9 @@ func (o *Owner) resetCallsLocked() {
 		h.done = true
 	}
 	clear(o.holds.calls)
-	o.holds.generation++
 	o.holds.yielders = 0
 	o.holds.parked, o.holds.parkedSet = nil, false
+	o.holds.parkedRetained = leaseExtent{}
 }
 
 // Close removes an unretained extent through the existing claim registrar.
@@ -166,13 +191,17 @@ func (p *PreparedCall) close(ctx context.Context) error {
 			return nil
 		}
 		if !extent.set || o.activeRuns == 0 && o.holds.inFlight == 0 {
-			release := o.releaseLocked(true)
+			release := o.releaseLocked(o.activeRuns == 0 || !o.holds.parkedSet)
 			o.mu.Unlock()
 			release()
 			return nil
 		}
-		if h.retained || coversPaths(extent.paths, o.scope.paths) {
+		if coversPaths(extent.paths, o.scope.paths) {
+			release := o.releaseIfIdleLocked()
 			o.mu.Unlock()
+			if release != nil {
+				release()
+			}
 			return nil
 		}
 		o.acquiring, o.acquireDone = true, make(chan struct{})

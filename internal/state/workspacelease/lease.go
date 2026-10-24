@@ -286,6 +286,13 @@ func (o *Owner) EndRun() {
 	o.mu.Lock()
 	if o.activeRuns > 0 {
 		o.activeRuns--
+		if o.activeRuns == 0 {
+			o.holds.generation++
+			o.holds.retained = leaseExtent{}
+			o.holds.yielders = 0
+			o.holds.parked, o.holds.parkedSet = nil, false
+			o.holds.parkedRetained = leaseExtent{}
+		}
 	}
 	release := o.releaseIfIdleLocked()
 	if o.activeRuns == 0 && o.holds.inFlight == 0 && !o.acquired && !o.acquiring {
@@ -326,7 +333,7 @@ func (o *Owner) acquire(ctx context.Context, paths []string, h *callHold) error 
 	for {
 		o.mu.Lock()
 		o.askedLocked(time.Now())
-		if h != nil && h.done {
+		if h != nil && (h.done || h.generation != o.holds.generation) {
 			o.mu.Unlock()
 			return ErrHoldEnded
 		}
@@ -359,6 +366,7 @@ func (o *Owner) acquire(ctx context.Context, paths []string, h *callHold) error 
 		o.mu.Lock()
 		o.acquiring = false
 		o.waiting = false
+		var stale *callHold
 		if err == nil {
 			o.acquired = true
 			o.scope.paths = claim
@@ -366,8 +374,10 @@ func (o *Owner) acquire(ctx context.Context, paths []string, h *callHold) error 
 				o.acquiredAt = time.Now()
 				o.releaseSystem = release
 			}
-			if h != nil && h.done {
+			if h != nil && (h.done || h.generation != o.holds.generation) {
 				err = ErrHoldEnded
+				stale = &callHold{owner: o, generation: o.holds.generation}
+				o.registerCallLocked(stale, requested)
 			} else {
 				o.registerCallLocked(h, requested)
 			}
@@ -378,15 +388,24 @@ func (o *Owner) acquire(ctx context.Context, paths []string, h *callHold) error 
 		if releaseIfIdle != nil {
 			releaseIfIdle()
 		}
+		if stale != nil {
+			err = errors.Join(err, (&PreparedCall{hold: stale}).Close(context.WithoutCancel(ctx)))
+		}
 		return err
 	}
 }
 
 func (o *Owner) releaseIfIdleLocked() func() {
-	if !o.acquired || o.acquiring || o.activeRuns != 0 || o.holds.inFlight != 0 {
+	if !o.acquired || o.acquiring || o.holds.inFlight != 0 {
 		return nil
 	}
-	return o.releaseLocked(true)
+	if o.activeRuns == 0 {
+		return o.releaseLocked(true)
+	}
+	if o.holds.yielders > 0 {
+		return o.parkLocked()
+	}
+	return nil
 }
 
 // releaseLocked drops the claim. A yield (final false) is a pause inside one
@@ -400,7 +419,9 @@ func (o *Owner) releaseLocked(final bool) func() {
 		o.stats.Held += time.Since(o.acquiredAt)
 		return release
 	}
-	o.resetCallsLocked()
+	if o.activeRuns == 0 {
+		o.resetCallsLocked()
+	}
 	closed, report := o.closeStatsLocked(time.Now())
 	notice := o.onRelease
 	return func() {
