@@ -16,7 +16,7 @@ export interface HistoryPaging {
 export function useHistorySearch(paging: HistoryPaging, open: boolean, query: string) {
   useEffect(() => {
     if (open && query.trim() && paging.hasMore && !paging.busy && !paging.failed) void paging.more().catch(() => {});
-  }, [open, query, paging.hasMore, paging.busy, paging.failed, paging.more]);
+  }, [open, query, paging.revision, paging.hasMore, paging.busy, paging.failed, paging.more]);
 }
 
 const projection = (page: HistoryPage) => fromHistory(Array.isArray(page.messages) ? page.messages : [], {
@@ -88,6 +88,7 @@ export function useHistoryPages(port: Pick<AgentPort, "history" | "historyPage">
       if (page.end !== owner.before || page.total !== owner.total || page.start >= page.end) throw new Error("history page did not advance");
       owner.cursor = page.nextCursor ?? "";
       owner.before = page.start;
+      owner.more = null;
       dispatch({ kind: "__history_prepend", ...projection(page) });
       setState((old) => ({ ...old, revision: old.revision + 1, hasMore: !!owner.cursor, busy: false, failed: false }));
     }).catch(async (error) => {

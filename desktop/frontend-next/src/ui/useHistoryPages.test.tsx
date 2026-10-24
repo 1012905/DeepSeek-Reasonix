@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { HttpError } from "../port/port";
 import type { HistoryPage } from "../port/session";
@@ -106,6 +106,32 @@ it("refuses malformed successful responses without falling back to full history"
   const { result } = renderHook(() => useHistoryPages(port, vi.fn()));
   await act(async () => { await expect(result.current.load()).rejects.toThrow("invalid history page"); });
   expect(port.history).not.toHaveBeenCalled();
+});
+
+it("continues searching when fast page responses batch busy state transitions", async () => {
+  const port = { history: vi.fn(async () => []), historyPage: vi.fn()
+    .mockResolvedValueOnce({ ...page("one", "middle"), start: 4, end: 6, total: 6 })
+    .mockResolvedValueOnce({ ...page("one", "first"), start: 2, end: 4, total: 6 })
+    .mockResolvedValueOnce({ ...page("one", ""), start: 0, end: 2, total: 6 }) };
+  const dispatch = vi.fn();
+  const { result } = renderHook(() => {
+    const reading = useHistoryPages(port, dispatch);
+    useHistorySearch(reading.paging, true, "needle");
+    return reading;
+  });
+  await act(async () => { await result.current.load(); });
+  await waitFor(() => expect(result.current.paging.hasMore).toBe(false));
+  expect(port.historyPage.mock.calls).toEqual([[], ["middle"], ["first"]]);
+  expect(dispatch.mock.calls.map(([event]) => event.kind)).toEqual(["__restore", "__history_prepend", "__history_prepend"]);
+});
+
+it("searches the next page when a committed revision is the only changed read state", () => {
+  const more = vi.fn(async () => {});
+  const paging = { snapshot: "one", revision: 1, hasMore: true, busy: false, failed: false, more, reload: vi.fn(async () => {}) };
+  const { rerender } = renderHook(({ revision }) => useHistorySearch({ ...paging, revision }, true, "needle"), { initialProps: { revision: 1 } });
+  expect(more).toHaveBeenCalledTimes(1);
+  rerender({ revision: 2 });
+  expect(more).toHaveBeenCalledTimes(2);
 });
 
 it("does not treat a missing runtime as an unsupported paging route", async () => {
