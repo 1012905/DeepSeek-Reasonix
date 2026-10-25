@@ -11,7 +11,7 @@ import (
 // dxtFromTEX decodes the first mip of a DXT-compressed TEX. Wallpaper Engine
 // writes TEX headers as 9-byte strings, so every following int32 is unaligned.
 func dxtFromTEX(raw []byte) ([]byte, string, bool) {
-	if len(raw) < 46 || !bytes.HasPrefix(raw, []byte("TEXV0005\x00TEXI0001\x00")) {
+	if !dxtMagic(raw) {
 		return nil, "", false
 	}
 	format := int(int32(binary.LittleEndian.Uint32(raw[18:22])))
@@ -24,6 +24,9 @@ func dxtFromTEX(raw []byte) ([]byte, string, bool) {
 	imgW := int(int32(binary.LittleEndian.Uint32(raw[34:38])))
 	imgH := int(int32(binary.LittleEndian.Uint32(raw[38:42])))
 	if texW <= 0 || texH <= 0 || imgW <= 0 || imgH <= 0 || texW > 32768 || texH > 32768 {
+		return nil, "", false
+	}
+	if !dxtImageFits(texW, texH, imgW, imgH) {
 		return nil, "", false
 	}
 	if int64(texW)*int64(texH) > maxSceneImagePixels {
@@ -85,6 +88,14 @@ func dxtFromTEX(raw []byte) ([]byte, string, bool) {
 		}
 	}
 	return nil, "", false
+}
+
+func dxtMagic(raw []byte) bool {
+	return len(raw) >= 46 && bytes.HasPrefix(raw, []byte("TEXV0005\x00TEXI0001\x00"))
+}
+
+func dxtImageFits(texW, texH, imgW, imgH int) bool {
+	return imgW <= texW && imgH <= texH
 }
 
 func dxtBlockSize(format int) int {
@@ -204,7 +215,7 @@ func lz4Block(src []byte, size int) ([]byte, error) {
 	if size < 0 || size > 256<<20 {
 		return nil, errors.New("invalid LZ4 size")
 	}
-	out := make([]byte, 0, size)
+	out := make([]byte, 0, min(size, len(src)*255))
 	for i := 0; i < len(src); {
 		token := src[i]
 		i++
