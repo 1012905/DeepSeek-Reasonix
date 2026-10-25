@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useEffect, useRef } from "react";
 import type { Wallpaper } from "../port/look";
 import { listenAction } from "./listen";
@@ -58,7 +59,10 @@ export function WallpaperScene({ wallpaper }: { wallpaper?: Wallpaper }) {
   }, [wallpaper?.audio, wallpaper?.muted, wallpaper?.kind, wallpaper?.volume]);
 
   if (wallpaper?.kind !== "scene" || !wallpaper.audio) return null;
-  return <audio ref={audio} src={wallpaper.audio} loop muted={wallpaper.muted} preload="auto" hidden />;
+  return createPortal(
+    <audio ref={audio} src={wallpaper.audio} loop muted={wallpaper.muted} preload="auto" hidden />,
+    document.body,
+  );
 }
 
 function clampPct(value: number): number {

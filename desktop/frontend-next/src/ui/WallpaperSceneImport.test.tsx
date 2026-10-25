@@ -89,19 +89,4 @@ describe("importing a Wallpaper Engine folder", () => {
     fireEvent.click(screen.getByRole("button", { name: t("关闭声音") }));
     expect(setPaper).toHaveBeenCalledWith({ muted: true });
   });
-
-  it("sets the soundtrack volume", () => {
-    const setPaper = vi.fn();
-    render(
-      <WallpaperSceneImport
-        port={{ uploadScene: vi.fn() } as unknown as AgentPort}
-        look={sceneLook}
-        onLook={() => {}}
-        setPaper={setPaper}
-        onError={() => {}}
-      />,
-    );
-    fireEvent.change(screen.getByRole("slider", { name: /音量/ }), { target: { value: "0.25" } });
-    expect(setPaper).toHaveBeenCalledWith({ volume: 0.25, muted: false });
-  });
 });

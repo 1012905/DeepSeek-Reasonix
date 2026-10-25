@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import type { Appearance } from "../port/port";
 import type { Wallpaper } from "../port/look";
 import { t } from "../i18n";
@@ -16,7 +17,7 @@ export function WallpaperVolume({ look, onLook }: Props) {
   const silent = paper.muted || volume <= 0;
   const update = (patch: Partial<Wallpaper>) => onLook({ ...look, wallpaper: { ...paper, ...patch } });
 
-  return (
+  return createPortal(
     <div
       className="wvol"
       data-silent={silent ? "" : undefined}
@@ -63,7 +64,8 @@ export function WallpaperVolume({ look, onLook }: Props) {
           )}
         </svg>
       </button>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

@@ -81,25 +81,6 @@ export function WallpaperSceneImport({ port, look, onLook, setPaper, onError }: 
               </button>
             )}
           </div>
-          {paper.audio && (
-            <label className="prow">
-              <span className="tx">{t("音量")}</span>
-              <input
-                className="slider"
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={paper.volume ?? 1}
-                data-action="wallpaper.volume"
-                onChange={(e) => {
-                  const volume = Number(e.target.value);
-                  setPaper({ volume, muted: volume <= 0 });
-                }}
-              />
-              <span className="now">{Math.round((paper.volume ?? 1) * 100)}%</span>
-            </label>
-          )}
           <p className="note">{t("场景以主图和声音播放；粒子和着色器效果暂未再现。")}</p>
         </>
       )}

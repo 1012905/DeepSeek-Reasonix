@@ -30,6 +30,7 @@ import { PageSleepSetting } from "./PageSleepSetting";
 import { ThemeImport } from "./ThemeImport";
 import { ThemeRemove } from "./ThemeRemove";
 import { WallpaperSceneImport } from "./WallpaperSceneImport";
+import { WallpaperVolumeSlider } from "./WallpaperVolumeSlider";
 import { useThemeInventory } from "./useThemeInventory";
 
 // "" follows the machine; the rest are explicit, the same shape the light/dark
@@ -509,6 +510,9 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
                 />
                 <span className="now">{pct(look.wallpaper.focusY)}</span>
               </label>
+              {look.wallpaper.audio && (
+                <WallpaperVolumeSlider volume={look.wallpaper.volume} onChange={setPaper} />
+              )}
               {crop.known && !(crop.x && crop.y) && (
                 <p className="note">
                   {crop.x

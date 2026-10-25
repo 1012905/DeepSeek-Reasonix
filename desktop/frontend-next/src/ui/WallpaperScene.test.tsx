@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, waitFor } from "@testing-library/react";
+import { cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Wallpaper } from "../port/look";
 import { WallpaperScene } from "./WallpaperScene";
@@ -19,6 +19,7 @@ const scene: Wallpaper = {
 };
 
 afterEach(() => {
+  cleanup();
   vi.restoreAllMocks();
   document.documentElement.style.removeProperty("--bg-x");
   document.documentElement.style.removeProperty("--bg-y");
@@ -27,8 +28,8 @@ afterEach(() => {
 describe("a Wallpaper Engine backdrop", () => {
   it("renders a looping soundtrack and starts it", async () => {
     const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
-    const { container } = render(<WallpaperScene wallpaper={scene} />);
-    const audio = container.querySelector("audio");
+    render(<WallpaperScene wallpaper={scene} />);
+    const audio = document.querySelector("audio");
     expect(audio?.getAttribute("src")).toBe("/scene.mp3");
     expect(audio?.loop).toBe(true);
     await waitFor(() => expect(audio?.volume).toBeCloseTo(0.5));
@@ -52,8 +53,8 @@ describe("a Wallpaper Engine backdrop", () => {
   });
 
   it("does not install the soundtrack when muted", () => {
-    const { container } = render(<WallpaperScene wallpaper={{ ...scene, muted: true }} />);
-    const audio = container.querySelector("audio");
+    render(<WallpaperScene wallpaper={{ ...scene, muted: true }} />);
+    const audio = document.querySelector("audio");
     expect(audio?.muted).toBe(true);
   });
 });

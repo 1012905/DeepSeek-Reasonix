@@ -30,6 +30,12 @@ function look(paper: Wallpaper): Appearance {
 }
 
 describe("the scene's main-window volume control", () => {
+  it("lives outside the app layout", () => {
+    const { container } = render(<WallpaperVolume look={look(unit())} onLook={() => {}} />);
+    expect(container.querySelector(".wvol")).toBeNull();
+    expect(document.querySelector(".wvol")).not.toBeNull();
+  });
+
   it("mutes from the icon without losing the level", () => {
     const onLook = vi.fn((_next: Appearance) => {});
     render(<WallpaperVolume look={look(unit())} onLook={onLook} />);
