@@ -79,9 +79,9 @@ export function apply(look: Appearance | null, busy = false) {
   if (look?.textSize && look.textSize !== 1) style.setProperty("--fs-scale", String(look.textSize));
   else style.removeProperty("--fs-scale");
 
-  // Reading size moves the transcript's prose alone, so the frame around it
-  // stays where the layout put it.
-  style.setProperty("--read", `${readSizeOf(look?.readSize)}px`);
+  const readSize = readSizeOf(look?.readSize);
+  style.setProperty("--read", `${readSize}px`);
+  style.setProperty("--read-scale", String(readSize / readDefault()));
 
   // How far that prose runs is the other half of the same question, and the
   // only one with two honest answers: a line short enough to read without
