@@ -4413,11 +4413,11 @@
   .ptab:hover { color: var(--text); background: var(--overlay) }
   .ptab[aria-selected="true"] { color: var(--text); background: var(--surface); box-shadow: inset 0 1px 0 var(--border) }
   .ptab:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
-  .ptab-nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis }
+  .ptab-nm { flex: 1; min-width: 4em; overflow: hidden; text-overflow: ellipsis }
   .ptab-x { margin-left: auto }
-  .ptab-ws { flex: none; font: var(--w-reg) var(--fs-micro) var(--mono); color: var(--ghost) }
-
-  .ptab-host { flex: none; font: var(--w-reg) var(--fs-micro) var(--mono); color: var(--net) }
+  .ptab-ws, .ptab-host { flex: 0 1 auto; min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis }
+  .ptab-ws { font: var(--w-reg) var(--fs-micro) var(--mono); color: var(--ghost) }
+  .ptab-host { font: var(--w-reg) var(--fs-micro) var(--mono); color: var(--net) }
   .ptab-host::before { content: "◦"; margin-right: 2px; opacity: .7 }
   .ptab .pip { flex: none; background: var(--ghost) }
 
