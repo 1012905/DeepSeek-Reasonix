@@ -418,7 +418,7 @@ func (t *TaskTool) executeTask(ctx context.Context, args json.RawMessage) (strin
 		return "", fmt.Errorf("prompt is required")
 	}
 	if p.Isolation != "" {
-		return t.executeIsolated(ctx, isolatedCall{mode: p.Isolation, prompt: p.Prompt, model: p.Model,
+		return t.executeIsolated(ctx, isolatedCall{mode: p.Isolation, prompt: p.Prompt, model: p.Model, effort: p.Effort, maxSteps: p.MaxSteps,
 			unsupported: isolatedUnsupported(p.Profile, p.WritePaths, p.Tools, p.ContinueFrom, p.ForkFrom, p.RunInBackground)})
 	}
 
