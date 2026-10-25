@@ -190,9 +190,9 @@ func SessionLeaseHeldByOtherRuntime(path string) bool {
 	if err != nil {
 		if os.IsNotExist(err) {
 			// A missing sidecar does not mean the lease is free: the lock is what
-			// a live holder keeps, and the sidecar can be deleted underneath it.
-			// Ask the lock without creating it, so the common case touches nothing.
-			if _, statErr := os.Stat(store.SessionLeaseLock(path)); errors.Is(statErr, os.ErrNotExist) {
+			// a live holder keeps. Ask it only when a lock file exists, using the
+			// package's existing existence probe (a lock has no sidecars).
+			if !sessionArtifactExists(store.SessionLeaseLock(path)) {
 				return false
 			}
 			unlock, lockErr := tryLockSessionLeaseFile(path)
