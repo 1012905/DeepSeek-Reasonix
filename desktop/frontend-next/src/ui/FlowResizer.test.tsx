@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { act, cleanup, fireEvent, render, renderHook } from "@testing-library/react";
 import "./testkit";
-import { barsFit, flowCeiling, flowFloor, flowMin, FlowGrips, useColumn, type Column } from "./FlowResizer";
+import { barsFit, flowCeiling, flowFloor, flowMin, forgetDraggedWidth, FlowGrips, useColumn, type Column } from "./FlowResizer";
 
 const RAIL_MIN = 232;
 const DOCK_MIN = 320;
@@ -217,5 +217,18 @@ describe("the keys walk the same path the hand does", () => {
     expect(press("l", "ArrowRight", false, 640)).toEqual([]);
     // The readable measure is no longer the end of the road.
     expect(press("l", "ArrowRight", false, 760)).toEqual([748]);
+  });
+});
+
+describe("a line-width preset answers for the dragged width", () => {
+  it("forgets what a hand set, in storage and in every mounted column", () => {
+    localStorage.clear();
+    localStorage.setItem("rx-flow-w", "900");
+    const { result } = renderHook(() => useColumn(316, 316, RAIL_MIN, DOCK_MIN));
+    expect(result.current.dragged).toBe(900);
+    act(() => forgetDraggedWidth());
+    expect(result.current.dragged).toBe(0);
+    expect(localStorage.getItem("rx-flow-w")).toBeNull();
+    expect(result.current.width).toBe(result.current.floor);
   });
 });
