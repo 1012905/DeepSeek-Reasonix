@@ -601,7 +601,7 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 	// Acquire the checkpoint barrier before preimage capture and any hook. It is
 	// held through post hooks and AfterMutation so rewind cannot interleave with
 	// writer-side user code.
-	if !plan.readOnly && a.svc.mutationObserver != nil {
+	if (!plan.readOnly || toolHooksMayMutateWorkspace(a.svc.hooks)) && a.svc.mutationObserver != nil {
 		release, err := a.svc.mutationObserver.BeginWrite()
 		if err != nil {
 			return toolOutcome{output: "blocked: " + err.Error(), blocked: true, errMsg: "blocked: checkpoint write preparation failed"}, true
