@@ -55,7 +55,7 @@ type sceneDocument struct {
 func importSceneWallpaper(project, pkg, preview []byte) (sceneWallpaper, error) {
 	var meta sceneProject
 	if err := json.Unmarshal(project, &meta); err != nil {
-		return sceneWallpaper{}, fmt.Errorf("%w: project.json: %v", errSceneInvalid, err)
+		return sceneWallpaper{}, fmt.Errorf("%w: project.json: %w", errSceneInvalid, err)
 	}
 	if !strings.EqualFold(strings.TrimSpace(meta.Type), "scene") {
 		return sceneWallpaper{}, fmt.Errorf("%w: type %q", errSceneUnsupported, meta.Type)
@@ -70,7 +70,7 @@ func importSceneWallpaper(project, pkg, preview []byte) (sceneWallpaper, error) 
 
 	files, err := parseWallpaperPackage(pkg)
 	if err != nil {
-		return sceneWallpaper{}, fmt.Errorf("%w: %v", errSceneInvalid, err)
+		return sceneWallpaper{}, fmt.Errorf("%w: %w", errSceneInvalid, err)
 	}
 	scenePath := cleanAssetPath(meta.File)
 	if scenePath == "" {
@@ -82,7 +82,7 @@ func importSceneWallpaper(project, pkg, preview []byte) (sceneWallpaper, error) 
 	}
 	var scene sceneDocument
 	if err := json.Unmarshal(rawScene, &scene); err != nil {
-		return sceneWallpaper{}, fmt.Errorf("%w: %s: %v", errSceneInvalid, scenePath, err)
+		return sceneWallpaper{}, fmt.Errorf("%w: %s: %w", errSceneInvalid, scenePath, err)
 	}
 
 	out := sceneWallpaper{Title: title}
