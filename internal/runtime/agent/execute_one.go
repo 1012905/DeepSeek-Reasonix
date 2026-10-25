@@ -602,7 +602,7 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 	// held through post hooks and AfterMutation so rewind cannot interleave with
 	// writer-side user code.
 	if (!plan.readOnly || toolHooksMayMutateWorkspace(a.svc.hooks)) && a.svc.mutationObserver != nil {
-		release, err := a.svc.mutationObserver.BeginWrite()
+		release, err := a.svc.mutationObserver.BeginWriteContext(ctx)
 		if err != nil {
 			return toolOutcome{output: "blocked: " + err.Error(), blocked: true, errMsg: "blocked: checkpoint write preparation failed"}, true
 		}
