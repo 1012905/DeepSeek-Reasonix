@@ -162,6 +162,7 @@ jobs:
           node perf/flowgrip-quiet.mjs
           node perf/flow-narrow.mjs
           node perf/flow-preset.mjs
+          node perf/prefs-wide-centered.mjs
           node perf/tab-pip.mjs
           node perf/context-card-hover.mjs
           node perf/sessquick.mjs
