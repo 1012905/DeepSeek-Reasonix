@@ -27,8 +27,8 @@ try {
     await page.goto(BASE, { waitUntil: "networkidle" });
     await page.waitForSelector(".app");
     const out = await page.evaluate(async ({ scheme, sample, hljs, names, token, hex }) => {
-      const theme = await import("/src/ui/theme.ts");
-      const { mount } = await import("/perf/syntax-mount.tsx");
+      const theme = window.__syntax;
+      const { mount } = theme;
       const host = document.createElement("div");
       host.style.cssText = "position:fixed;left:0;top:0;width:700px;height:260px;z-index:2147483647";
       document.body.appendChild(host);

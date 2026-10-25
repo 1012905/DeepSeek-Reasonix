@@ -2,6 +2,8 @@ import { createRoot } from "react-dom/client";
 import { boot as bootLang } from "../src/i18n";
 import { track as trackWidth } from "../src/ui/viewport";
 import { pushToast } from "../src/state/toasts";
+import { apply as applyPack } from "../src/ui/theme";
+import { mount as mountEditor } from "./syntax-mount";
 import "../src/styles/tokens.css";
 import "../src/styles/app.css";
 import "../src/styles/dock.css";
@@ -606,9 +608,11 @@ declare global {
     __refuse: (method: string, message: string) => void;
     // Put a notice in the window's corner the way a failed setting does.
     __toast: (text: string) => void;
+    __syntax: { apply: typeof applyPack; mount: typeof mountEditor };
   }
 }
 window.__toast = pushToast;
+window.__syntax = { apply: applyPack, mount: mountEditor };
 window.__feed = (ev) => hub.feeds.forEach((p) => p.feed(ev));
 window.__panes = () => hub.feeds.size;
 window.__previewFiles = (files) => hub.feeds.forEach((port) => {
