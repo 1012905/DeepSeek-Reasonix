@@ -1080,8 +1080,10 @@
   @keyframes bob { 0%, 100% { opacity: .22; transform: translateY(0) } 50% { opacity: 1; transform: translateY(-3px) } }
 
   .think { margin-top: 5px }
-  .think > summary { display: inline-flex; max-width: 100%; align-items: baseline; gap: 8px }
-  .think .peek { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--w-reg) var(--fs-ui) var(--ui); color: var(--faint) }
+  .think > summary { display: flex; flex-direction: column; max-width: 100%; gap: 0 }
+  .thinking-preview { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    margin: 5px 0 0 14px; padding-left: 10px; border-left: 1px solid var(--hair); font: var(--w-reg) var(--fs-ui)/1.68 var(--ui); color: var(--faint);
+  }
   .think .tk {
     margin-top: 5px; padding-left: 14px;
     font: var(--w-reg) var(--fs-ui)/1.68 var(--ui); color: var(--faint); white-space: pre-wrap;
