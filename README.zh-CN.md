@@ -156,6 +156,10 @@ Reasonix 分为两条版本线，调整的原因见[版本路线公告](https://
 
 同一个发布页也提供 2.x 的 `reasonix` CLI 归档（`darwin|linux|windows × amd64|arm64`）。
 
+安卓版在同一个发布页上，文件名是 `ReasonixMobile-<版本>.apk`（`arm64`，Android 8.0 及以上）。
+内核与界面都跑在手机上，Agent 通过 SSH 连接你自己的服务器；与电脑配对时扫它显示的二维码。
+发布时没有配签名密钥的包会带 `-unsigned` 后缀，装之前先看文件名和它旁边的 `.sha256`。
+
 ### Reasonix 1.x（稳定版）
 
 1.x CLI 在任意支持的平台上都可以通过 npm 安装，macOS 也可以使用 Homebrew：

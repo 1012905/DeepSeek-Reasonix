@@ -169,6 +169,13 @@ Every package ships with a `.minisig` signature, and the release carries
 The same release also carries the 2.x `reasonix` CLI as archives for
 `darwin|linux|windows × amd64|arm64`.
 
+The Android build ships on that release as `ReasonixMobile-<version>.apk`
+(`arm64`, Android 8.0 or newer). The kernel and the page run on the phone, and
+the agent reaches your servers over SSH; pairing with a computer is done by
+scanning the code it shows. A build made without a signing key is named
+`-unsigned.apk`, so check for that name — and the `.sha256` beside it — before
+installing.
+
 ### Reasonix 1.x (stable)
 
 The 1.x CLI installs through npm on any supported platform, or Homebrew on
