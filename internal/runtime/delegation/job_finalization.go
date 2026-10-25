@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"reasonix/internal/state/checkpoint"
 	"reasonix/internal/tools/jobs"
 )
 
@@ -14,14 +13,6 @@ func jobCleanup(release func()) jobs.StartOption {
 			release()
 		}
 		return nil
-	})
-}
-
-func registeredWriterCleanup(observer *checkpoint.MutationObserver, id string, registered bool) jobs.StartOption {
-	return jobCleanup(func() {
-		if registered {
-			observer.UnregisterWriter(id)
-		}
 	})
 }
 

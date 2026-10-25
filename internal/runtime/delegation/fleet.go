@@ -172,7 +172,7 @@ func (f *FleetTool) Execute(ctx context.Context, args json.RawMessage) (result s
 		label := fmt.Sprintf("fleet(%d)", len(specs))
 		backgroundEvidence := evidence.NewLedger()
 		writerID := fmt.Sprintf("background-fleet:%s:%d", parentID, time.Now().UnixNano())
-		writerRegistered := false
+		var releaseWriter func()
 		observer := f.taskTool.mutationObserver
 		if observer != nil {
 			hasWriter := false
@@ -183,10 +183,11 @@ func (f *FleetTool) Execute(ctx context.Context, args json.RawMessage) (result s
 				}
 			}
 			if hasWriter {
-				if err := observer.RegisterWriter(writerID, "background_fleet", observer.OwnershipTurn()); err != nil {
+				var err error
+				releaseWriter, err = observer.RegisterWriterContext(ctx, writerID, "background_fleet", observer.OwnershipTurn())
+				if err != nil {
 					return "", err
 				}
-				writerRegistered = true
 			}
 		}
 		job := jm.StartForSession(jobs.SessionFromContext(ctx), "fleet", label, func(jobCtx context.Context, _ io.Writer) (string, error) {
@@ -200,7 +201,7 @@ func (f *FleetTool) Execute(ctx context.Context, args json.RawMessage) (result s
 			// events and the child previews ride the same pacing budget.
 			jobCtx = withSubagentProgressMerger(jobCtx, merger)
 			return f.runFleet(jobCtx, groupSink, specs, plan, adopted, parentID)
-		}, uninvokedFleetFinalizer(ctx, merger, groupParentID), registeredWriterCleanup(observer, writerID, writerRegistered))
+		}, uninvokedFleetFinalizer(ctx, merger, groupParentID), jobCleanup(releaseWriter))
 		// The Manager finalizes the merger even when no closure is invoked.
 		// Foreground Execute retains ownership until its synchronous return.
 		lifecycleHandoff = true

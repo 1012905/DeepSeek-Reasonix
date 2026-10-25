@@ -625,11 +625,11 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	}
 	runSession := func(runCtx context.Context, sink event.Sink, writerAlreadyRegistered bool) (string, error) {
 		if mutationObserver != nil && backgroundWriter && !writerAlreadyRegistered {
-			turn := mutationObserver.OwnershipTurn()
-			if err := mutationObserver.RegisterWriter(recoveryTaskID, "background_subagent", turn); err != nil {
+			releaseWriter, err := mutationObserver.RegisterWriterContext(runCtx, recoveryTaskID, "background_subagent", mutationObserver.OwnershipTurn())
+			if err != nil {
 				return "", err
 			}
-			defer mutationObserver.UnregisterWriter(recoveryTaskID)
+			defer releaseWriter()
 		}
 		if spec.Grant.ReadOnly {
 			return t.runReadOnlySubSession(withUpstream(runCtx, spec.Context.Upstream), spec.Task.Objective, subReg, sink, maxSteps, prov, pricing, ctxWin, run.Session, childDepth, recoveryTaskID, usageModelRef, mutationObserver, "read_only_"+spec.Worker.Kind, grant)
@@ -660,15 +660,15 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 			releaseStart = func() {}
 		}
 		label := firstNonEmpty(spec.Task.Description, spec.Worker.Name, "task")
-		writerRegistered := false
+		var releaseWriter func()
 		if mutationObserver != nil && backgroundWriter {
 			turn := mutationObserver.OwnershipTurn()
-			if err := mutationObserver.RegisterWriter(recoveryTaskID, "background_subagent", turn); err != nil {
+			releaseWriter, err = mutationObserver.RegisterWriterContext(ctx, recoveryTaskID, "background_subagent", turn)
+			if err != nil {
 				releaseStart()
 				run.Release()
 				return "", err
 			}
-			writerRegistered = true
 		}
 		parentSession := agent.ParentSession(ctx)
 		backgroundEvidence := evidence.NewLedger()
@@ -703,7 +703,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 			if err := t.beginExecution(jobCtx, life, spec.Context.Ephemeral, trk, run); err != nil {
 				return FormatSubagentRunResult("", run, true), err
 			}
-			answer, err := runSession(jobCtx, trk.wrap(), writerRegistered)
+			answer, err := runSession(jobCtx, trk.wrap(), releaseWriter != nil)
 			if err != nil {
 				return FormatSubagentRunResult("", run, true), errors.Join(err, t.saveRunTerminal(run, err))
 			}
@@ -711,7 +711,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 				return FormatSubagentRunResult("", run, true), errors.Join(err, t.transcripts.SaveFailed(run))
 			}
 			return FormatSubagentRunResult(answer, run, false), nil
-		}, t.uninvokedTaskFinalizer(ctx, run, life, trk), jobCleanup(run.Release), registeredWriterCleanup(mutationObserver, recoveryTaskID, writerRegistered))
+		}, t.uninvokedTaskFinalizer(ctx, run, life, trk), jobCleanup(run.Release), jobCleanup(releaseWriter))
 		releaseStart()
 		// Hand the tracker to the job goroutine: the outer defer must not
 		// finish (and close) it while the job still runs.
