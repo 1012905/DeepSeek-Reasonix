@@ -49,12 +49,14 @@ type Store struct {
 	repo        gitcmd.Repo
 	mu          sync.Mutex
 	entries     map[string]*Entry
+	uninspected map[string]*Entry
 }
 
 // NewStore keeps worktrees under managedRoot and answers for results taken
 // from workspaceRoot, whose git identity repo was resolved when it opened.
 func NewStore(managedRoot, workspaceRoot string, repo gitcmd.Repo) *Store {
-	return &Store{managedRoot: managedRoot, workspace: workspaceRoot, repo: repo, entries: map[string]*Entry{}}
+	return &Store{managedRoot: managedRoot, workspace: workspaceRoot, repo: repo,
+		entries: map[string]*Entry{}, uninspected: map[string]*Entry{}}
 }
 
 // Begin checks the workspace out into a fresh worktree. A workspace git cannot
@@ -79,23 +81,26 @@ func (s *Store) Begin(ctx context.Context, workspaceRoot string) (*Entry, error)
 	return &Entry{ID: id, Workspace: workspaceRoot, Snap: snap, Cand: cand}, nil
 }
 
-// Finish records what the run changed. A run that changed nothing leaves no
-// entry and no worktree, and reports false.
+// Finish records what the run changed. Inspection errors retain its identity
+// and files for retry; a successfully inspected empty result reports false.
 func (s *Store) Finish(ctx context.Context, e *Entry) (bool, error) {
 	tree, changes, err := worktree.CandidateTree(ctx, e.Snap, e.Cand)
 	if err == nil && len(changes) > 0 {
 		e.Stats, err = worktree.DiffStat(ctx, e.Snap, tree, changes)
 	}
-	if err != nil || len(changes) == 0 {
+	if err != nil {
+		return true, s.retainInspection(e, err)
+	}
+	if len(changes) == 0 {
 		s.remove(ctx, e)
 		return false, err
+	}
+	if err := s.recordFinished(e); err != nil {
+		return true, s.retainInspection(e, err)
 	}
 	e.Tree, e.Changes = tree, changes
-	if err := persist(e); err != nil {
-		s.remove(ctx, e)
-		return false, err
-	}
 	s.mu.Lock()
+	delete(s.uninspected, e.ID)
 	s.entries[e.ID] = e
 	s.mu.Unlock()
 	return true, nil
@@ -156,6 +161,11 @@ func (s *Store) Pending() []string {
 			ids = append(ids, id)
 		}
 	}
+	for id := range s.uninspected {
+		if !slices.Contains(ids, id) {
+			ids = append(ids, id)
+		}
+	}
 	s.mu.Unlock()
 	slices.Sort(ids)
 	return ids
@@ -168,7 +178,18 @@ func (s *Store) lookup(id string) (*Entry, error) {
 	id = strings.TrimSpace(id)
 	s.mu.Lock()
 	e, ok := s.entries[id]
+	unfinished := s.uninspected[id]
 	s.mu.Unlock()
+	if ok {
+		if err := s.checkCachedInspection(e); err != nil {
+			return nil, tool.Refusal{Code: CodeUnavailable, Message: err.Error()}
+		}
+	}
+	if unfinished != nil {
+		if err := s.persistInspection(unfinished); err != nil {
+			return nil, tool.Refusal{Code: CodeUnavailable, Message: fmt.Sprintf("record isolated result %s; files retained: %v", id, err)}
+		}
+	}
 	if !ok {
 		recovered, err := s.recover(id)
 		if err != nil {
@@ -198,6 +219,9 @@ func (s *Store) drop(ctx context.Context, id string) {
 }
 
 func (s *Store) remove(ctx context.Context, e *Entry) {
+	s.mu.Lock()
+	delete(s.uninspected, e.ID)
+	s.mu.Unlock()
 	forget(e)
 	_ = worktree.RemoveCandidate(context.WithoutCancel(ctx), e.Snap, e.Cand)
 }

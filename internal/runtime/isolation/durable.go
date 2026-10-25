@@ -42,7 +42,10 @@ func persist(e *Entry) error {
 	return os.Rename(tmp, path)
 }
 
-func forget(e *Entry) { _ = os.Remove(entryPath(e.Cand)) }
+func forget(e *Entry) {
+	_ = os.Remove(entryPath(e.Cand))
+	_ = os.Remove(inspectionPath(e.Cand))
+}
 
 // durable lists the results on disk that were taken from this store's
 // workspace. A result from another workspace is never offered here: applying
@@ -76,6 +79,10 @@ func (s *Store) durable() []durableEntry {
 }
 
 func (s *Store) readRecord(slot *os.Root) (durableEntry, bool) {
+	// An unresolved newer record must never fall back to legacy settlement.
+	if _, err := slot.Lstat(inspectionFile); !os.IsNotExist(err) {
+		return durableEntry{}, false
+	}
 	if !recordRegularFile(slot, entryFile) {
 		return durableEntry{}, false
 	}
@@ -92,36 +99,53 @@ func (s *Store) durableIDs() []string {
 	for _, d := range s.durable() {
 		ids = append(ids, d.ID)
 	}
+	for _, record := range s.inspections() {
+		ids = append(ids, record.Entry.ID)
+	}
 	return ids
 }
 
 // recover rebuilds a result from its worktree. Inspection errors retain the
 // result for retry; a successfully inspected empty result is removed.
 func (s *Store) recover(id string) (*Entry, error) {
+	for _, record := range s.inspections() {
+		if record.Entry.ID != id {
+			continue
+		}
+		if record.Version != inspectionVersion {
+			return nil, fmt.Errorf("isolated result %s uses unsupported inspection version %d; files retained", id, record.Version)
+		}
+		return s.recoverEntry(record.Entry)
+	}
 	for _, d := range s.durable() {
 		if d.ID != id {
 			continue
 		}
-		ctx := context.Background()
-		e := &Entry{ID: d.ID, Workspace: d.Workspace, Snap: d.Snap, Cand: d.Cand}
-		tree, changes, err := worktree.CandidateTree(ctx, e.Snap, e.Cand)
-		if err == nil && len(changes) > 0 {
-			e.Stats, err = worktree.DiffStat(ctx, e.Snap, tree, changes)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("inspect isolated result %s; files retained: %w", id, err)
-		}
-		if len(changes) == 0 {
-			s.remove(ctx, e)
-			return nil, nil
-		}
-		e.Tree, e.Changes = tree, changes
-		s.mu.Lock()
-		s.entries[e.ID] = e
-		s.mu.Unlock()
-		return e, nil
+		return s.recoverEntry(d)
 	}
 	return nil, nil
+}
+
+func (s *Store) recoverEntry(d durableEntry) (*Entry, error) {
+	ctx := context.Background()
+	e := &Entry{ID: d.ID, Workspace: d.Workspace, Snap: d.Snap, Cand: d.Cand}
+	tree, changes, err := worktree.CandidateTree(ctx, e.Snap, e.Cand)
+	if err == nil && len(changes) > 0 {
+		e.Stats, err = worktree.DiffStat(ctx, e.Snap, tree, changes)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("inspect isolated result %s; files retained: %w", d.ID, err)
+	}
+	if len(changes) == 0 {
+		s.remove(ctx, e)
+		return nil, nil
+	}
+	e.Tree, e.Changes = tree, changes
+	s.mu.Lock()
+	delete(s.uninspected, e.ID)
+	s.entries[e.ID] = e
+	s.mu.Unlock()
+	return e, nil
 }
 
 // SweepExpired removes this workspace's results nobody settled within maxAge.
