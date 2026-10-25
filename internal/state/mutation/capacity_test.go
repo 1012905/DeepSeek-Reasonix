@@ -240,13 +240,19 @@ func TestLegacyWaitDoesNotConsumeExecutionCapacity(t *testing.T) {
 		t.Fatal(err)
 	}
 	notices := make(chan Notice, 16)
-	c, err := New(root, state, func(n Notice) { notices <- n })
+	resume := make(chan struct{})
+	c, err := New(root, state, func(n Notice) {
+		if n.State == "waiting" {
+			notices <- n
+			<-resume
+		}
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
-	defer func() { cancel(); <-done }()
+	defer func() { cancel(); close(resume); <-done }()
 	go func() {
 		req := intent(path)
 		req.Capacities = []Capacity{capacity("total")}
@@ -257,9 +263,9 @@ func TestLegacyWaitDoesNotConsumeExecutionCapacity(t *testing.T) {
 		done <- err
 	}()
 	awaitCapacityNotice(t, notices, "waiting")
-	probeCtx, stop := context.WithTimeout(t.Context(), time.Second)
-	defer stop()
-	l, err := testCoordinator(t, root, state).Acquire(probeCtx, Intent{Effect: CapacityOnly, Capacities: []Capacity{capacity("total")}})
+	// Pin the observed blocked state, outside the registry lock. A concurrent
+	// preparation retry may temporarily reserve queue priority for this writer.
+	l, err := testCoordinator(t, root, state).TryAcquire(t.Context(), Intent{Effect: CapacityOnly, Capacities: []Capacity{capacity("total")}})
 	if err != nil {
 		t.Fatalf("legacy file wait exhausted execution capacity: %v", err)
 	}
