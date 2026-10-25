@@ -19,7 +19,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"slices"
 	"sort"
 	"strings"
@@ -422,15 +421,6 @@ func (m *Manager) StartForSession(parentSession, kind, label string, run func(ct
 
 	m.launchJob(ctx, j, run)
 	return j
-}
-
-func runRecovered(ctx context.Context, out io.Writer, run func(context.Context, io.Writer) (string, error)) (result string, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("internal error: panic: %v\n%s", r, debug.Stack())
-		}
-	}()
-	return run(ctx, out)
 }
 
 func (m *Manager) openArtifactLocked(parentSession, id string) (logPath, metaPath string, file *os.File, artifactErr string) {

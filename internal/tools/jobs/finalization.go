@@ -50,13 +50,11 @@ func (j *Job) finalize(state Finalization) error {
 	return f.err
 }
 
-func callFinalizer(fn func(Finalization) error, state Finalization) (err error) {
-	defer func() {
-		if p := recover(); p != nil {
-			err = fmt.Errorf("%w: panic: %v", ErrFinalization, p)
-		}
-	}()
-	if err := fn(state); err != nil {
+func callFinalizer(fn func(Finalization) error, state Finalization) error {
+	err := withPanicRecovery(func() error { return fn(state) }, func(value any) error {
+		return panicCause("panic", value)
+	})
+	if err != nil {
 		return fmt.Errorf("%w: %w", ErrFinalization, err)
 	}
 	return nil
