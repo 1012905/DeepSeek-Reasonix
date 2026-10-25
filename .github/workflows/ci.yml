@@ -198,7 +198,7 @@ jobs:
 
       # Pull requests run a Windows smoke suite: the packages that actually
       # carry *_windows.go code, the startup/checkpoint packages with portable
-      # filesystem contracts, plus cmd/. The isolation/worktree owners have a
+      # filesystem contracts, plus cmd/. Isolation/worktree/mutation have a
       # complete JSON inventory below. The full ./... sweep stays on pushes
       # to main-v2; the Unix legs always run the full suite. Keep the job-level
       # budget above normal 7-9 minute runner variance; each package test binary
@@ -229,12 +229,12 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          go test -count=1 -p 4 -timeout=18m -json ./internal/runtime/isolation/... ./internal/platform/worktree/... | tee "$RUNNER_TEMP/isolation-owners.jsonl" |
+          go test -count=1 -p 4 -timeout=18m -json ./internal/runtime/isolation/... ./internal/platform/worktree/... ./internal/state/mutation/... | tee "$RUNNER_TEMP/isolation-owners.jsonl" |
             jq -rj --unbuffered 'select(.Action == "output" and .Test == null) | .Output'
           jq -se '
             [.[] | select(.Test == null and .Action == "pass") | .Package] as $passed |
             [.[] | select(.Test != null and .Action == "pass") | .Test] as $tests |
-            (["reasonix/internal/runtime/isolation", "reasonix/internal/platform/worktree"] - $passed | length) == 0 and
+            (["reasonix/internal/runtime/isolation", "reasonix/internal/platform/worktree", "reasonix/internal/state/mutation"] - $passed | length) == 0 and
             (["TestResultOperationUsesCrossProcessOwnership",
               "TestActualResultOperationHoldsOwnershipThroughWriteAndCleanup/restore",
               "TestActualResultOperationHoldsOwnershipThroughWriteAndCleanup/remove",
@@ -242,7 +242,9 @@ jobs:
               "TestApplyPathsWithUntrustedModesPreservesTheIndex/source_index_mode",
               "TestApplyPathsWithUntrustedModesPreservesTheIndex/candidate_mode",
               "TestApplyPathsWithUntrustedModesPreservesTheIndex/candidate_type",
-              "TestApplyPathsEmulatedLinksUseSnapshotFilters"] - $tests | length) == 0
+              "TestApplyPathsEmulatedLinksUseSnapshotFilters",
+              "TestHeldPathsCoverOnlyTheSameFileAcrossCaseSpellings",
+              "TestLegacyWaitDoesNotConsumeExecutionCapacity"] - $tests | length) == 0
           ' "$RUNNER_TEMP/isolation-owners.jsonl"
 
       - name: upload Windows isolation test inventory
@@ -341,7 +343,7 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           REASONIX_RELEASE_CACHE_GUARD: "1"
-        run: go test -race ./internal/runtime/agent/... ./internal/runtime/isolation/... ./internal/platform/worktree/... ./internal/ext/plugin/... ./internal/tools/jobs/... ./internal/base/proc/... ./internal/safety/sandbox/... ./internal/base/filelock/... ./internal/contract/eventwire/... ./internal/platform/remote/... ./internal/ext/extension/... ./internal/assembly/boot/... ./internal/session/control/... ./internal/contract/tool/...
+        run: go test -race ./internal/runtime/agent/... ./internal/runtime/isolation/... ./internal/platform/worktree/... ./internal/state/mutation/... ./internal/ext/plugin/... ./internal/tools/jobs/... ./internal/base/proc/... ./internal/safety/sandbox/... ./internal/base/filelock/... ./internal/contract/eventwire/... ./internal/platform/remote/... ./internal/ext/extension/... ./internal/assembly/boot/... ./internal/session/control/... ./internal/contract/tool/...
 
       - name: test -race (full)
         if: github.event_name != 'pull_request'

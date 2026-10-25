@@ -26,6 +26,7 @@ import { SendShortcut } from "./SendShortcut";
 import { KeysSheet } from "./KeysSheet";
 import { SessionTabsSetting } from "./SessionTabsSetting";
 import { EscStopSetting } from "./EscStopSetting";
+import { forgetDraggedWidth } from "./FlowResizer";
 import { PageSleepSetting } from "./PageSleepSetting";
 import { ThemeImport } from "./ThemeImport";
 import { ThemeRemove } from "./ThemeRemove";
@@ -365,7 +366,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
             <div className="seg" data-text role="group" aria-label={t("正文行宽")}>
               {MEASURES.map(([id, name, why]) => (
                 <button key={id} data-action="appearance.measure" data-value={id}
-                  aria-pressed={(look.width || "standard") === id} title={t(why)} onClick={() => set({ width: id })}>
+                  aria-pressed={(look.width || "standard") === id} title={t(why)} onClick={() => { forgetDraggedWidth(); set({ width: id }); }}>
                   {t(name)}
                 </button>
               ))}

@@ -21,6 +21,8 @@ test("platform paths and unknown paths need them", () => {
     "internal/safety/sandbox/a.go",
     "internal/runtime/isolation/store.go",
     "internal/runtime/isolation/durable_test.go",
+    "internal/state/mutation/resources.go",
+    "internal/state/mutation/capacity_test.go",
     "internal/platform/update/a.go",
     "cmd/reasonix/main.go",
     "desktop/electron/main.ts",
