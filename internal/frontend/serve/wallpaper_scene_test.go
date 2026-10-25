@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"runtime"
 	"sort"
 	"testing"
 )
@@ -31,6 +32,22 @@ func sceneTestJPEG(t *testing.T) []byte {
 		t.Fatal(err)
 	}
 	return buf.Bytes()
+}
+
+// sceneHugeJPEG keeps a valid JPEG header but declares an enormous frame.
+// Decoding it, rather than reading only its config, would allocate the frame.
+func sceneHugeJPEG(t *testing.T, width, height uint16) []byte {
+	t.Helper()
+	raw := sceneTestJPEG(t)
+	for i := 0; i+9 < len(raw); i++ {
+		if raw[i] == 0xff && raw[i+1] == 0xc0 {
+			binary.BigEndian.PutUint16(raw[i+5:i+7], height)
+			binary.BigEndian.PutUint16(raw[i+7:i+9], width)
+			return raw
+		}
+	}
+	t.Fatal("JPEG has no SOF0 marker")
+	return nil
 }
 
 // sceneTestPackage writes the PKG table exactly as Wallpaper Engine does:
@@ -162,5 +179,19 @@ func TestCleanAssetPathKeepsNamesInsideThePackage(t *testing.T) {
 		if got := cleanAssetPath(c.in); got != c.want {
 			t.Errorf("cleanAssetPath(%q) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+func TestImageFromTEXRefusesAHugeJPEGBeforeDecoding(t *testing.T) {
+	raw := append([]byte("TEXV0005\x00TEXI0001\x00"), sceneHugeJPEG(t, 16000, 16000)...)
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	if _, _, err := imageFromTEX(raw); err == nil {
+		t.Fatal("a JPEG declaring 16000x16000 pixels was accepted")
+	}
+	runtime.ReadMemStats(&after)
+	if delta := after.TotalAlloc - before.TotalAlloc; delta > 16<<20 {
+		t.Fatalf("refusing the JPEG allocated %d bytes", delta)
 	}
 }

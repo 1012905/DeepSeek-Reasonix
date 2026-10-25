@@ -290,6 +290,7 @@ func (s *Server) wallpaperAsset(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", contentTypeOf(name))
 	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(w, r, name, info.ModTime(), f)
 }
 

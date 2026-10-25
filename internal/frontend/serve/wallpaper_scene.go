@@ -250,6 +250,10 @@ var (
 	jpegSignature = []byte{0xff, 0xd8, 0xff}
 )
 
+// maxSceneImagePixels bounds the frame jpeg.Decode may allocate for a scene's
+// backdrop. A header can declare a huge frame without carrying any image data.
+const maxSceneImagePixels = int64(64 << 20)
+
 // imageFromTEX pulls the PNG or JPEG a TEX container may carry. Masks and
 // depth maps use compressed GPU formats and are not needed by the still
 // backdrop.
@@ -265,13 +269,21 @@ func imageFromTEX(raw []byte) ([]byte, string, error) {
 		}
 	}
 	if start := bytes.Index(raw, jpegSignature); start >= 0 {
+		rest := raw[start:]
+		cfg, err := jpeg.DecodeConfig(bytes.NewReader(rest))
+		if err != nil {
+			return nil, "", errSceneNoImage
+		}
+		if int64(cfg.Width)*int64(cfg.Height) > maxSceneImagePixels {
+			return nil, "", fmt.Errorf("%w: JPEG %dx%d exceeds %d pixels", errSceneInvalid, cfg.Width, cfg.Height, maxSceneImagePixels)
+		}
 		// A TEX may hold several mip JPEGs back to back, and EXIF can carry a
 		// thumbnail with its own EOI. Decode the first image so the marker
 		// scan follows the real structure instead of guessing at "FF D9".
-		reader := bytes.NewReader(raw[start:])
+		reader := bytes.NewReader(rest)
 		if _, err := jpeg.Decode(reader); err == nil {
-			consumed := len(raw[start:]) - reader.Len()
-			out := raw[start : start+consumed]
+			consumed := len(rest) - reader.Len()
+			out := rest[:consumed]
 			if mime := imageMIME(out); mime != "" {
 				return out, mime, nil
 			}

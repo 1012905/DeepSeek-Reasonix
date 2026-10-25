@@ -89,6 +89,9 @@ func TestSceneUploadStoresBackdropAudioAndParallax(t *testing.T) {
 		if contentType := got.Header().Get("Content-Type"); contentType != asset.mime {
 			t.Errorf("GET %s content type = %q, want %q", asset.url, contentType, asset.mime)
 		}
+		if nosniff := got.Header().Get("X-Content-Type-Options"); nosniff != "nosniff" {
+			t.Errorf("GET %s X-Content-Type-Options = %q, want nosniff", asset.url, nosniff)
+		}
 		if !bytes.Equal(got.Body.Bytes(), asset.body) {
 			t.Errorf("GET %s returned different bytes", asset.url)
 		}
