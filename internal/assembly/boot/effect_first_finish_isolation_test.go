@@ -66,6 +66,7 @@ kind = "`+kind+`"
 model = "x"
 `)
 	gitInDir(t, dir, "init", "-q")
+	gitInDir(t, dir, "config", "core.autocrlf", "true")
 	mirrorToUserConfigAt(t, home, dir)
 	gitInDir(t, dir, "add", "-A")
 	gitInDir(t, dir, "commit", "-q", "-m", "init")
@@ -114,7 +115,7 @@ model = "x"
 		t.Fatalf("same-ID apply after controller reconstruction: %q", applied)
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, "out.txt"))
-	if err != nil || string(raw) != "made in isolation\n" {
+	if err != nil || strings.ReplaceAll(string(raw), "\r\n", "\n") != "made in isolation\n" {
 		t.Fatalf("retained work after restart = %q, %v", raw, err)
 	}
 }
