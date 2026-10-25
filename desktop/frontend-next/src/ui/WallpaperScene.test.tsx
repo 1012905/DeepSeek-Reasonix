@@ -53,8 +53,10 @@ describe("a Wallpaper Engine backdrop", () => {
   });
 
   it("does not install the soundtrack when muted", () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
     render(<WallpaperScene wallpaper={{ ...scene, muted: true }} />);
     const audio = document.querySelector("audio");
     expect(audio?.muted).toBe(true);
+    expect(play).not.toHaveBeenCalled();
   });
 });

@@ -30,12 +30,12 @@ func (s *Server) uploadWallpaperScene(w http.ResponseWriter, r *http.Request) {
 	}
 	project, err := decodeScenePart(body.Project)
 	if err != nil {
-		refuse(w, http.StatusBadRequest, "wallpaper.not_base64", "the folder data was not base64", nil)
+		refuse(w, http.StatusBadRequest, "wallpaper.scene_invalid", "the folder data was not base64", nil)
 		return
 	}
 	scene, err := decodeScenePart(body.Scene)
 	if err != nil {
-		refuse(w, http.StatusBadRequest, "wallpaper.not_base64", "the folder data was not base64", nil)
+		refuse(w, http.StatusBadRequest, "wallpaper.scene_invalid", "the folder data was not base64", nil)
 		return
 	}
 	if len(scene) > maxSceneAsset {
@@ -44,7 +44,7 @@ func (s *Server) uploadWallpaperScene(w http.ResponseWriter, r *http.Request) {
 	}
 	preview, err := decodeScenePart(body.Preview)
 	if err != nil {
-		refuse(w, http.StatusBadRequest, "wallpaper.not_base64", "the folder data was not base64", nil)
+		refuse(w, http.StatusBadRequest, "wallpaper.scene_invalid", "the folder data was not base64", nil)
 		return
 	}
 	if len(preview) > maxSceneAsset {
@@ -88,7 +88,7 @@ func (s *Server) uploadWallpaperScene(w http.ResponseWriter, r *http.Request) {
 	paper.Title = got.Title
 	paper.Audio = audioName
 	paper.Parallax = got.Parallax
-	paper.Muted = false
+	paper.Muted = true
 	if paper.Volume == nil {
 		volume := 1.0
 		paper.Volume = &volume

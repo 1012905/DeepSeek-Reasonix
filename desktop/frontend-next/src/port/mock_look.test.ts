@@ -16,7 +16,7 @@ describe("the fixture's scene import", () => {
       kind: "scene",
       title: "花海",
       parallax: 0.02,
-      muted: false,
+      muted: true,
     });
   });
 

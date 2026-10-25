@@ -56,6 +56,9 @@ func TestSceneUploadStoresBackdropAudioAndParallax(t *testing.T) {
 	if view.Wallpaper.Volume != 1 {
 		t.Errorf("wallpaper volume = %v, want the scene default of 1", view.Wallpaper.Volume)
 	}
+	if !view.Wallpaper.Muted {
+		t.Error("a newly imported scene must start muted")
+	}
 
 	raw, err := os.ReadFile(config.UserConfigPath())
 	if err != nil {

@@ -67,7 +67,7 @@ export class MockLook {
         kind: "scene",
         title: title || "Wallpaper Engine scene",
         parallax: 0.02,
-        muted: false,
+        muted: true,
         volume: 1,
         opacity: 0.5,
         dim: 0.55,

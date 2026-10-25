@@ -136,3 +136,31 @@ func TestParseWallpaperPackageRejectsATruncatedEntry(t *testing.T) {
 		t.Fatal("a truncated package was accepted")
 	}
 }
+
+func TestParseWallpaperPackageRejectsTooManyEntries(t *testing.T) {
+	raw := make([]byte, 16)
+	binary.LittleEndian.PutUint32(raw[0:4], 8)
+	copy(raw[4:12], "PKGV0024")
+	binary.LittleEndian.PutUint32(raw[12:16], 10001)
+	if _, err := parseWallpaperPackage(raw); err == nil {
+		t.Fatal("a package declaring 10001 entries was accepted")
+	}
+}
+
+func TestCleanAssetPathKeepsNamesInsideThePackage(t *testing.T) {
+	for _, bad := range []string{"", ".", "..", "../scene.json", "models/../../escape.json", "/"} {
+		if got := cleanAssetPath(bad); got != "" {
+			t.Errorf("cleanAssetPath(%q) = %q, want an empty path", bad, got)
+		}
+	}
+	for _, c := range []struct{ in, want string }{
+		{"scene.json", "scene.json"},
+		{"models/main.json", "models/main.json"},
+		{"/materials/main.tex", "materials/main.tex"},
+		{"a\\b", "a/b"},
+	} {
+		if got := cleanAssetPath(c.in); got != c.want {
+			t.Errorf("cleanAssetPath(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
