@@ -156,11 +156,6 @@ func (s *Store) Pending() []string {
 	}
 	ids := s.durableIDs()
 	s.mu.Lock()
-	for id := range s.entries {
-		if !slices.Contains(ids, id) {
-			ids = append(ids, id)
-		}
-	}
 	for id := range s.uninspected {
 		if !slices.Contains(ids, id) {
 			ids = append(ids, id)
@@ -190,13 +185,17 @@ func (s *Store) lookup(id string) (*Entry, error) {
 			return nil, tool.Refusal{Code: CodeUnavailable, Message: fmt.Sprintf("record isolated result %s; files retained: %v", id, err)}
 		}
 	}
-	if !ok {
-		recovered, err := s.recover(id)
-		if err != nil {
-			return nil, tool.Refusal{Code: CodeUnavailable, Message: err.Error()}
-		}
-		e, ok = recovered, recovered != nil
+	// Git objects outlive settled worktrees. Reinspect durable identity and
+	// content rather than treating a cached tree as settlement authority.
+	recovered, err := s.recover(id)
+	if err != nil {
+		return nil, tool.Refusal{Code: CodeUnavailable, Message: err.Error()}
 	}
+	if e != nil && recovered != nil && (e.Snap.Commit != recovered.Snap.Commit || e.Snap.Tree != recovered.Snap.Tree ||
+		e.Snap.Prefix != recovered.Snap.Prefix || e.Cand.WorktreeRoot != recovered.Cand.WorktreeRoot || e.Tree != recovered.Tree) {
+		return nil, tool.Refusal{Code: CodeUnavailable, Message: fmt.Sprintf("isolated result %s changed since it was inspected; inspect its paths again before settlement", id)}
+	}
+	e, ok = recovered, recovered != nil
 	if !ok {
 		pending := s.Pending()
 		known := "none are pending"
