@@ -50,7 +50,7 @@ import { useZoomKeys } from "./zoomkeys";
 import { rememberActivePane, savedActivePane } from "./activepane";
 import { Sidebar } from "./Sidebar";
 import { PeerThreadsProvider } from "./peerthreads";
-import { Backdrop } from "./Backdrop";import { useAddWorkspace } from "./addws";
+import { WallpaperStage } from "./WallpaperStage";import { useAddWorkspace } from "./addws";
 import { AddWorkspacePrompt } from "./AddWorkspacePrompt";
 import { PaneTabs } from "./PaneTabs";
 import { paneReader } from "../state/paneread";
@@ -583,7 +583,7 @@ export function App({ hub }: { hub: HubPort }) {
         hub={hub} onError={fail}
       />
 
-      <Backdrop sky={!!pack?.sky && effects !== "reduced"} wallpaper={look?.wallpaper} />
+      <WallpaperStage sky={!!pack?.sky && effects !== "reduced"} look={look} onLook={onLook} />
 
       <div className="cols">
         {navRail.drawn && (
