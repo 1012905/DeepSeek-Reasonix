@@ -2,6 +2,7 @@ package isolation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -38,14 +39,14 @@ func (s *Store) Execute(ctx context.Context, runner Runner, workspaceRoot, promp
 	}
 	out, runErr := runner(ctx, Run{WorkspaceRoot: e.Cand.WorkspaceRoot, Prompt: prompt, Model: model})
 	kept, finishErr := s.Finish(context.WithoutCancel(ctx), e)
+	if finishErr != nil {
+		return "", fmt.Errorf("isolated task inspection is incomplete; files retained as %s; retry apply_isolated or discard_isolated after resolving the inspection error: %w", e.ID, errors.Join(runErr, finishErr))
+	}
 	if runErr != nil {
 		if kept {
 			return "", fmt.Errorf("isolated task failed; the changes it made are kept as %s (apply_isolated or discard_isolated): %w", e.ID, runErr)
 		}
 		return "", runErr
-	}
-	if finishErr != nil {
-		return "", finishErr
 	}
 	return report(e, kept, out), nil
 }
