@@ -17,6 +17,7 @@ func TestApplyPathsWithUntrustedModesPreservesTheIndex(t *testing.T) {
 	for _, scenario := range []string{"content", "source_index_mode", "candidate_mode", "candidate_type"} {
 		t.Run(scenario, func(t *testing.T) {
 			repo, snap, c, finish := isolatedCandidate(t)
+			gitIn(t, repo, "config", "core.autocrlf", "true")
 			gitIn(t, repo, "config", "core.filemode", "false")
 			gitIn(t, repo, "config", "core.symlinks", "false")
 			writeRepoFile(t, c.WorkspaceRoot, "a.txt", "candidate\n")
