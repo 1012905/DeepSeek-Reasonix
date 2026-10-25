@@ -62,7 +62,11 @@ func within(root, path string) bool {
 
 func withinExact(root, path string) bool {
 	rel, err := filepath.Rel(root, path)
-	return err == nil && (rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))))
+	if err != nil || (rel != "." && (rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)))) {
+		return false
+	}
+	// filepath.Rel ignores case on Windows, so the spelling has to agree too.
+	return strings.HasPrefix(path, root)
 }
 
 // heldWithin authorizes path under root. A case-folded spelling counts only
