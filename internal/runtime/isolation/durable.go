@@ -107,7 +107,7 @@ func (s *Store) durableIDs() []string {
 
 // recover rebuilds a result from its worktree. Inspection errors retain the
 // result for retry; a successfully inspected empty result is removed.
-func (s *Store) recover(id string) (*Entry, error) {
+func (s *Store) recover(ctx context.Context, id string) (*Entry, error) {
 	for _, record := range s.inspections() {
 		if record.Entry.ID != id {
 			continue
@@ -115,19 +115,18 @@ func (s *Store) recover(id string) (*Entry, error) {
 		if record.Version != inspectionVersion {
 			return nil, fmt.Errorf("isolated result %s uses unsupported inspection version %d; files retained", id, record.Version)
 		}
-		return s.recoverEntry(record.Entry)
+		return s.recoverEntry(ctx, record.Entry)
 	}
 	for _, d := range s.durable() {
 		if d.ID != id {
 			continue
 		}
-		return s.recoverEntry(d)
+		return s.recoverEntry(ctx, d)
 	}
 	return nil, nil
 }
 
-func (s *Store) recoverEntry(d durableEntry) (*Entry, error) {
-	ctx := context.Background()
+func (s *Store) recoverEntry(ctx context.Context, d durableEntry) (*Entry, error) {
 	e := &Entry{ID: d.ID, Workspace: d.Workspace, Snap: d.Snap, Cand: d.Cand}
 	tree, changes, err := worktree.CandidateTree(ctx, e.Snap, e.Cand)
 	if err == nil && len(changes) > 0 {
@@ -137,7 +136,7 @@ func (s *Store) recoverEntry(d durableEntry) (*Entry, error) {
 		return nil, fmt.Errorf("inspect isolated result %s; files retained: %w", d.ID, err)
 	}
 	if len(changes) == 0 {
-		s.remove(ctx, e)
+		s.removeLocked(ctx, e)
 		return nil, nil
 	}
 	e.Tree, e.Changes = tree, changes
@@ -155,10 +154,37 @@ func (s *Store) SweepExpired(ctx context.Context, maxAge time.Duration) {
 		return
 	}
 	for _, d := range s.durable() {
-		info, err := os.Stat(entryPath(d.Cand))
-		if err != nil || time.Since(info.ModTime()) < maxAge {
+		release, err := s.acquireResultOperation(ctx, d.ID, true)
+		if err != nil {
 			continue
 		}
-		s.remove(ctx, &Entry{ID: d.ID, Snap: d.Snap, Cand: d.Cand})
+		s.sweepResultLocked(ctx, d, maxAge)
+		release()
 	}
+}
+
+func (s *Store) sweepResultLocked(ctx context.Context, observed durableEntry, maxAge time.Duration) {
+	managed, err := os.OpenRoot(s.managedRoot)
+	if err != nil {
+		return
+	}
+	defer managed.Close()
+	name, err := filepath.Rel(s.managedRoot, filepath.Dir(observed.Cand.WorktreeRoot))
+	if err != nil || !filepath.IsLocal(name) || name == "." || filepath.Dir(name) != "." || !recordDirectoryEntry(managed, name) {
+		return
+	}
+	slot, err := managed.OpenRoot(name)
+	if err != nil {
+		return
+	}
+	defer slot.Close()
+	d, ok := s.readRecord(slot)
+	if !ok || d != observed {
+		return
+	}
+	info, err := slot.Stat(entryFile)
+	if err != nil || time.Since(info.ModTime()) < maxAge {
+		return
+	}
+	s.removeLocked(ctx, &Entry{ID: d.ID, Snap: d.Snap, Cand: d.Cand})
 }
