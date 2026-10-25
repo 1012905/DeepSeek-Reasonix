@@ -1,0 +1,2 @@
+- 新增：Wallpaper Engine 场景支持同时循环多条音轨，并支持 DXT1/DXT3/DXT5 压缩主图。关联 def94177c。
+- Added: scene wallpapers loop every soundtrack and decode DXT1/DXT3/DXT5 backdrops. Refs def94177c.

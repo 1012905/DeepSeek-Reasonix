@@ -39,6 +39,7 @@ export const EN: Record<string, string> = {
   "正在读取历史消息…": "Reading history messages…",
   "历史加载失败 · 重试": "History could not be loaded · Retry",
   "加载更早的消息": "Load earlier messages",
+  "更早还有 {n} 条消息，点击加载": "{n} more messages before these — click to load",
   "正在查找较早消息…": "Searching earlier messages…",
   "部分历史尚未读取": "Some history has not been read",
   "此检查点不包含文件快照": "This checkpoint contains no file snapshots",
@@ -283,7 +284,6 @@ export const EN: Record<string, string> = {
   "收起度量栏": "Collapse the metrics rail",
   "展开度量栏": "Show the metrics rail",
   "调整工作区栏宽度": "Resize the workspace rail",
-  "调整正文字宽": "Resize the reading column",
   "调整度量栏宽度": "Resize the metrics rail",
   "从列表移除": "Remove from the list",
   "改为输入路径": "Type a path instead",
@@ -1006,6 +1006,10 @@ export const EN: Record<string, string> = {
   "这些地址直连": "Reach these addresses directly",
   "测试目标": "Test target",
   "无法读取网络配置。": "Could not read the network config.",
+  "正在读取网络配置…": "Loading network settings…",
+  "测试已保存配置": "Test saved settings",
+  "有未保存的改动；连接测试使用已保存的配置。": "There are unsaved changes. Connection tests use the saved settings.",
+  "已保存配置的测试结果": "Test results for saved settings",
 
   // ── 命令解释器 ───────────────────────────────────────────────────
   "当前生效": "In effect",

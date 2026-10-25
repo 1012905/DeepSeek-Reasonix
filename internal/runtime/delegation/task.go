@@ -675,12 +675,8 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 		// Capture acquire request by value for the job goroutine.
 		slotReq := acquireReq
 		job := jm.StartForSession(jobs.SessionFromContext(ctx), "task", label, func(jobCtx context.Context, _ io.Writer) (result string, err error) {
-			if releaseWriter != nil {
-				defer releaseWriter()
-			}
 			jobCtx = agent.WithParentSession(jobCtx, parentSession)
 			jobCtx = evidence.WithLedger(jobCtx, backgroundEvidence)
-			defer run.Release()
 			defer func() { jobs.PublishEvidence(jobCtx, backgroundEvidence.Summary()) }()
 			defer func() {
 				if r := recover(); r != nil {
@@ -715,7 +711,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 				return FormatSubagentRunResult("", run, true), errors.Join(err, t.transcripts.SaveFailed(run))
 			}
 			return FormatSubagentRunResult(answer, run, false), nil
-		})
+		}, t.uninvokedTaskFinalizer(ctx, run, life, trk), jobCleanup(run.Release), jobCleanup(releaseWriter))
 		releaseStart()
 		// Hand the tracker to the job goroutine: the outer defer must not
 		// finish (and close) it while the job still runs.

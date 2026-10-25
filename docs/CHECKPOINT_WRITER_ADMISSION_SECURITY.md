@@ -2,7 +2,7 @@
 owner: @SivanCola
 backup: @esengine
 status: active
-reviewed: 2026-10-25
+reviewed: 2026-10-26
 ---
 
 # Background writer admission / 后台写入者准入
@@ -72,9 +72,14 @@ not file-level mutual exclusion, process-scope completion, automatic isolation,
 result integration, recovery journaling or root-budget enforcement. Asynchronous
 hooks and processes require their own physical-lifetime integration.
 
-A job manager may decline launch before invoking the job closure. Finalizing
-resources on that existing no-launch path belongs to the jobs owner and remains
-separate from registration preparation; this slice does not claim to close it.
+The accepted [job finalization owner](https://github.com/esengine/DeepSeek-Reasonix/pull/14469)
+may prove that a closure will not be invoked.
+
+Task/fleet register returned writer-token cleanup with that owner alongside
+transcript/progress cleanup, instead of a closure-only defer or ID unregistration.
+
+Cleanup runs on actual closure return or proven no-launch, before completion
+publication. This is not proof of descendant process-scope completion.
 
 ## Verification boundaries
 
@@ -97,6 +102,14 @@ task/fleet callers reproduce two cancellation failures plus their parent test.
 The observer overlay adds only a context-shaped adapter to legacy registration
 and ID-only cleanup; it does not assert that the old API offered identified cleanup.
 
+The combined job-owner regression checks both ordinary writer release and a
+same-ID replacement admitted before the old job finishes. Its finalizer must
+release only its original token.
+
+Accepted no-launch tests and checkpoint
+admission tests remain part of the combined validation, including real boot
+entry points. These do not establish unknown process-scope termination.
+
 Local race and root results, hosted CI, native platforms and independent review
 are reported separately in the PR.
 
@@ -118,5 +131,9 @@ task/fleet 三个生产入口没有把调用上下文交给后台写入者准入
 磁盘 I/O 和普通互斥锁本身仍不可取消；这是进程内的 rewind 协调，不能替代跨进程文件
 事务、进程物理完成、自动隔离或恢复日志。原生平台、CI 与独立审查以各自实际证据为准。
 
-任务管理器可能在调用任务闭包前拒绝启动；该未启动路径的资源终结仍需 jobs 所有者修复，
-不能把本次正常后台交接验证称为所有后台生命周期都已闭合。
+已接受的 #14469 统一实际闭包返回与已证明不启动时的资源终结。本分支把登记 token 的
+清理回调交给这个所有者，与进度和 transcript 资源一起在完成发布前终结，不再只靠闭包
+defer，也不退回按字符串 ID 移除。组合回归覆盖普通释放及旧任务结束前同 ID 新登记；
+旧 finalizer 不能释放新 token。
+
+这仍不证明后代进程 scope 完成或所有后台生命周期闭合。
