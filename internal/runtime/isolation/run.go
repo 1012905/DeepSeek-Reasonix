@@ -13,6 +13,8 @@ type Run struct {
 	WorkspaceRoot string
 	Prompt        string
 	Model         string
+	Effort        string
+	MaxSteps      int
 }
 
 // Outcome is what the run ended with. Unverified carries the readiness reason
