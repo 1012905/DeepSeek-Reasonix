@@ -39,9 +39,12 @@ The utility adds `AcquireRoot` and `TryAcquireRoot` for an `os.Root` plus a loca
 name. They reject nonlocal names and nonregular lock files, preserve file bytes
 and modes, and never reopen a filename by concatenating `Root.Name()`.
 
-Relative opens follow the opened directory after a rename. Outside symlinks are
-refused by `os.Root`. Closing the directory handle does not release an admitted
-file lease. Existing path APIs keep their global-path and wait-budget contracts.
+Relative child-directory opens follow the opened directory after a rename.
+Windows may forbid renaming a directory opened directly with os.OpenRoot;
+the result owner uses a child handle. Outside symlinks are refused by os.Root.
+
+Closing the directory handle does not release an admitted file lease.
+Existing path APIs keep their global-path and wait-budget contracts.
 
 ## Lifecycle coverage
 

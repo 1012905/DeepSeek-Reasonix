@@ -178,7 +178,13 @@ func TestRootedLockFollowsTheOpenedDirectoryAfterRename(t *testing.T) {
 	if err := os.Mkdir(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	root, err := os.OpenRoot(dir)
+	parentRoot, err := os.OpenRoot(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer parentRoot.Close()
+	// Match resultLockRoot: a relative child handle permits Windows rename.
+	root, err := parentRoot.OpenRoot("original")
 	if err != nil {
 		t.Fatal(err)
 	}
