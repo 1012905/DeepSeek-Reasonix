@@ -106,6 +106,11 @@ that stops refreshing activity fails the active-progress test while preserving
 the real-silence control. Final package inventories and platform/review evidence
 are reported in the PR; author analysis is not independent approval.
 
+Windows PR CI runs complete jobs/delegation packages and retains a JSON inventory
+requiring both terminal package passes and fifteen new portable case passes.
+Pure delegation changes also select native platform legs. Linux PR race coverage
+includes delegation. Workflow configuration is not native execution evidence.
+
 ## 中文说明
 
 原 task/fleet 在交给任务管理器前创建检查点登记，但只在任务闭包中清理资源。
