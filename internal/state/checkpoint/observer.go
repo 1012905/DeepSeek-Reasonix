@@ -1,6 +1,7 @@
 package checkpoint
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -116,18 +117,34 @@ func (o *MutationObserver) OwnershipTurn() int {
 
 // BeginWrite retires undo durably before a tool or hook can modify files.
 func (o *MutationObserver) BeginWrite() (func(), error) {
+	return o.BeginWriteContext(context.Background())
+}
+
+// BeginWriteContext checks cancellation before admission and after preparation.
+// Durable undo retirement already completed is not reversed on cancellation.
+func (o *MutationObserver) BeginWriteContext(ctx context.Context) (func(), error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if o == nil || o.store == nil {
 		return nil, nil
 	}
 	barrier := o.store.Barrier()
-	if err := barrier.EnterWrite(); err != nil {
+	if err := barrier.EnterWriteContext(ctx); err != nil {
 		return nil, err
 	}
 	if err := o.store.InvalidateUndo(); err != nil {
 		barrier.ExitWrite()
 		return nil, fmt.Errorf("prepare workspace write: %w", err)
 	}
-	return barrier.ExitWrite, nil
+	if err := ctx.Err(); err != nil {
+		barrier.ExitWrite()
+		return nil, err
+	}
+	return sync.OnceFunc(barrier.ExitWrite), nil
 }
 
 // RegisterWriter marks a background writer as active. Rollback precheck returns

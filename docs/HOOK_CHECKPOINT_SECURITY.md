@@ -27,7 +27,7 @@ checkpoint complete. Tool execution and read-only classification are unchanged.
 | --- | --- |
 | Target access | Existing permission and target resolution finish before checkpoint admission |
 | Hook capability | Existing optional capability report; legacy custom hooks remain conservatively write-capable |
-| Checkpoint owner | Existing `MutationObserver.BeginWrite`: enter rewind barrier, durably retire undo, then return permit |
+| Checkpoint owner | `MutationObserver.BeginWriteContext`: enter rewind barrier, durably retire undo, then return permit |
 | Failure | Closed barrier or failed undo retirement refuses the call before hook/tool entry |
 | Cleanup | Existing invocation defer releases the permit on success, refusal or failure |
 | Coverage | Existing `GapHookWrite`, never a fabricated path or captured preimage |
@@ -46,9 +46,9 @@ The checkpoint barrier excludes rewind; it does not serialize all writers or
 replace file-level, cross-process mutation coordination. Readers with possible
 hook writes now follow the existing writer wait/shutdown contract.
 
-The existing barrier wait has no context argument. This change does not add a
-cancellable fair queue or claim to fix its wait semantics. It introduces no
-new global mutex or filesystem scan.
+Invocation admission accepts its context; cancellation can abandon a wait
+without releasing the exclusive owner. See [cancellation bounds](CHECKPOINT_CANCELLATION_SECURITY.md).
+This does not add a fair queue, global execution mutex or filesystem scan.
 
 Imported asynchronous hooks can outlive their callback. Their process lifetime
 is not covered by this permit; registering and reconciling those background
@@ -97,8 +97,8 @@ undo，再允许回调执行。准入失败则 hook 和工具都不执行；调�
 hook 的未知写入只记录既有覆盖缺口，不伪造预映像或修改工具 `Executed`。无工具
 hook 的读取保持原行为。权限、工具定义、配置和持久化格式不变。
 
-该屏障只保护 checkpoint 与 rewind，不是完整文件事务或跨进程锁；原屏障等待的
-取消能力、验证证据、自动隔离与恢复仍需后续实现。测试的存储故障是明确故障注入，
+该屏障只保护 checkpoint 与 rewind，不是完整文件事务或跨进程锁；调用等待支持
+取消，但后台登记、验证证据、自动隔离与恢复仍需后续实现。测试的存储故障是明确故障注入，
 不冒称已在线上发生。
 
 导入的异步 hook 进程可能晚于回调结束，当前许可不覆盖它的完整运行期；这类后台
