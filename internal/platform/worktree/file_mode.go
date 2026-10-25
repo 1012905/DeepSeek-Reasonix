@@ -34,7 +34,7 @@ func configBool(ctx context.Context, repo gitcmd.Repo, key string) (bool, error)
 }
 
 func indexModes(ctx context.Context, repo gitcmd.Repo, paths []string) (map[string]string, error) {
-	args := append([]string{"ls-files", "--stage", "-z", "--"}, paths...)
+	args := append([]string{"ls-files", "--stage", "-z", "--"}, literalPathspecs(paths)...)
 	out, stderr, err := runGit(ctx, repo, args...)
 	if err != nil {
 		return nil, fmt.Errorf("read index modes: %w%s", err, stderrSuffix(stderr))
