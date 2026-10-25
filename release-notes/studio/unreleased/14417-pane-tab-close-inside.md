@@ -1,0 +1,2 @@
+- 修复：会话标签栏里，项目文件夹名或主机名很长时，关闭按钮不再被挤出标签、压在旁边的标签上点不到，标题也不再被挤没；文件夹名和主机名过长时用省略号截断。关联 #14417。
+- Fixed: in the session tab bar, a long folder or host name no longer pushes a tab's close button out onto the next tab where it cannot be pressed, or squeezes the title away; the folder and host names are cut short with an ellipsis instead. Refs #14417.
