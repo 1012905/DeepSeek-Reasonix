@@ -1081,9 +1081,7 @@
 
   .think { margin-top: 5px }
   .think > summary { display: flex; flex-direction: column; max-width: 100%; gap: 0 }
-  .thinking-preview { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    margin: 5px 0 0 14px; padding-left: 10px; border-left: 1px solid var(--hair); font: var(--w-reg) var(--fs-ui)/1.68 var(--ui); color: var(--faint);
-  }
+  .thinking-preview { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 5px 0 0 14px; padding-left: 10px; border-left: 1px solid var(--hair); font: var(--w-reg) var(--fs-ui)/1.68 var(--ui); color: var(--faint) }
   .think .tk {
     margin-top: 5px; padding-left: 14px;
     font: var(--w-reg) var(--fs-ui)/1.68 var(--ui); color: var(--faint); white-space: pre-wrap;
