@@ -159,7 +159,7 @@ func DiffStat(ctx context.Context, snap Snapshot, tree string, changes []Change)
 
 // treeBlobs maps each path to its blob in tree, or to absent.
 func treeBlobs(ctx context.Context, repo gitcmd.Repo, tree string, paths []string) (map[string]gitFileVersion, error) {
-	args := append([]string{"ls-tree", "-z", "--full-tree", tree, "--"}, paths...)
+	args := append([]string{"ls-tree", "-z", "--full-tree", tree, "--"}, literalPathspecs(paths)...)
 	out, stderr, err := runGit(ctx, repo, args...)
 	if err != nil {
 		return nil, fmt.Errorf("read candidate tree: %w%s", err, stderrSuffix(stderr))
@@ -241,7 +241,7 @@ func hashPaths(ctx context.Context, repo gitcmd.Repo, blobs map[string]gitFileVe
 	if len(paths) == 0 {
 		return nil
 	}
-	out, stderr, err := runGitInput(ctx, repo, strings.Join(paths, "\n")+"\n", "hash-object", "--stdin-paths")
+	out, stderr, err := runGitInput(ctx, repo, hashPathInput(paths), "hash-object", "--stdin-paths")
 	if err != nil {
 		return fmt.Errorf("hash workspace files: %w%s", err, stderrSuffix(stderr))
 	}
@@ -282,7 +282,7 @@ func writeChanges(ctx context.Context, repo gitcmd.Repo, tree string, changes []
 		return nil
 	}
 	slices.Sort(restore)
-	args := append([]string{"restore", "--source=" + tree, "--worktree", "--"}, restore...)
+	args := append([]string{"restore", "--source=" + tree, "--worktree", "--"}, literalPathspecs(restore)...)
 	if _, stderr, err := runGit(ctx, repo, args...); err != nil {
 		return fmt.Errorf("apply candidate files: %w%s", err, stderrSuffix(stderr))
 	}
