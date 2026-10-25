@@ -193,10 +193,6 @@ func (f *FleetTool) Execute(ctx context.Context, args json.RawMessage) (result s
 			// Execute returns as soon as the job is registered, so the job owns
 			// the handed-off merger until every child preview and terminal has
 			// flushed. Closing it in Execute would strand child cards at running.
-			defer merger.Close()
-			if writerRegistered {
-				defer observer.UnregisterWriter(writerID)
-			}
 			jobCtx = agent.WithParentSession(jobCtx, parentSession)
 			jobCtx = evidence.WithLedger(jobCtx, backgroundEvidence)
 			defer func() { jobs.PublishEvidence(jobCtx, backgroundEvidence.Summary()) }()
@@ -204,10 +200,9 @@ func (f *FleetTool) Execute(ctx context.Context, args json.RawMessage) (result s
 			// events and the child previews ride the same pacing budget.
 			jobCtx = withSubagentProgressMerger(jobCtx, merger)
 			return f.runFleet(jobCtx, groupSink, specs, plan, adopted, parentID)
-		})
-		// runFleet (inside the job) owns the terminal and merger close from
-		// here on. Foreground runFleet hands off only the terminal; Execute
-		// still closes the merger after the synchronous call returns.
+		}, uninvokedFleetFinalizer(ctx, merger, groupParentID), registeredWriterCleanup(observer, writerID, writerRegistered))
+		// The Manager finalizes the merger even when no closure is invoked.
+		// Foreground Execute retains ownership until its synchronous return.
 		lifecycleHandoff = true
 		mergerCloseHandoff = true
 		return fmt.Sprintf("Started background fleet %q (%s). Collect results with wait; you will be notified when it finishes.", job.ID, label), nil
