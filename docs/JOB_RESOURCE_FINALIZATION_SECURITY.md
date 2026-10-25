@@ -7,6 +7,11 @@ reviewed: 2026-10-25
 
 # Job resource finalization / 后台任务资源终结
 
+See [job panic results](JOB_PANIC_RESULT_SECURITY.md) for legacy nil-panic and
+typed-cause handling at invocation and finalization boundaries.
+
+执行与清理边界的 legacy nil panic 和错误身份处理，另见上述说明。
+
 ## Cause and owner
 
 Task and fleet prepared checkpoint writer registrations before calling the job
