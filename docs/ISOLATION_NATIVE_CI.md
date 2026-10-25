@@ -56,10 +56,10 @@ The existing YAML test owner now also checks that unfiltered PR commands select
 all three complete packages on native Windows and with race enabled. A focused
 rollback command cannot satisfy that coverage contract.
 
-The legacy-wait regression observes the waiting notice, then uses TryAcquire to
-check capacity without queuing. A wrong reservation fails immediately; registry
-latency no longer impersonates exhaustion through a one-second alarm. The suite
-timeout still detects a stuck process.
+The legacy-wait regression pins the waiting callback outside the registry lock,
+then uses TryAcquire to check capacity without queuing. A wrong reservation fails
+immediately. Pinning prevents a preparation retry's valid queue priority from
+impersonating exhaustion. The suite timeout still detects a stuck process.
 
 No production Go, data format, tool permission or default is changed. No new
 secret, credential, privileged trigger or write scope is introduced. Artifact
@@ -88,8 +88,9 @@ performance and complete combined-tree acceptance remain separate requirements.
 原始 JSON 上传用于核对实际执行、条件跳过和故障。完整 worktree 测试包含原有
 回滚用例，不重复运行子集。Linux race 同时加入三个完整所有者包。
 
-mutation 的路径大小写缺陷由 #14424 单独修复。本批另将旧锁等待测试改为先观察等待，
-再执行不排队的额度准入；保留额度不应被耗尽的断言，去掉任意一秒钟的机器速度要求。
+mutation 的路径大小写缺陷由 #14424 单独修复。本批在登记锁外停住等待回调，再执行
+不排队的额度准入，避免准备阶段重试的合法排队优先权造成瞬态忙；保留额度不应被耗尽
+的断言，去掉任意一秒钟的机器速度要求。
 原生清单同时要求这两个关键回归实际通过，跳过不能算验收。
 
 沿用已有超时、并发数、权限、固定版本 action 和结果缓存规则，不改变产品行为。

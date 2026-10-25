@@ -22,7 +22,7 @@ func gitIn(t *testing.T, dir string, args ...string) string {
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("git %v: %v\n%s\n%s", args, err, out, stderr.String())
+		t.Fatalf("git %v: %v\n%s%s", args, err, out, stderr.String())
 	}
 	return string(out)
 }
