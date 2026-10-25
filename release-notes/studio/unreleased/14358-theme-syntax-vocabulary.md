@@ -1,2 +1,0 @@
-- 新增：主题包可以给注释、类型、运算符、标点和变量单独配色（五个可选标记），文件编辑器和对话代码块都生效；不写它们的主题外观不变。关联 #14358。
-- Added: theme packs can colour comments, types, operators, punctuation and variables with five optional tokens, in the file editor and in code blocks; packs that omit them look the same. Refs #14358.
