@@ -1006,6 +1006,10 @@ export const EN: Record<string, string> = {
   "这些地址直连": "Reach these addresses directly",
   "测试目标": "Test target",
   "无法读取网络配置。": "Could not read the network config.",
+  "正在读取网络配置…": "Loading network settings…",
+  "测试已保存配置": "Test saved settings",
+  "有未保存的改动；连接测试使用已保存的配置。": "There are unsaved changes. Connection tests use the saved settings.",
+  "已保存配置的测试结果": "Test results for saved settings",
 
   // ── 命令解释器 ───────────────────────────────────────────────────
   "当前生效": "In effect",
