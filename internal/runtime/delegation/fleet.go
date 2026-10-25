@@ -172,7 +172,7 @@ func (f *FleetTool) Execute(ctx context.Context, args json.RawMessage) (result s
 		label := fmt.Sprintf("fleet(%d)", len(specs))
 		backgroundEvidence := evidence.NewLedger()
 		writerID := fmt.Sprintf("background-fleet:%s:%d", parentID, time.Now().UnixNano())
-		writerRegistered := false
+		var releaseWriter func()
 		observer := f.taskTool.mutationObserver
 		if observer != nil {
 			hasWriter := false
@@ -183,10 +183,11 @@ func (f *FleetTool) Execute(ctx context.Context, args json.RawMessage) (result s
 				}
 			}
 			if hasWriter {
-				if err := observer.RegisterWriter(writerID, "background_fleet", observer.OwnershipTurn()); err != nil {
+				var err error
+				releaseWriter, err = observer.RegisterWriterContext(ctx, writerID, "background_fleet", observer.OwnershipTurn())
+				if err != nil {
 					return "", err
 				}
-				writerRegistered = true
 			}
 		}
 		job := jm.StartForSession(jobs.SessionFromContext(ctx), "fleet", label, func(jobCtx context.Context, _ io.Writer) (string, error) {
@@ -194,8 +195,8 @@ func (f *FleetTool) Execute(ctx context.Context, args json.RawMessage) (result s
 			// the handed-off merger until every child preview and terminal has
 			// flushed. Closing it in Execute would strand child cards at running.
 			defer merger.Close()
-			if writerRegistered {
-				defer observer.UnregisterWriter(writerID)
+			if releaseWriter != nil {
+				defer releaseWriter()
 			}
 			jobCtx = agent.WithParentSession(jobCtx, parentSession)
 			jobCtx = evidence.WithLedger(jobCtx, backgroundEvidence)
