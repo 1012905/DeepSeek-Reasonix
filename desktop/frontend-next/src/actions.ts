@@ -150,6 +150,7 @@ export const ACTIONS: UIAction[] = [
   { id: "transcript.fold", kind: "view", target: "none", proof: "interaction" },
   { id: "transcript.fold-preset", kind: "view", target: "none", proof: "interaction" },
   { id: "transcript.fold-preview", kind: "view", target: "none", proof: "interaction" },
+  { id: "transcript.thinking-preview", kind: "view", target: "none", proof: "interaction" },
   { id: "chrome.account", kind: "navigation", target: "none", proof: "interaction" },
   { id: "metrics.details", kind: "view", target: "optional", proof: "interaction" },
   { id: "metrics.hide-amounts", kind: "view", target: "none", proof: "interaction" },
