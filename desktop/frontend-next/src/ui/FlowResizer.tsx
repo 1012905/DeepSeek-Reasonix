@@ -21,6 +21,16 @@ const NARROWEST = 640;
  *  the kernel's config. */
 export const FLOW_KEY = "rx-flow-w";
 
+const forgetters = new Set<() => void>();
+
+/** A line-width preset and a hand on the grips answer the same question, and
+ *  the width a hand set outranks the stylesheet, so choosing a preset has to
+ *  drop it or the choice changes nothing on a column that was ever dragged. */
+export function forgetDraggedWidth() {
+  try { localStorage.removeItem(FLOW_KEY); } catch { /* storage is a convenience */ }
+  forgetters.forEach((forget) => forget());
+}
+
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 /** What the column may grow to: the window, less the room the two sidebars need
@@ -97,6 +107,11 @@ export function useColumn(railW: number, dockW: number, railMin: number, dockMin
   });
   const [room, setRoom] = useState(() => document.body.clientWidth);
   useEffect(() => onRoomWidth(setRoom), []);
+  useEffect(() => {
+    const forget = () => setDragged(0);
+    forgetters.add(forget);
+    return () => { forgetters.delete(forget); };
+  }, []);
 
   const floor = flowFloor(room, railMin, dockMin);
   const min = flowMin(room, railMin, dockMin);
