@@ -95,12 +95,14 @@ func TestASessionDoesNotAnswerAMessageFromASessionItOpened(t *testing.T) {
 
 func TestNoReplyGoesOutWhenTheDispatchSwitchIsOff(t *testing.T) {
 	f := newPeerFixture(t)
+	f.runner.hold = make(chan struct{})
 	setDispatchSwitch(t, true, true)
 	f.pairedWith(t, true)
 	f.sendSigned(t, "m-task", "please rotate the key", 1)
 	f.c.peerIngest()
-	setDispatchSwitch(t, true, false)
 	waitForInboxDispatch(t, f.runner)
+	setDispatchSwitch(t, true, false)
+	close(f.runner.hold)
 	time.Sleep(300 * time.Millisecond)
 	if got := f.senderInbox(); len(got) != 0 {
 		t.Fatalf("a reply went out with dispatch off: %+v", got)
