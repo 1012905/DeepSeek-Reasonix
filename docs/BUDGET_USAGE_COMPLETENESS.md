@@ -7,6 +7,10 @@ reviewed: 2026-10-26
 
 # Budget usage completeness / 预算用量完整性
 
+Shared quote/ledger provenance is covered in
+[Estimated usage and quote completeness](ESTIMATED_USAGE_QUOTE_SECURITY.md).
+共享报价及账本来源的后续边界见该双语说明。
+
 `RunBudgetTotals.Priced` requires reported usage and a price table for every
 observed round. A missing record or an existing `Usage.Estimated` record keeps
 the turn and continuing task incomplete. `Cost` retains only their known priced
