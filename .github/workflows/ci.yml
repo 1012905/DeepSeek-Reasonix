@@ -421,6 +421,38 @@ jobs:
           retention-days: 7
 
 
+      - name: test (Windows Anthropic interrupted usage)
+        if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -count=1 -timeout=3m -json -run '^Test(InterruptedUsage|EffectAnthropicPartialUsageRecovery)' ./internal/model/anthropic ./internal/assembly/boot | tee "$RUNNER_TEMP/anthropic-interrupted-usage.jsonl"
+          jq -se '
+            [.[] | select(.Test == null and .Action == "pass") | .Package] as $packages |
+            [.[] | select(.Test != null and .Action == "pass") | .Test] as $tests |
+            all(.[]; .Action != "skip" and .Action != "fail") and
+            (["reasonix/internal/model/anthropic", "reasonix/internal/assembly/boot"] - $packages | length) == 0 and
+            (["TestInterruptedUsageTerminal", "TestInterruptedUsageTerminal/upstream_error",
+              "TestInterruptedUsageTerminal/payload_error", "TestInterruptedUsageTerminal/premature_eof",
+              "TestInterruptedUsageTerminal/decode_error", "TestInterruptedUsageTerminal/reported_zero",
+              "TestInterruptedUsageTerminal/missing_control", "TestInterruptedUsageTerminal/complete_control",
+              "TestInterruptedUsageBoundedConsumer", "TestInterruptedUsageReadErrorAndCancellation",
+              "TestInterruptedUsageReadErrorAndCancellation/read_error", "TestInterruptedUsageReadErrorAndCancellation/cancelled_buffered_reader",
+              "TestInterruptedUsageAbandonedConsumer", "TestInterruptedUsageIdleTimeout",
+              "TestEffectAnthropicPartialUsageRecovery", "TestEffectAnthropicPartialUsageRecovery/upstream_error",
+              "TestEffectAnthropicPartialUsageRecovery/premature_eof", "TestEffectAnthropicPartialUsageRecovery/complete_control"] - $tests | length) == 0
+          ' "$RUNNER_TEMP/anthropic-interrupted-usage.jsonl"
+
+      - name: upload Windows Anthropic interrupted usage inventory
+        if: always() && env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: anthropic-interrupted-usage-windows-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/anthropic-interrupted-usage.jsonl
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: test (Windows root websearch budget)
         if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
         timeout-minutes: 5
