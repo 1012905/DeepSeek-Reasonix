@@ -327,6 +327,38 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: test (Windows budget usage completeness)
+        if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -count=1 -timeout=3m -json -run '^Test(RequestOnlyUsage|RunBudgetMissingUsage|TaskBudgetKnownCost|RunBudgetExplicitZero|TaskBudgetUsageCompleteness|TaskBudgetCostUses|EffectBudgetCompleteness|TaskBudgetGateIgnoresCostWhenUnpriced)' ./internal/contract/provider ./internal/runtime/agent ./internal/assembly/boot | tee "$RUNNER_TEMP/budget-usage.jsonl"
+          jq -se '
+            [.[] | select(.Test == null and .Action == "pass") | .Package] as $packages |
+            [.[] | select(.Test != null and .Action == "pass") | .Test] as $tests |
+            all(.[]; .Action != "skip" and .Action != "fail") and
+            (["reasonix/internal/contract/provider", "reasonix/internal/runtime/agent", "reasonix/internal/assembly/boot"] - $packages | length) == 0 and
+            (["TestRequestOnlyUsageDoesNotCertifyTokenAccounting", "TestRunBudgetMissingUsageKeepsCostIncomplete",
+              "TestRunBudgetMissingUsageKeepsCostIncomplete/complete", "TestRunBudgetMissingUsageKeepsCostIncomplete/missing_first",
+              "TestRunBudgetMissingUsageKeepsCostIncomplete/missing_last", "TestRunBudgetMissingUsageKeepsCostIncomplete/all_missing",
+              "TestTaskBudgetKnownCostStillLandsAfterMissingUsage", "TestRunBudgetExplicitZeroUsageIsPriced",
+              "TestTaskBudgetUsageCompletenessFollowsItsLifetime", "TestTaskBudgetUsageCompletenessFollowsItsLifetime/continuation",
+              "TestTaskBudgetUsageCompletenessFollowsItsLifetime/new_task", "TestTaskBudgetUsageCompletenessFollowsItsLifetime/explicit_reset",
+              "TestTaskBudgetCostUsesOnlyTheReportedSubtotal", "TestTaskBudgetGateIgnoresCostWhenUnpriced",
+              "TestEffectBudgetCompletenessFromOpenAIStream", "TestEffectBudgetCompletenessFromOpenAIStream/missing_0",
+              "TestEffectBudgetCompletenessFromOpenAIStream/missing_1", "TestEffectBudgetCompletenessFromOpenAIStream/missing_2"] - $tests | length) == 0
+          ' "$RUNNER_TEMP/budget-usage.jsonl"
+
+      - name: upload Windows budget usage inventory
+        if: always() && env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: budget-usage-windows-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/budget-usage.jsonl
+          if-no-files-found: ignore
+          retention-days: 7
+
       # The general Windows PR smoke list intentionally omits internal/contract/tool.
       # Keep the session-temp portability contract covered without widening the
       # leg to every tool test: two real PowerShell launches must share the
