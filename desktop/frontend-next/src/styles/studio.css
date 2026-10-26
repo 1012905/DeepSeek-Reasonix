@@ -2875,7 +2875,7 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 :root[data-theme="light"] .flow .call[data-approval] .apv-dt {
   border-top-color: var(--hair); color: var(--faint);
 }
-:root[data-theme="light"] .flow .call[data-approval] .apv-dt-label { color: var(--ghost); }
+:root[data-theme="light"] .flow .call[data-approval] .apv-dt-label { color: var(--ghost); } .apv-paths { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 3px } .apv-paths code { font: var(--w-reg) var(--fs-meta) var(--mono); color: var(--text); overflow-wrap: anywhere }
 :root[data-theme="light"] .flow .call[data-approval] .apv-ft .btn[data-yolo] { color: var(--warn-ink); border-color: #dec4b4; }
 :root[data-theme="light"] .flow .call[data-approval] .apv-yolo-confirm { border-top-color: var(--border); background: var(--page); }
 :root[data-theme="light"] .flow .call[data-approval] .apv-yolo-confirm b { color: var(--warn-ink); }
