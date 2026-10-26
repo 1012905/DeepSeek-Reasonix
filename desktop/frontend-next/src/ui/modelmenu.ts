@@ -20,7 +20,7 @@ export function modelMenu(models: ModelEntry[], order: readonly string[] = [], c
       for (const m of a.byKind[kind]) {
         out.push({
           value: m.ref,
-          label: m.modelAlias?.trim() || m.model,
+          label: m.modelAlias?.trim() || m.modelShort || m.model,
           desc: m.modelAlias?.trim() ? m.model : undefined,
           meta: t(KIND_LABEL[kind] ?? kind),
           badge: m.vision ? t("读图") : undefined,
