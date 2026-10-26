@@ -50,7 +50,8 @@ type runBudget struct {
 	unpricedTurns bool
 	// limit is configuration, not accumulation: it survives the reset that
 	// starts a new task.
-	limit TaskBudget
+	limit      TaskBudget
+	rootTokens *rootTokenBudget
 }
 
 // observe folds one round's provider usage into the turn's running total.
@@ -135,6 +136,7 @@ func (a *Agent) observeRunBudget(state *turnRuntime, usage *provider.Usage) {
 	if state == nil {
 		return
 	}
+	state.budget.rootTokens.observe(usage)
 	state.budget.observe(usage, a.svc.pricing)
 	if a.task.budget.started.IsZero() {
 		a.task.budget.started = state.budget.started

@@ -1,0 +1,68 @@
+package agent
+
+import (
+	"context"
+	"fmt"
+	"sync/atomic"
+
+	"reasonix/internal/contract/provider"
+)
+
+type rootTokenBudget struct {
+	used  *atomic.Uint64
+	limit uint64
+}
+
+type rootTokenBudgetKey struct{}
+
+// InheritRootTokenBudget carries only the Agent-root token scope into a job.
+// The job keeps its own cancellation and deadline authority.
+func InheritRootTokenBudget(ctx, parent context.Context) context.Context {
+	if scope, ok := parent.Value(rootTokenBudgetKey{}).(*rootTokenBudget); ok {
+		return context.WithValue(ctx, rootTokenBudgetKey{}, scope)
+	}
+	return ctx
+}
+
+func (a *Agent) bindRootTokenBudget(ctx context.Context, state *turnRuntime) context.Context {
+	scope, inherited := ctx.Value(rootTokenBudgetKey{}).(*rootTokenBudget)
+	if !inherited {
+		previous := a.task.budget.rootTokens
+		if previous == nil {
+			previous = &rootTokenBudget{used: new(atomic.Uint64)}
+			previous.observe(&provider.Usage{PromptTokens: a.task.budget.promptTokens, CompletionTokens: a.task.budget.outputTokens})
+		}
+		scope = &rootTokenBudget{used: previous.used, limit: uint64(max(0, a.taskBudgetLimit(ctx).Tokens))}
+		a.task.budget.rootTokens = scope
+		ctx = context.WithValue(ctx, rootTokenBudgetKey{}, scope)
+	}
+	state.budget.rootTokens = scope
+	return ctx
+}
+
+func (b *rootTokenBudget) observe(usage *provider.Usage) {
+	if b == nil || usage == nil {
+		return
+	}
+	delta := uint64(max(0, usage.PromptTokens)) + uint64(max(0, usage.CompletionTokens))
+	for {
+		old := b.used.Load()
+		next := old + delta
+		if next < old {
+			next = ^uint64(0)
+		}
+		if b.used.CompareAndSwap(old, next) {
+			return
+		}
+	}
+}
+
+func (a *Agent) exceededTaskBudget(ctx context.Context, state *turnRuntime) (string, string) {
+	if axis, detail := a.task.budget.exceeded(a.taskBudgetLimit(ctx)); axis != "" {
+		return axis, detail
+	}
+	if root := state.budget.rootTokens; root != nil && root.limit > 0 && root.used.Load() >= root.limit {
+		return "token", fmt.Sprintf("root task reached its %d token budget across delegated runs", root.limit)
+	}
+	return "", ""
+}

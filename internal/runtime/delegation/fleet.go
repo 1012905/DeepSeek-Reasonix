@@ -191,6 +191,7 @@ func (f *FleetTool) Execute(ctx context.Context, args json.RawMessage) (result s
 			}
 		}
 		job := jm.StartForSession(jobs.SessionFromContext(ctx), "fleet", label, func(jobCtx context.Context, _ io.Writer) (string, error) {
+			jobCtx = agent.InheritRootTokenBudget(jobCtx, ctx)
 			// Execute returns as soon as the job is registered, so the job owns
 			// the handed-off merger until every child preview and terminal has
 			// flushed. Closing it in Execute would strand child cards at running.

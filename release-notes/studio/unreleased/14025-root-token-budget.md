@@ -1,0 +1,2 @@
+- 修复：显式 `task_token_budget` 共享累计 Agent task/fleet 子树已报告的 token，包括后台 job 和缓存输入。默认不限，保留软收尾；不是硬预留或金额上限。关联 #14025。
+- Fixed: explicit `task_token_budget` shares reported tokens across Agent task/fleet descendants. Defaults stay unlimited; existing soft landing remains. Refs #14025.
