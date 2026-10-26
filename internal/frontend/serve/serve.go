@@ -781,6 +781,7 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 				NotAdded: !cfg.ProviderAdded(p.Name),
 			}
 			capabilitiesFor(cfg, p, model, &entry)
+			entry.Mark = presetVendor(p)
 			out = append(out, entry)
 		}
 	}

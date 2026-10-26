@@ -30,6 +30,7 @@ func openRouterAttributionHeaders() map[string]string {
 var globalProviderPresets = []ProviderPreset{
 	{
 		ID:          "openrouter",
+		Vendor:      "openrouter",
 		Label:       "OpenRouter",
 		Description: "OpenRouter multi-model gateway: DeepSeek, GPT, Gemini, Kimi, GLM, Qwen and MiniMax behind one key.",
 		KeyEnv:      "OPENROUTER_API_KEY",
@@ -48,6 +49,7 @@ var globalProviderPresets = []ProviderPreset{
 	},
 	{
 		ID:          "openai",
+		Vendor:      "openai",
 		Label:       "OpenAI",
 		Description: "OpenAI Responses API for the GPT-6 family.",
 		KeyEnv:      "OPENAI_API_KEY",
@@ -68,6 +70,7 @@ var globalProviderPresets = []ProviderPreset{
 	},
 	{
 		ID:          "gemini",
+		Vendor:      "google",
 		Label:       "Google Gemini",
 		Description: "Gemini Developer API through its OpenAI-compatible endpoint.",
 		KeyEnv:      "GEMINI_API_KEY",
@@ -84,6 +87,7 @@ var globalProviderPresets = []ProviderPreset{
 	},
 	{
 		ID:          "volcengine-coding-plan",
+		Vendor:      "volcengine",
 		Label:       "Volcengine Ark Coding Plan",
 		Description: "Volcengine Ark Coding Plan (OpenAI-compatible); ark-code-latest follows the model chosen in the Ark console.",
 		KeyEnv:      "ARK_API_KEY",

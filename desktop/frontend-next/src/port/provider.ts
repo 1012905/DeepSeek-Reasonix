@@ -126,6 +126,9 @@ export interface ProviderPreset {
   label: string;
   kind: string;
   baseUrl: string;
+  // Who makes or runs the service, declared by the kernel's catalogue. The mark
+  // drawn for it is keyed on this, never on the label.
+  vendor: string;
 }
 
 export interface ProviderPresetInstall {

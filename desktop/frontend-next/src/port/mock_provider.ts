@@ -96,11 +96,22 @@ export class MockProvider extends MockBoundary {
   }
 
   async providerPresets(): Promise<ProviderPreset[]> {
+    const p = (id: string, label: string, vendor: string, kind = "openai", baseUrl = `https://api.${vendor}.example/v1`): ProviderPreset => ({ id, label, kind, baseUrl, vendor });
     return [
-      { id: "kimi-cn", label: "Kimi CN API", kind: "openai", baseUrl: "https://api.moonshot.cn/v1" },
-      { id: "kimi-global", label: "Kimi Global API", kind: "openai", baseUrl: "https://api.moonshot.ai/v1" },
-      { id: "stepfun", label: "StepFun", kind: "openai", baseUrl: "https://api.stepfun.com/v1" },
-      { id: "stepfun-anthropic", label: "StepFun Anthropic", kind: "anthropic", baseUrl: "https://api.stepfun.com/anthropic" },
+      p("deepseek-responses", "DeepSeek Official Responses API", "deepseek", "responses", "https://api.deepseek.com"),
+      p("glm-cn", "GLM CN API", "zhipu", "openai", "https://open.bigmodel.cn/api/paas/v4"),
+      p("zai-global", "Z.AI Global API", "zhipu", "openai", "https://api.z.ai/api/paas/v4"),
+      p("kimi-cn", "Kimi CN API", "kimi", "openai", "https://api.moonshot.cn/v1"),
+      p("kimi-global", "Kimi Global API", "kimi", "openai", "https://api.moonshot.ai/v1"),
+      p("minimax-cn-api", "MiniMax CN API", "minimax", "openai", "https://api.minimaxi.com/v1"),
+      p("qwen-cn", "Qwen CN API", "qwen", "openai", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+      p("mimo-api", "MiMo API", "mimo", "openai", "https://api.xiaomimimo.com/v1"),
+      p("longcat-openai", "LongCat OpenAI", "longcat", "openai", "https://api.longcat.chat/openai/v1"),
+      p("stepfun", "StepFun", "stepfun", "openai", "https://api.stepfun.com/v1"),
+      p("openrouter", "OpenRouter", "openrouter", "openai", "https://openrouter.ai/api/v1"),
+      p("openai", "OpenAI", "openai", "openai", "https://api.openai.com/v1"),
+      p("gemini", "Google Gemini", "google", "openai", "https://generativelanguage.googleapis.com/v1beta/openai"),
+      p("token-rhythm", "Token Rhythm", "token-rhythm", "openai", "https://tokenrhythm.studio/v1"),
     ];
   }
 

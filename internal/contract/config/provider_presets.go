@@ -4,15 +4,17 @@ import (
 	"slices"
 	"sort"
 	"strings"
-
-	"reasonix/internal/contract/provider"
 )
 
 // ProviderPreset is a curated, editable provider starter template. Presets are
 // not secret-bearing: API key values still live only in Reasonix home .env.
 type ProviderPreset struct {
-	ID          string
-	Label       string
+	ID    string
+	Label string
+	// Vendor names the maker or operator of the service, as a lowercase slug the
+	// client draws a mark for. It is declared per preset, never derived from the
+	// id or the label.
+	Vendor      string
 	Description string
 	KeyEnv      string
 	Entries     []ProviderEntry
@@ -188,6 +190,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	deepSeekResponsesPreset(),
 	{
 		ID:          "longcat-openai",
+		Vendor:      "longcat",
 		Label:       "LongCat OpenAI",
 		Description: "LongCat Platform OpenAI-compatible endpoint for LongCat-2.0.",
 		KeyEnv:      "LONGCAT_API_KEY",
@@ -208,6 +211,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "longcat-anthropic",
+		Vendor:      "longcat",
 		Label:       "LongCat Anthropic",
 		Description: "LongCat Platform Anthropic-compatible Messages endpoint for LongCat-2.0.",
 		KeyEnv:      "LONGCAT_API_KEY",
@@ -229,6 +233,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "token-rhythm",
+		Vendor:      "token-rhythm",
 		Label:       "Token Rhythm",
 		Description: "Token Rhythm (基元律动) multi-model OpenAI-compatible gateway.",
 		KeyEnv:      "TOKEN_RHYTHM_API_KEY",
@@ -247,6 +252,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "kimi-cn",
+		Vendor:      "kimi",
 		Label:       "Kimi CN API",
 		Description: "Moonshot Kimi China OpenAI-compatible API.",
 		KeyEnv:      "KIMI_API_KEY",
@@ -268,6 +274,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "kimi-global",
+		Vendor:      "kimi",
 		Label:       "Kimi Global API",
 		Description: "Moonshot Kimi international OpenAI-compatible API.",
 		KeyEnv:      "MOONSHOT_API_KEY",
@@ -289,6 +296,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "kimi-coding-plan",
+		Vendor:      "kimi",
 		Label:       "Kimi Coding Plan",
 		Description: "Kimi Coding Plan via its dedicated Anthropic-compatible endpoint.",
 		KeyEnv:      "KIMI_CODING_API_KEY",
@@ -308,6 +316,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 }, mimoPresets, geminiNativePresets, []ProviderPreset{
 	{
 		ID:          "minimax-cn-api",
+		Vendor:      "minimax",
 		Label:       "MiniMax CN API",
 		Description: "MiniMax China OpenAI-compatible M-series API endpoint.",
 		KeyEnv:      "MINIMAX_API_KEY",
@@ -325,6 +334,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "minimax-global-api",
+		Vendor:      "minimax",
 		Label:       "MiniMax Global API",
 		Description: "MiniMax international OpenAI-compatible M-series API endpoint.",
 		KeyEnv:      "MINIMAX_API_KEY",
@@ -342,6 +352,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "minimax-cn-anthropic",
+		Vendor:      "minimax",
 		Label:       "MiniMax CN Anthropic",
 		Description: "MiniMax China Anthropic-compatible M-series endpoint.",
 		KeyEnv:      "MINIMAX_PLAN_API_KEY",
@@ -359,6 +370,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "minimax-global-anthropic",
+		Vendor:      "minimax",
 		Label:       "MiniMax Global Anthropic",
 		Description: "MiniMax international Anthropic-compatible endpoint with Bearer auth.",
 		KeyEnv:      "MINIMAX_API_KEY",
@@ -376,6 +388,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "glm-cn",
+		Vendor:      "zhipu",
 		Label:       "GLM CN API",
 		Description: "Zhipu GLM China OpenAI-compatible API with thinking controls.",
 		KeyEnv:      "GLM_API_KEY",
@@ -392,6 +405,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "zai-global",
+		Vendor:      "zhipu",
 		Label:       "Z.AI Global API",
 		Description: "Z.AI international OpenAI-compatible GLM API.",
 		KeyEnv:      "ZAI_API_KEY",
@@ -408,6 +422,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "glm-coding-plan-cn",
+		Vendor:      "zhipu",
 		Label:       "GLM Coding Plan CN",
 		Description: "Zhipu GLM China coding-plan endpoint.",
 		KeyEnv:      "GLM_PLAN_API_KEY",
@@ -424,6 +439,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "glm-coding-plan-cn-anthropic",
+		Vendor:      "zhipu",
 		Label:       "GLM Coding Plan CN Anthropic",
 		Description: "Zhipu GLM China coding-plan Anthropic-compatible endpoint.",
 		KeyEnv:      "GLM_PLAN_API_KEY",
@@ -442,6 +458,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "zai-coding-plan-global",
+		Vendor:      "zhipu",
 		Label:       "Z.AI Coding Plan Global",
 		Description: "Z.AI international coding-plan endpoint.",
 		KeyEnv:      "ZAI_CODING_API_KEY",
@@ -457,6 +474,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "zai-coding-plan-global-anthropic",
+		Vendor:      "zhipu",
 		Label:       "Z.AI Coding Plan Global Anthropic",
 		Description: "Z.AI international coding-plan Anthropic-compatible endpoint.",
 		KeyEnv:      "ZAI_CODING_API_KEY",
@@ -474,6 +492,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "opencode-go",
+		Vendor:      "opencode",
 		Label:       "OpenCode Go",
 		Description: "OpenCode Go relay with per-model capability overrides.",
 		KeyEnv:      "OPENCODE_GO_API_KEY",
@@ -521,6 +540,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	opencodeGoDeepSeekResponsesPreset,
 	{
 		ID:          "opencode-zen-anthropic",
+		Vendor:      "opencode",
 		Label:       "OpenCode Zen Anthropic",
 		Description: "OpenCode Zen Anthropic-compatible route for Claude and Qwen models.",
 		KeyEnv:      "OPENCODE_API_KEY",
@@ -537,6 +557,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "qwen-cn",
+		Vendor:      "qwen",
 		Label:       "Qwen CN API",
 		Description: "Alibaba DashScope China standard OpenAI-compatible endpoint.",
 		KeyEnv:      "QWEN_API_KEY",
@@ -555,6 +576,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "qwen-global",
+		Vendor:      "qwen",
 		Label:       "Qwen Global API",
 		Description: "Alibaba DashScope international standard OpenAI-compatible endpoint.",
 		KeyEnv:      "QWEN_API_KEY",
@@ -572,6 +594,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "qwen-coding-plan-cn",
+		Vendor:      "qwen",
 		Label:       "Qwen Coding Plan CN",
 		Description: "Alibaba Cloud Qwen Coding Plan China endpoint.",
 		KeyEnv:      "QWEN_CODING_API_KEY",
@@ -590,6 +613,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "qwen-coding-plan-cn-anthropic",
+		Vendor:      "qwen",
 		Label:       "Qwen Coding Plan CN Anthropic",
 		Description: "Alibaba Cloud Qwen Coding Plan China Anthropic-compatible endpoint.",
 		KeyEnv:      "QWEN_CODING_API_KEY",
@@ -609,6 +633,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "qwen-coding-plan-global",
+		Vendor:      "qwen",
 		Label:       "Qwen Coding Plan Global",
 		Description: "Alibaba Cloud Qwen Coding Plan international endpoint.",
 		KeyEnv:      "QWEN_CODING_API_KEY",
@@ -626,6 +651,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "qwen-coding-plan-global-anthropic",
+		Vendor:      "qwen",
 		Label:       "Qwen Coding Plan Global Anthropic",
 		Description: "Alibaba Cloud Qwen Coding Plan international Anthropic-compatible endpoint.",
 		KeyEnv:      "QWEN_CODING_API_KEY",
@@ -644,6 +670,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "stepfun",
+		Vendor:      "stepfun",
 		Label:       "StepFun",
 		Description: "StepFun coding-plan OpenAI-compatible endpoint.",
 		KeyEnv:      "STEPFUN_API_KEY",
@@ -660,6 +687,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "stepfun-anthropic",
+		Vendor:      "stepfun",
 		Label:       "StepFun Anthropic",
 		Description: "StepFun coding-plan Anthropic-compatible endpoint.",
 		KeyEnv:      "STEPFUN_API_KEY",
@@ -677,6 +705,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "novita",
+		Vendor:      "novita",
 		Label:       "NovitaAI",
 		Description: "NovitaAI OpenAI-compatible multi-model gateway.",
 		KeyEnv:      "NOVITA_API_KEY",
@@ -691,6 +720,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "gmi",
+		Vendor:      "gmi",
 		Label:       "GMI Cloud",
 		Description: "GMI Cloud direct multi-model OpenAI-compatible gateway.",
 		KeyEnv:      "GMI_API_KEY",
@@ -706,6 +736,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "vercel-ai-gateway",
+		Vendor:      "vercel",
 		Label:       "Vercel AI Gateway",
 		Description: "Vercel AI Gateway via Anthropic-compatible Messages API.",
 		KeyEnv:      "AI_GATEWAY_API_KEY",
@@ -723,6 +754,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "huggingface",
+		Vendor:      "huggingface",
 		Label:       "HuggingFace Router",
 		Description: "HuggingFace Inference Router OpenAI-compatible endpoint.",
 		KeyEnv:      "HF_TOKEN",
@@ -737,6 +769,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "nvidia",
+		Vendor:      "nvidia",
 		Label:       "NVIDIA NIM",
 		Description: "NVIDIA NIM OpenAI-compatible accelerated inference endpoint.",
 		KeyEnv:      "NVIDIA_API_KEY",
@@ -751,6 +784,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "kilocode",
+		Vendor:      "kilocode",
 		Label:       "KiloCode",
 		Description: "Kilo Code gateway OpenAI-compatible endpoint.",
 		KeyEnv:      "KILOCODE_API_KEY",
@@ -765,6 +799,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	},
 	{
 		ID:          "ollama-cloud",
+		Vendor:      "ollama",
 		Label:       "Ollama Cloud",
 		Description: "Hosted Ollama Cloud OpenAI-compatible endpoint with max reasoning effort.",
 		KeyEnv:      "OLLAMA_API_KEY",
@@ -778,97 +813,3 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 		}},
 	},
 }, globalProviderPresets)
-
-func cloneProviderPreset(p ProviderPreset) ProviderPreset {
-	p.Entries = cloneProviderEntries(p.Entries)
-	for i := range p.Entries {
-		p.Entries[i].PresetID = p.ID
-		p.Entries[i].PresetVersion = ProviderPresetVersion
-	}
-	return p
-}
-
-func cloneProviderEntries(in []ProviderEntry) []ProviderEntry {
-	out := make([]ProviderEntry, 0, len(in))
-	for _, e := range in {
-		out = append(out, cloneProviderEntry(e))
-	}
-	return out
-}
-
-func cloneProviderEntry(e ProviderEntry) ProviderEntry {
-	if e.WebSearch != nil {
-		value := *e.WebSearch
-		e.WebSearch = &value
-	}
-	if e.ResponsesStateful != nil {
-		value := *e.ResponsesStateful
-		e.ResponsesStateful = &value
-	}
-	if e.visionOverride != nil {
-		value := *e.visionOverride
-		e.visionOverride = &value
-	}
-	e.Models = append([]string(nil), e.Models...)
-	e.VisionModels = append([]string(nil), e.VisionModels...)
-	e.SupportedEfforts = append([]string(nil), e.SupportedEfforts...)
-	e.Headers, e.ModelAliases = cloneStringMap(e.Headers), cloneStringMap(e.ModelAliases)
-	e.ExtraBody = cloneAnyMap(e.ExtraBody)
-	e.Price = clonePricing(e.Price)
-	e.Prices = clonePricingMap(e.Prices)
-	e.ModelOverrides = cloneModelOverrideMap(e.ModelOverrides)
-	return e
-}
-
-func clonePricingMap(in map[string]*provider.Pricing) map[string]*provider.Pricing {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]*provider.Pricing, len(in))
-	for k, v := range in {
-		out[k] = clonePricing(v)
-	}
-	return out
-}
-
-func cloneAnyMap(in map[string]any) map[string]any {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(in))
-	for k, v := range in {
-		out[k] = cloneAnyValue(v)
-	}
-	return out
-}
-
-func cloneAnyValue(v any) any {
-	switch x := v.(type) {
-	case map[string]any:
-		return cloneAnyMap(x)
-	case []any:
-		out := make([]any, len(x))
-		for i := range x {
-			out[i] = cloneAnyValue(x[i])
-		}
-		return out
-	default:
-		return v
-	}
-}
-
-func cloneModelOverrideMap(in map[string]ProviderModelOverride) map[string]ProviderModelOverride {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]ProviderModelOverride, len(in))
-	for k, v := range in {
-		v.SupportedEfforts = append([]string(nil), v.SupportedEfforts...)
-		if v.Vision != nil {
-			vision := *v.Vision
-			v.Vision = &vision
-		}
-		out[k] = v
-	}
-	return out
-}

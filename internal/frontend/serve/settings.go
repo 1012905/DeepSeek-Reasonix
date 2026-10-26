@@ -288,6 +288,10 @@ type modelEntry struct {
 	// Vendor is the endpoint host. Entries sharing it are one service reached
 	// under different protocols, which is what lets a picker fold the routes.
 	Vendor string `json:"vendor,omitempty"`
+	// Mark is the vendor the curated preset this provider was created from
+	// declares, for the client to draw a mark. Empty for a provider the person
+	// wrote by hand: nothing declares its vendor, so the client does not guess.
+	Mark string `json:"mark,omitempty"`
 	// KeyEnv is the credential this route spends. It pairs with Vendor to
 	// identify the account: one host can hold more than one.
 	KeyEnv string `json:"keyEnv,omitempty"`
@@ -390,4 +394,16 @@ func tariffBody(t pricing.Tariff) map[string]any {
 		body["changesAt"] = t.ChangesAt.UTC().Format(time.RFC3339)
 	}
 	return body
+}
+
+// presetVendor is the declared vendor of the curated preset a provider came
+// from, read through the provenance the entry already records.
+func presetVendor(p *config.ProviderEntry) string {
+	if p == nil || p.PresetID == "" {
+		return ""
+	}
+	if preset, ok := config.CuratedProviderPreset(p.PresetID); ok {
+		return preset.Vendor
+	}
+	return ""
 }
