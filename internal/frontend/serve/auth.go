@@ -706,3 +706,14 @@ func PlainHTTPAuthWarning(cfg config.ServeConfig, addr string) string {
 	}
 	return "warning: authenticated serve is listening on non-loopback HTTP; use HTTPS via a trusted reverse proxy or bind to 127.0.0.1 for local-only access"
 }
+
+// OpenBindRefusal is why serve will not start with authentication off on an
+// address other machines can reach: sessions and history are then readable by
+// anyone on the network. allow is the operator saying they accept that.
+func OpenBindRefusal(cfg config.ServeConfig, addr string, allow bool) error {
+	mode, err := NormalizeAuthMode(cfg.AuthMode)
+	if err != nil || mode != "none" || allow || isLoopbackHost(addr) {
+		return nil
+	}
+	return fmt.Errorf("auth none on %s would let anyone on the network read sessions and history; use --auth token or password, bind to 127.0.0.1, or pass --allow-open-network", addr)
+}
