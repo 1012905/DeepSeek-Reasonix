@@ -1,0 +1,2 @@
+- 新增：设置「人设」里你自己的预设现在也能点「设为默认」作为新任务默认；该预设被删除后，新任务会改用内置的并忘掉这个默认。关联 #14572。
+- Added: in Settings, your own agent presets can now be made the new task default; if one is deleted, new tasks fall back to the built-in one and forget it. Refs #14572.
