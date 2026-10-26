@@ -1,2 +1,2 @@
-- 改进：放大设置窗口后，设置内容一直铺到窗口最底部，不再在底部留一条空白。关联 #14418。
-- Changed: an enlarged settings window now reaches the bottom of the window instead of leaving a blank strip beneath it. Refs #14418.
+- 改进：放大设置窗口后铺满整个窗口，含顶部和底部，Windows 的窗口按钮在设置头部里；放大按钮的箭头随状态向外或向内。关联 #14418。
+- Changed: an enlarged settings window fills the whole window, top and bottom, with the Windows buttons in its header; the enlarge button's arrows turn inward. Refs #14418.
