@@ -641,6 +641,7 @@ export const ACTIONS: UIAction[] = [
   { id: "deck.agents", kind: "view", target: "none", proof: "interaction" },
   { id: "deck.jobs", kind: "view", target: "none", proof: "interaction" },
   { id: "plan.fold", kind: "view", target: "none", proof: "interaction" },
+  { id: "plan.collapse", kind: "view", target: "none", proof: "interaction" },
   { id: "workbench.file", kind: "view", target: "entity", proof: "interaction" },
   { id: "tool-approval.mode", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // The folder-trust question and the no-sandbox note beside the composer.
