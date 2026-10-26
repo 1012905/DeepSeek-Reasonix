@@ -55,6 +55,7 @@ import { MockPort } from "../src/port/mock";
 import { fromHistory } from "../src/state/session";
 import { HttpError } from "../src/port/port";
 import type { AgentPort, Appearance, ChipCall, HistoryMessage, McpEntry } from "../src/port/port";
+import type { HistoryPage } from "../src/port/session";
 import type { UpdateProgress } from "../src/port/version";
 import type { ThemePack } from "../src/port/look";
 import type { RuntimeView, TreeWindow, TreeWorkspace } from "../src/port/hub";
@@ -350,6 +351,20 @@ class BenchPort extends MockPort {
   // stream — is what a switch costs.
   async history(): Promise<HistoryMessage[]> {
     return query.has("deliveries") ? deliveryHistory() : storedHistory();
+  }
+
+  // ?paged=N serves that transcript the way a paging kernel does: N messages a
+  // page, counted back from the newest. Without the parameter the answer is 404
+  // and the read falls back to full history, so scripts written before paging
+  // keep measuring what they measured.
+  async historyPage(cursor?: string): Promise<HistoryPage> {
+    const size = Number(query.get("paged") ?? 0);
+    if (!(size > 0)) throw new HttpError(404, "paged history is off");
+    const all = query.has("deliveries") ? deliveryHistory() : storedHistory();
+    const end = cursor ? Number(cursor) : all.length;
+    const start = Math.max(0, end - size);
+    return { messages: all.slice(start, end), toolContext: [], snapshot: "harness", start, end, total: all.length,
+      hasMoreBefore: start > 0, nextCursor: start > 0 ? String(start) : undefined };
   }
 
   // ?queue= fills the pending queue to the count under measurement. Seeded
