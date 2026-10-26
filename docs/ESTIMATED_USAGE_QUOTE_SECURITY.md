@@ -40,6 +40,14 @@ same owner. `CostComplete`, `DisplayComplete` and `Complete` stay false, coverag
 stays incomplete, and the reason is existing `missing_price_or_usage`.
 No new reason, enum or wire field is added.
 
+Existing selected-cost aliases in wire/ACP and recorded rows remain absent for
+an incomplete selection. Their original amounts remain in the quote/row. The
+reported-usage controls retain those optional aliases. This uses the existing
+unavailable-display path, without a wire version or permission change.
+
+wire、ACP 与统计行的既有选定金额别名在不完整选择时保持缺省，原金额仍在报价
+或行内。准确用量对照保留这些可选别名；复用已有不可用显示路径，不改版本或权限。
+
 主循环、guardian 及配置辅助报价共用同一入口。三个完整性字段保持假，覆盖为
 不完整，原因复用已有值。没有新增原因码、枚举或序列化字段。
 
