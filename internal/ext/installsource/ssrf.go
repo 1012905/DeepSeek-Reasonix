@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+
+	"reasonix/internal/base/netclient"
 )
 
 // ssrfGuardClient wraps base so every fetch refuses to connect to private,
@@ -74,6 +76,13 @@ func mustCIDR(s string) *net.IPNet {
 // blockedFetchIP reports whether ip is an address install_source must not reach.
 // Loopback is intentionally allowed (see ssrfGuardClient).
 func blockedFetchIP(ip net.IP) bool {
+	if v4 := netclient.EmbeddedIPv4(ip); v4 != nil && !v4.Equal(ip) && blockedFetchAddress(v4) {
+		return true
+	}
+	return blockedFetchAddress(ip)
+}
+
+func blockedFetchAddress(ip net.IP) bool {
 	return ip.IsPrivate() || // RFC1918 + IPv6 unique-local (fc00::/7)
 		ip.IsLinkLocalUnicast() || // 169.254.0.0/16 (incl. cloud metadata) + fe80::/10
 		ip.IsLinkLocalMulticast() ||
