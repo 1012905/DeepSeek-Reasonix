@@ -41,18 +41,16 @@ func (a *Agent) bindRootTokenBudget(ctx context.Context, state *turnRuntime) con
 			previous = &rootTokenBudget{used: new(atomic.Uint64)}
 			previous.observe(&provider.Usage{PromptTokens: a.task.budget.promptTokens, CompletionTokens: a.task.budget.outputTokens})
 		}
-		limit := a.taskBudgetLimit(ctx)
-		wall := previous.wall
-		if wall.started.IsZero() {
-			wall.started = a.task.budget.started
-			if wall.started.IsZero() {
-				wall.started = state.budget.started
-			}
+		started := a.task.budget.started
+		if started.IsZero() {
+			started = state.budget.started
 		}
-		wall.limit = limit.Wall
-		scope = &rootTokenBudget{used: previous.used, limit: uint64(max(0, limit.Tokens)), wall: wall}
+		scope = rootBudgetSnapshot(previous, a.taskBudgetLimit(ctx), started)
 		a.task.budget.rootTokens = scope
+		a.task.budget.rootOrigin = rootBudgetOrigin{session: a.Session(), scopeID: a.task.scopeID}
 		ctx = context.WithValue(ctx, rootTokenBudgetKey{}, scope)
+	} else if prepared, ok := ctx.Value(preparedRootBudgetKey{}).(preparedRootBudget); ok && prepared.owner == a {
+		a.task.budget.rootTokens, a.task.budget.rootOrigin = scope, prepared.origin
 	}
 	state.budget.rootTokens = scope
 	return provider.WithAuxiliaryUsageObserver(ctx, scope.observe)

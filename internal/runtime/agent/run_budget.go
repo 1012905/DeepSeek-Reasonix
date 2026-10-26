@@ -52,6 +52,7 @@ type runBudget struct {
 	// starts a new task.
 	limit      TaskBudget
 	rootTokens *rootTokenBudget
+	rootOrigin rootBudgetOrigin
 }
 
 // observe folds one round's provider usage into the turn's running total.
