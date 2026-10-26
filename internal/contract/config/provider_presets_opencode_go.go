@@ -3,6 +3,7 @@ package config
 var opencodeGoAnthropicPreset = ProviderPreset{
 	ID:          "opencode-go-anthropic",
 	Vendor:      "opencode",
+	Relay:       true,
 	Label:       "OpenCode Go Anthropic",
 	Description: "OpenCode Go subscription Anthropic-compatible route for Qwen and MiniMax models.",
 	KeyEnv:      "OPENCODE_GO_API_KEY",
@@ -22,6 +23,7 @@ var opencodeGoAnthropicPreset = ProviderPreset{
 var opencodeGoDeepSeekAnthropicPreset = ProviderPreset{
 	ID:          "opencode-go-deepseek-anthropic",
 	Vendor:      "opencode",
+	Relay:       true,
 	Label:       "OpenCode Go DeepSeek Anthropic",
 	Description: "OpenCode Go Anthropic Messages route for DeepSeek Flash with server-side web search.",
 	KeyEnv:      "OPENCODE_GO_API_KEY",
@@ -43,6 +45,7 @@ var opencodeGoDeepSeekAnthropicPreset = ProviderPreset{
 var opencodeGoDeepSeekResponsesPreset = ProviderPreset{
 	ID:          "opencode-go-deepseek-responses",
 	Vendor:      "opencode",
+	Relay:       true,
 	Label:       "OpenCode Go DeepSeek Responses",
 	Description: "OpenCode Go stateless Responses API route for DeepSeek Flash with server-side web search.",
 	KeyEnv:      "OPENCODE_GO_API_KEY",

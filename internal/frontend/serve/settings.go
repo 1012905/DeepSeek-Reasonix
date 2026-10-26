@@ -292,6 +292,9 @@ type modelEntry struct {
 	// declares, for the client to draw a mark. Empty for a provider the person
 	// wrote by hand: nothing declares its vendor, so the client does not guess.
 	Mark string `json:"mark,omitempty"`
+	// ServiceMark is the same vendor for the service heading. It differs from
+	// Mark only on a relay, whose models are made by someone else.
+	ServiceMark string `json:"serviceMark,omitempty"`
 	// KeyEnv is the credential this route spends. It pairs with Vendor to
 	// identify the account: one host can hold more than one.
 	KeyEnv string `json:"keyEnv,omitempty"`
@@ -397,13 +400,19 @@ func tariffBody(t pricing.Tariff) map[string]any {
 }
 
 // presetVendor is the declared vendor of the curated preset a provider came
-// from, read through the provenance the entry already records.
-func presetVendor(p *config.ProviderEntry) string {
+// from, read through the provenance the entry already records, and whether the
+// preset is a relay of other makers' models.
+func presetVendor(p *config.ProviderEntry) (vendor string, relay bool) {
 	if p == nil || p.PresetID == "" {
-		return ""
+		return "", false
 	}
 	if preset, ok := config.CuratedProviderPreset(p.PresetID); ok {
-		return preset.Vendor
+		return preset.Vendor, preset.Relay
 	}
-	return ""
+	return "", false
+}
+
+func providerMark(p *config.ProviderEntry) string {
+	vendor, _ := presetVendor(p)
+	return vendor
 }

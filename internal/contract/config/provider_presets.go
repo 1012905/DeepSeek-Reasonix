@@ -14,7 +14,10 @@ type ProviderPreset struct {
 	// Vendor names the maker or operator of the service, as a lowercase slug the
 	// client draws a mark for. It is declared per preset, never derived from the
 	// id or the label.
-	Vendor      string
+	Vendor string
+	// Relay marks a service that sells models other makers built, so its mark
+	// belongs to the service and a model row must not borrow it.
+	Relay       bool
 	Description string
 	KeyEnv      string
 	Entries     []ProviderEntry
@@ -234,6 +237,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	{
 		ID:          "token-rhythm",
 		Vendor:      "token-rhythm",
+		Relay:       true,
 		Label:       "Token Rhythm",
 		Description: "Token Rhythm (基元律动) multi-model OpenAI-compatible gateway.",
 		KeyEnv:      "TOKEN_RHYTHM_API_KEY",
@@ -493,6 +497,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	{
 		ID:          "opencode-go",
 		Vendor:      "opencode",
+		Relay:       true,
 		Label:       "OpenCode Go",
 		Description: "OpenCode Go relay with per-model capability overrides.",
 		KeyEnv:      "OPENCODE_GO_API_KEY",
@@ -541,6 +546,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	{
 		ID:          "opencode-zen-anthropic",
 		Vendor:      "opencode",
+		Relay:       true,
 		Label:       "OpenCode Zen Anthropic",
 		Description: "OpenCode Zen Anthropic-compatible route for Claude and Qwen models.",
 		KeyEnv:      "OPENCODE_API_KEY",
@@ -706,6 +712,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	{
 		ID:          "novita",
 		Vendor:      "novita",
+		Relay:       true,
 		Label:       "NovitaAI",
 		Description: "NovitaAI OpenAI-compatible multi-model gateway.",
 		KeyEnv:      "NOVITA_API_KEY",
@@ -721,6 +728,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	{
 		ID:          "gmi",
 		Vendor:      "gmi",
+		Relay:       true,
 		Label:       "GMI Cloud",
 		Description: "GMI Cloud direct multi-model OpenAI-compatible gateway.",
 		KeyEnv:      "GMI_API_KEY",
@@ -737,6 +745,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	{
 		ID:          "vercel-ai-gateway",
 		Vendor:      "vercel",
+		Relay:       true,
 		Label:       "Vercel AI Gateway",
 		Description: "Vercel AI Gateway via Anthropic-compatible Messages API.",
 		KeyEnv:      "AI_GATEWAY_API_KEY",
@@ -755,6 +764,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	{
 		ID:          "huggingface",
 		Vendor:      "huggingface",
+		Relay:       true,
 		Label:       "HuggingFace Router",
 		Description: "HuggingFace Inference Router OpenAI-compatible endpoint.",
 		KeyEnv:      "HF_TOKEN",
@@ -770,6 +780,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	{
 		ID:          "nvidia",
 		Vendor:      "nvidia",
+		Relay:       true,
 		Label:       "NVIDIA NIM",
 		Description: "NVIDIA NIM OpenAI-compatible accelerated inference endpoint.",
 		KeyEnv:      "NVIDIA_API_KEY",
@@ -785,6 +796,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	{
 		ID:          "kilocode",
 		Vendor:      "kilocode",
+		Relay:       true,
 		Label:       "KiloCode",
 		Description: "Kilo Code gateway OpenAI-compatible endpoint.",
 		KeyEnv:      "KILOCODE_API_KEY",
@@ -800,6 +812,7 @@ var curatedProviderPresets = slices.Concat([]ProviderPreset{
 	{
 		ID:          "ollama-cloud",
 		Vendor:      "ollama",
+		Relay:       true,
 		Label:       "Ollama Cloud",
 		Description: "Hosted Ollama Cloud OpenAI-compatible endpoint with max reasoning effort.",
 		KeyEnv:      "OLLAMA_API_KEY",

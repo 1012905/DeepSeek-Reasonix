@@ -14,7 +14,7 @@ export function modelMenu(models: ModelEntry[], order: readonly string[] = [], c
   const out: MenuItem[] = [];
   for (const [i, a] of accounts.entries()) {
     const mono = monogram(a.label, a.key);
-    const mark = a.kinds.flatMap((k) => a.byKind[k]).find((m) => m.mark)?.mark;
+    const mark = a.kinds.flatMap((k) => a.byKind[k]).map((m) => m.serviceMark ?? m.mark).find(Boolean);
     out.push({ value: `__account:${a.key}`, label: a.label, right: a.host, header: true, divide: i > 0, mono, mark });
     for (const kind of a.kinds) {
       for (const m of a.byKind[kind]) {

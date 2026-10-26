@@ -6,6 +6,8 @@ export interface ProviderEntry {
   // The label a person gave this source. Only ever shown: every ref, the
   // default model and saved sessions keep pointing at name.
   displayName?: string;
+  // The vendor slug the source's preset declares; absent for a hand-written source.
+  mark?: string;
   kind: string;
   baseUrl: string;
   models: string[];

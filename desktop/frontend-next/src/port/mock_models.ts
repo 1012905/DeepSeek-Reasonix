@@ -27,11 +27,11 @@ export function mockModels(efforts: string[]): ModelEntry[] {
     },
     {
       ref: "myrelay/gpt-4o", provider: "myrelay", model: "gpt-4o", kind: "openai",
-      vendor: "relay.example.com", keyEnv: "MYRELAY_API_KEY", vision: true, contextWindow: 131072,
+      vendor: "relay.example.com", serviceMark: "openrouter", keyEnv: "MYRELAY_API_KEY", vision: true, contextWindow: 131072,
     },
     {
       ref: "myrelay/claude-sonnet-4", provider: "myrelay", model: "claude-sonnet-4", kind: "openai",
-      vendor: "relay.example.com", keyEnv: "MYRELAY_API_KEY", contextWindow: 200000,
+      vendor: "relay.example.com", serviceMark: "openrouter", keyEnv: "MYRELAY_API_KEY", contextWindow: 200000,
     },
     {
       ref: "myrelay-work/gpt-4o", provider: "myrelay-work", model: "gpt-4o", kind: "openai",

@@ -35,3 +35,12 @@ func TestPresetsOfOneVendorShareTheSlug(t *testing.T) {
 		}
 	}
 }
+
+func TestRelaysAreDeclaredNotInferred(t *testing.T) {
+	for id, want := range map[string]bool{"openrouter": true, "token-rhythm": true, "opencode-go": true, "kimi-cn": false, "deepseek-responses": false} {
+		preset, ok := CuratedProviderPreset(id)
+		if !ok || preset.Relay != want {
+			t.Errorf("preset %q relay = %v (found %v), want %v", id, preset.Relay, ok, want)
+		}
+	}
+}

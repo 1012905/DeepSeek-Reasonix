@@ -85,3 +85,9 @@ it("carries the declared vendor mark onto the account heading and its rows, neve
   expect(ds?.mark).toBe("deepseek");
   expect(plain?.mark).toBeUndefined();
 });
+
+it("puts a relay's own mark on its heading and leaves its model rows to the letter chip", () => {
+  const items = modelMenu([{ ref: "or/x", provider: "or", vendor: "openrouter.ai", model: "x", serviceMark: "openrouter" }]);
+  expect(items.find((it) => it.header)?.mark).toBe("openrouter");
+  expect(items.find((it) => it.value === "or/x")?.mark).toBeUndefined();
+});

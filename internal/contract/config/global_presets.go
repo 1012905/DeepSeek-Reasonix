@@ -31,6 +31,7 @@ var globalProviderPresets = []ProviderPreset{
 	{
 		ID:          "openrouter",
 		Vendor:      "openrouter",
+		Relay:       true,
 		Label:       "OpenRouter",
 		Description: "OpenRouter multi-model gateway: DeepSeek, GPT, Gemini, Kimi, GLM, Qwen and MiniMax behind one key.",
 		KeyEnv:      "OPENROUTER_API_KEY",
