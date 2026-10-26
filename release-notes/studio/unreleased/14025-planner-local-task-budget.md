@@ -1,0 +1,2 @@
+- Fixed: tool-enabled planning now honors existing configured token, cost and time budgets. Normal planner pauses retain executor fallback; zero defaults and context overrides remain. Refs #14025.
+- 修复：启用工具的规划现在遵守既有 token、费用、耗时预算配置。普通规划暂停保留 executor 回退，零默认值和 context override 保持不变。Refs #14025.
