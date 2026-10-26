@@ -27,13 +27,17 @@ root task, root session replacement or explicit root reset starts another counte
 不能通过局部 override 放宽继承的根阈值。继续同一根任务会保留计数器；新根任务、
 替换根会话或显式重置根预算则使用另一个计数器。
 
-Task and fleet background jobs project only the token scope through
-`agent.InheritRootTokenBudget`. Job Manager cancellation and deadlines remain
-authoritative. A parent turn ending does not erase the handed-off scope. An old
-job still charges its old counter after the parent starts a different task.
+Task and fleet background jobs project the opaque root scope through
+`agent.InheritRootTokenBudget`. It carries token bounds and explicit
+[wall bounds](ROOT_WALL_BUDGET_SECURITY.md), while Job Manager cancellation and
+deadlines remain authoritative.
 
-task 和 fleet 后台 job 通过 `agent.InheritRootTokenBudget` 仅传递 token scope，
-取消与截止时间仍由 Job Manager 掌握。父 turn 结束不会抹掉已交出的 scope。父任务
+A parent turn ending does not erase the handed-off scope. An old job still
+charges its old counter after the parent starts a different task.
+
+task 和 fleet 后台 job 通过 `agent.InheritRootTokenBudget` 传递不透明根 scope，
+包括 token 与显式[耗时门禁](ROOT_WALL_BUDGET_SECURITY.md)，取消与截止时间仍由
+Job Manager 掌握。父 turn 结束不会抹掉已交出的 scope。父任务
 换成另一项工作后，旧 job 仍记入旧计数器，不会扣减新任务的预算。
 
 ## Authority and limits / 权限与边界
@@ -58,7 +62,7 @@ request by this gate. A missing usage report is unknown, not proof of free work.
 
 Auxiliary provider calls outside `observeRunBudget`, remote processes, durable
 restart accounting and a shared planner/executor Coordinator root are not
-covered. Existing cost and wall-time gates and per-Agent budget telemetry retain
+covered. Existing local cost/time gates and per-Agent budget telemetry retain
 their meanings. No currency amounts are mixed; unpriced models still count tokens.
 
 `observeRunBudget` 之外的辅助模型调用、远程进程、持久化重启记账，以及跨 planner
