@@ -4085,8 +4085,6 @@
   .theme-more > summary b { font: var(--w-med) var(--fs-ui) var(--ui); color: var(--text) }
   .theme-more > summary em { font: var(--w-reg) var(--fs-meta) var(--ui); font-style: normal; color: var(--faint) }
   .theme-more > .palettes { padding: 5px 0 15px }
-  .personal { margin-top: 12px }
-  .personal > .grp { border-top: 1px solid var(--hair); margin-top: 0 }
   .pal { display: flex; flex-direction: column; gap: 7px; padding: 0; border: 0; background: none; text-align: left; cursor: pointer }
   .pal-art {
     position: relative; display: flex; aspect-ratio: 16 / 10; overflow: hidden;

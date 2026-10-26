@@ -378,13 +378,6 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
         <ApplyNote id="size" />
       </section>
 
-      <details className="advset personal">
-        <summary>
-          <span className="tx">
-            <span className="lb">{t("更多个性化")}</span>
-            <span className="ds">{look.wallpaper ? t("已设置自定义壁纸") : t("壁纸与背景位置")}</span>
-          </span>
-        </summary>
       <section className="grp" id="set-wallpaper" data-setting="wallpaper">
         <div className="grp-hd">
           <h3>{t("壁纸")}</h3>
@@ -422,6 +415,8 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
           {look.wallpaper && (
             <div
               className="paperview"
+              role="img"
+              aria-label={t("壁纸")}
               ref={setView}
               style={{
                 backgroundImage: look.wallpaper.kind === "video" ? undefined : `url("${look.wallpaper.url}")`,
@@ -527,7 +522,6 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
         </div>
         <ApplyNote id="wallpaper" />
       </section>
-      </details>
 
       <section className="grp" id="set-language" data-setting="language">
         <div className="grp-hd">
