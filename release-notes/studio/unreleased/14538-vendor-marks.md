@@ -1,0 +1,2 @@
+- 新增：常用服务列表按厂商筛选并显示厂商图标，模型菜单里预设来源的模型也带上对应厂商图标。关联 #14538。
+- Added: the preset list filters by vendor and shows vendor marks, and models from a preset source carry the vendor mark in the model menu. Refs #14538.

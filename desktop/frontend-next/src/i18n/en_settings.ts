@@ -1090,6 +1090,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "单轮生成上限；留空使用内核的模型默认值。": "The per-turn generation limit; leave blank to use the runtime's model default.",
   "高级连接选项": "Advanced connection options",
   "从常用服务开始": "Start from a common service",
+  "按厂商筛选": "Filter by vendor",
   "留空就用预设自带的名称；重名时内核会自动编号。": "Leave empty to use the preset's own name; the kernel numbers a duplicate.",
   "模型目录、上下文窗口和思考设置由内核按这个服务的预设一并创建。": "The kernel creates the model catalogue, context window and thinking settings for this service from its preset.",
   "没有匹配的服务": "No matching service",
