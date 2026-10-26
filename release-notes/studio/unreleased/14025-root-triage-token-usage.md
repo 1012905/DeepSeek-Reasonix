@@ -1,2 +1,0 @@
-- 修复：活跃根任务的 token 软预算现在计入命令分类和外部内容筛查用量；分类结论、筛查提示、缺失用量与零阈值行为保留。关联 #14025。
-- Fixed: active root token soft budgets now include command-classification and external-screening usage, preserving verdicts, advisory notices, missing usage and zero limits. Refs #14025.

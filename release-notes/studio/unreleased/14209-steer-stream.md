@@ -1,2 +1,0 @@
-- Studio：思考或回答期间发送插话后，文字继续实时更新，不再等到下一次结构事件才补齐。修复 #14209。
-- Studio: reasoning and answers keep streaming while guidance waits in the queue, rather than freezing until the next structural event. Fixes #14209.

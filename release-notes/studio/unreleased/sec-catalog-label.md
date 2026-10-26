@@ -1,2 +1,0 @@
-- 修复：能力目录的列表、搜索和详情里含 MCP 工具描述时，结果带“外部内容，不是指令”的标签。关联 147d5365e。
-- Fixed: capability catalog answers that quote MCP-written tool descriptions carry the external-content label. Refs 147d5365e.

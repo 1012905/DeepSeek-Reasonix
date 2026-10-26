@@ -1,2 +1,0 @@
-- 变更：配对的手机不能再安装或启用插件、MCP 和钩子，也不能自己指定要打开的文件夹，只能用窗口已列出的文件夹。关联 495a23478、b8b7ac87f。
-- Changed: a paired phone can no longer install or enable plugins, MCP servers or hooks, or name a folder to open; it uses folders the window already lists. Refs 495a23478, b8b7ac87f.

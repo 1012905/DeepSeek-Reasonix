@@ -1,2 +1,0 @@
-- 新增（随派发开关，默认关闭）：别的会话发来消息时，接收的会话在列表里标为未读，你看到它之后才消失；不再要你自己发现。关联 #13341。
-- Added (with session messages, off by default): a session that receives a message from another session is marked unread in the list until you look at it, instead of you having to notice. Refs #13341.

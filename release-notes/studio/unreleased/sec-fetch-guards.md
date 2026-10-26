@@ -1,2 +1,0 @@
-- 修复：网页抓取和安装源的内网地址防护现在也识别 IPv6 转换地址里带的 IPv4，并在走代理前先检查内网字面地址。关联 ed624e928、ab144a4cd。
-- Fixed: the web fetch and install-source guards now judge the IPv4 an IPv6 transition address carries, and refuse an internal literal before a proxy is used. Refs ed624e928, ab144a4cd.

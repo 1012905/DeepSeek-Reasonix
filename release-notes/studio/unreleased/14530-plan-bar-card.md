@@ -1,2 +1,0 @@
-- 改进：计划栏现在是输入框上方独立的卡片，展开的计划列表右上角有明确的收起按钮，按 Esc 或点到外面也会收起，列表头部写出进行中和待处理的条数。关联 #14530。
-- Changed: the plan bar is its own card above the composer; its open list has a collapse button at the top right (Esc or a press outside also closes it) and counts the steps. Refs #14530.

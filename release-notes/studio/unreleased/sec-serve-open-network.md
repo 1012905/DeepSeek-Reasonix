@@ -1,2 +1,0 @@
-- 升级须知：`reasonix serve --auth none` 监听非本机地址时现在拒绝启动，需要显式加 `--allow-open-network`。关联 365337367。
-- Upgrade note: `reasonix serve --auth none` now refuses to start on an address other machines can reach unless you pass `--allow-open-network`. Refs 365337367.

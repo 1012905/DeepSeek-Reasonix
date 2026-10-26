@@ -1,2 +1,0 @@
-- 修复：仓库自己的配置里有会执行程序的键（如 fsmonitor、textconv、filter）时，智能体的 git 读命令不再自动放行，会先询问并写明原因。关联 191d1e17a。
-- Fixed: agent git reads (diff, log, show, blame, status) are no longer auto-approved in a repository whose own config runs programs; they ask first and name the key. Refs 191d1e17a.

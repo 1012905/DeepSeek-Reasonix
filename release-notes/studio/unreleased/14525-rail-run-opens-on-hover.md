@@ -1,2 +1,0 @@
-- 改进：极长会话里，右侧历史轨道上表示多条的合并条现在鼠标移上去就展开可选的条目，移开自动收起；原先要点击才展开，且展开后不会自己收。关联 #14525。
-- Changed: in very long conversations, a folded line on the history rail opens its questions on hover and closes when the pointer leaves; it used to need a click and stayed open. Refs #14525.

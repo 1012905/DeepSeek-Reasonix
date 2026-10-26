@@ -1,2 +1,0 @@
-- 修复：Anthropic 流中断时保留已知用量，并标记记账不完整；重试分类、请求计数和取消边界保持不变。关联 #14025。
-- Fixed: Anthropic interruptions retain known usage as incomplete accounting, preserving retry classification, request counts and cancellation boundaries. Refs #14025.

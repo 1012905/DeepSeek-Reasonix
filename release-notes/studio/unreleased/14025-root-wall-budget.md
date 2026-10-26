@@ -1,2 +1,0 @@
-- 修复：host 显式耗时预算跟随 Agent 委派树及后台 task/fleet，共享任务起点并保留 Job Manager 取消权和既有软收尾；默认仍不限。关联 #14025。
-- Fixed: explicit host wall budgets follow Agent delegation and background jobs, retaining Manager cancellation and soft landing. Defaults stay unlimited. Refs #14025.

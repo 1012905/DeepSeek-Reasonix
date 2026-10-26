@@ -1,2 +1,0 @@
-- 修复：宿主 Git 的 worktree 准备不再继承外部索引或对象存储变量，保留显式私有索引和仓库备用对象库。关联 #14025。
-- Fixed: host Git worktree preparation drops ambient index and object storage overrides, preserving explicit private indexes and repository alternates. Refs #14025.

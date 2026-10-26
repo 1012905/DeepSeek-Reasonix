@@ -1,2 +1,0 @@
-- 修复：缺失或估算的供应商用量不再把 Agent 成本标成完整；保留准确请求次数与已知金额，已知费用达到显式预算仍软收尾。关联 #14025。
-- Fixed: missing or estimated provider usage no longer certifies complete Agent costs. Exact request counts and known-cost soft landing remain. Refs #14025.

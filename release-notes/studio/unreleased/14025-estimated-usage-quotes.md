@@ -1,2 +1,0 @@
-- 修复：中断流重建的用量不再被报价层标成完整成本；保留估算金额和既有币种账本，后续准确调用不抹掉不确定性。关联 #14025。
-- Fixed: reconstructed stream usage no longer certifies a complete cost quote. Estimated amounts and currency ledgers remain; later reported calls preserve uncertainty. Refs #14025.

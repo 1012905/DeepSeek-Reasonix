@@ -1,2 +1,0 @@
-- 变更：项目 `reasonix.toml` 里的 `agent.system_prompt_file` 只有在你信任该文件夹后才会读取；未信任时忽略并在启动提示里说明，信任后恢复。关联 #13061。
-- Changed: a project's `agent.system_prompt_file` is read only once you trust the folder; until then it is ignored with a startup notice. Refs #13061.

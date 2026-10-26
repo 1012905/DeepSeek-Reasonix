@@ -1,2 +1,0 @@
-- 修复：在人设编辑页点「设为个人首选」或「设为项目首选」时，设置其实已生效，却弹出「Unexpected end of JSON input」的报错；现在不再误报。关联 #14541。
-- Fixed: "Set as personal default" and "Set as project default" on a persona applied but showed "Unexpected end of JSON input"; an empty success answer is no longer read as JSON. Refs #14541.
