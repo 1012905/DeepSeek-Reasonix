@@ -20,7 +20,8 @@ type rootTokenBudgetKey struct{}
 // Token and wall bounds share its lifetime; job cancellation remains separate.
 func InheritRootTokenBudget(ctx, parent context.Context) context.Context {
 	if scope, ok := parent.Value(rootTokenBudgetKey{}).(*rootTokenBudget); ok {
-		return context.WithValue(ctx, rootTokenBudgetKey{}, scope)
+		ctx = context.WithValue(ctx, rootTokenBudgetKey{}, scope)
+		return provider.WithAuxiliaryUsageObserver(ctx, scope.observe)
 	}
 	return ctx
 }
@@ -47,7 +48,7 @@ func (a *Agent) bindRootTokenBudget(ctx context.Context, state *turnRuntime) con
 		ctx = context.WithValue(ctx, rootTokenBudgetKey{}, scope)
 	}
 	state.budget.rootTokens = scope
-	return ctx
+	return provider.WithAuxiliaryUsageObserver(ctx, scope.observe)
 }
 
 func (b *rootTokenBudget) observe(usage *provider.Usage) {
