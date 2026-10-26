@@ -7,6 +7,10 @@ reviewed: 2026-10-26
 
 # Job panic results / 任务 panic 结果
 
+The delegated-run graph/transcript boundary is assessed separately in
+[delegation panic outcomes](DELEGATION_PANIC_OUTCOME_SECURITY.md).
+委派 run 的图与 transcript 边界另见上述说明。
+
 ## Cause and boundary / 原因与边界
 
 The invocation and finalizer boundaries treated a non-nil `recover()` value as
