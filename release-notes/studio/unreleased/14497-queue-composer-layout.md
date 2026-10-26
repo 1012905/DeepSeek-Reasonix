@@ -1,0 +1,2 @@
+- 改进：待发送队列与输入框共用外框和底色，采用紧凑透明行、内部滚动与轻量图标操作；受阻原因降低对比，取回仍恢复到输入框，现有操作与快捷键保持不变。关联 #14497。
+- Changed: pending messages share the composer frame, with compact transparent rows, internal scrolling and icon actions. Existing queue actions and shortcuts are unchanged. Refs #14497.
