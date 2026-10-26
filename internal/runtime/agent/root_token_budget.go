@@ -11,12 +11,13 @@ import (
 type rootTokenBudget struct {
 	used  *atomic.Uint64
 	limit uint64
+	wall  rootWallBudget
 }
 
 type rootTokenBudgetKey struct{}
 
-// InheritRootTokenBudget carries only the Agent-root token scope into a job.
-// The job keeps its own cancellation and deadline authority.
+// InheritRootTokenBudget carries the opaque Agent-root budget scope into a job.
+// Token and wall bounds share its lifetime; job cancellation remains separate.
 func InheritRootTokenBudget(ctx, parent context.Context) context.Context {
 	if scope, ok := parent.Value(rootTokenBudgetKey{}).(*rootTokenBudget); ok {
 		return context.WithValue(ctx, rootTokenBudgetKey{}, scope)
@@ -32,7 +33,16 @@ func (a *Agent) bindRootTokenBudget(ctx context.Context, state *turnRuntime) con
 			previous = &rootTokenBudget{used: new(atomic.Uint64)}
 			previous.observe(&provider.Usage{PromptTokens: a.task.budget.promptTokens, CompletionTokens: a.task.budget.outputTokens})
 		}
-		scope = &rootTokenBudget{used: previous.used, limit: uint64(max(0, a.taskBudgetLimit(ctx).Tokens))}
+		limit := a.taskBudgetLimit(ctx)
+		wall := previous.wall
+		if wall.started.IsZero() {
+			wall.started = a.task.budget.started
+			if wall.started.IsZero() {
+				wall.started = state.budget.started
+			}
+		}
+		wall.limit = limit.Wall
+		scope = &rootTokenBudget{used: previous.used, limit: uint64(max(0, limit.Tokens)), wall: wall}
 		a.task.budget.rootTokens = scope
 		ctx = context.WithValue(ctx, rootTokenBudgetKey{}, scope)
 	}
@@ -63,6 +73,9 @@ func (a *Agent) exceededTaskBudget(ctx context.Context, state *turnRuntime) (str
 	}
 	if root := state.budget.rootTokens; root != nil && root.limit > 0 && root.used.Load() >= root.limit {
 		return "token", fmt.Sprintf("root task reached its %d token budget across delegated runs", root.limit)
+	}
+	if root := state.budget.rootTokens; root != nil {
+		return root.wall.exceeded()
 	}
 	return "", ""
 }
