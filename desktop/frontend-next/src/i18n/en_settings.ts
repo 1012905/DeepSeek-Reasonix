@@ -127,6 +127,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "项目配置覆盖了这一项；此处保存的是全局设置。": "The project config overrides this; what you set here is saved globally.",
   "尚无可用搜索模型": "No search models available",
   "{model}（不可用）": "{model} (unavailable)",
+  "{model}（未声明读图）": "{model} (not declared to read images)",
   "模型用途": "Model uses",
   "用途": "Use",
   "使用模型": "Model",
