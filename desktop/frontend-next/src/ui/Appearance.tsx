@@ -22,6 +22,7 @@ import { SessionQuickSection } from "./SessionQuickSection";
 import { NavEntriesSection } from "./NavEntriesSection";
 import { NavRailSection } from "./NavRailSection";
 import { GraphicsSection } from "./GraphicsSection";
+import { GlobalShortcutSection } from "./GlobalShortcutSection";
 import { SendShortcut } from "./SendShortcut";
 import { KeysSheet } from "./KeysSheet";
 import { SessionTabsSetting } from "./SessionTabsSetting";
@@ -561,6 +562,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
       <NewAnswerSection />
       <GraphicsSection />
       <SendShortcut />
+      <GlobalShortcutSection />
       <KeysSheet />
       <EscStopSetting />
       <PageSleepSetting />

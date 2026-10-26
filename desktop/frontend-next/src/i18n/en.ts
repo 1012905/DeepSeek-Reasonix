@@ -966,7 +966,6 @@ export const EN: Record<string, string> = {
   "返回正文": "Back to the conversation",
   "完成": "Done",
   "快捷键": "Keyboard shortcuts",
-  "下列按键在窗口中生效；标着 ⌘ 的地方，Windows 与 Linux 上是 Ctrl。": "These work anywhere in the window. Where a chord shows ⌘, Windows and Linux use Ctrl.",
   "在对话里查找": "Find in the conversation",
   "搜索会话": "Search conversations",
   "在提问之间移动": "Move between your questions",
