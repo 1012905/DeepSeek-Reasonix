@@ -427,6 +427,8 @@ func (ag *authGate) loginPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // loginSubmit verifies the password and issues a session cookie.
+const maxLoginFormBytes = 4 << 10
+
 func (ag *authGate) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	// Rate limit.
 	ip := ag.clientIP(r)
@@ -439,6 +441,7 @@ func (ag *authGate) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse the password from the form.
+	r.Body = http.MaxBytesReader(w, r.Body, maxLoginFormBytes)
 	if err := r.ParseForm(); err != nil {
 		badBody(w)
 		return
