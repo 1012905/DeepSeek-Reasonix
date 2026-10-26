@@ -105,6 +105,11 @@ function benchPack(): ThemePack | null {
 class BenchPort extends MockPort {
   opensFiles() { return query.has("deliveries") || super.opensFiles(); }
   revealsFiles() { return query.has("deliveries") || super.revealsFiles(); }
+  async account() {
+    const state = await super.account();
+    const label = query.get("accountLabel");
+    return label && state.signedIn && state.user ? { ...state, user: { ...state.user, label } } : state;
+  }
   // ?mcpactions=1 adds a server whose tools are withheld and one that is followed.
   constructor() {
     super();
