@@ -25,6 +25,13 @@ func InheritRootTokenBudget(ctx, parent context.Context) context.Context {
 	return ctx
 }
 
+// Auxiliary requests share the active context's scope. Using that scope rather
+// than Agent task state also keeps late usage attached to its original task.
+func observeRootTokenUsage(ctx context.Context, usage *provider.Usage) {
+	scope, _ := ctx.Value(rootTokenBudgetKey{}).(*rootTokenBudget)
+	scope.observe(usage)
+}
+
 func (a *Agent) bindRootTokenBudget(ctx context.Context, state *turnRuntime) context.Context {
 	scope, inherited := ctx.Value(rootTokenBudgetKey{}).(*rootTokenBudget)
 	if !inherited {
