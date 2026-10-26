@@ -319,6 +319,10 @@ pack states a shape, never a number the layout has to agree with.
   pack sheet. The backdrop transcript rule defaults to its 2px shadow and 7px
   halo when this variable is absent. The choice affects text only; the frosted
   backing remains. Reduced effects overrides the text shadow.
+- `background.surfaceOpacity.{light,dark}` paints `--bg-{nav,rail,chrome,side,compose}-background`
+  through the pack sheet, only for a backdrop. Omitted values keep existing paint.
+- Shell opacity mixes `--page`; composer opacity mixes `--raised`. Existing
+  Studio scheme-specific overrides and blur remain the defaults.
 
 - Stroke weight is an axis beside contrast, not part of it: however bright the
   colour, 400 Han at 11px is thin. Han strokes are dense and blur at a size

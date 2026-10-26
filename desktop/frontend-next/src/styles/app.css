@@ -62,24 +62,24 @@
   :root[data-sky] .app { background: transparent }
 
   :root[data-bg] .app { background: transparent }
-
   .rail, .side { background: var(--page) }
   .panes { background: var(--surface) }
-
   :root[data-bg] .main, :root[data-bg] .panes { background: transparent }
-
   :root[data-bg] .rail, :root[data-bg] .side,
   :root[data-bg] .nav, :root[data-bg] .chrome {
-    background: color-mix(in srgb, var(--page) 62%, transparent);
     text-shadow: 0 1px 2px color-mix(in srgb, var(--page) 88%, transparent),
                  0 0 6px color-mix(in srgb, var(--page) 70%, transparent);
   }
+  :root[data-bg] .nav { background: var(--bg-nav-background, color-mix(in srgb, var(--page) 62%, transparent)) }
+  :root[data-bg] .rail { background: var(--bg-rail-background, color-mix(in srgb, var(--page) 62%, transparent)) }
+  :root[data-bg] .chrome { background: var(--bg-chrome-background, color-mix(in srgb, var(--page) 62%, transparent)) }
+  :root[data-bg] .side { background: var(--bg-side-background, color-mix(in srgb, var(--page) 62%, transparent)) }
   :root[data-bg] .flow:not([data-empty]) {
     text-shadow: var(--flow-text-shadow, 0 1px 2px color-mix(in srgb, var(--page) 90%, transparent),
                  0 0 7px color-mix(in srgb, var(--page) 72%, transparent));
   }
   :root[data-bg] .compose {
-    background: color-mix(in srgb, var(--raised) 80%, transparent);
+    background: var(--bg-compose-background, color-mix(in srgb, var(--raised) 80%, transparent));
     -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
   }
 
