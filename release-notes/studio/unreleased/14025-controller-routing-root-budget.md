@@ -1,0 +1,2 @@
+- 修复：Controller 在语义路由前绑定根预算，路由用量计入规划与执行共享软额度，保留缓存、新任务和续跑边界。关联 #14025。
+- Fixed: Controller binds root budgets before semantic routing, counting routing usage in shared soft limits while preserving cached decisions and task lifetimes. Refs #14025.
