@@ -1,0 +1,2 @@
+- 修复：活跃根任务的 token 软预算现在计入原生 web_search 已报告用量，保留独立请求计数、缺失用量、来源标签和付费同意边界。关联 #14025。
+- Fixed: active root token soft budgets now include native web_search usage, preserving independent request counts, missing usage, provenance and paid-search consent. Refs #14025.
