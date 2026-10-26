@@ -485,6 +485,7 @@ const JOBS = Number(query.get("jobs") ?? 0);
 // window can be seen before the kernel has named a single folder.
 const TREE_AT = performance.now() + Number(query.get("treems") ?? 0);
 // ?panes=0 opens the window with no conversation open; ?panes=N opens N.
+// ?tree=none answers every tree read with no folders.
 const PANES = query.has("panes") ? Number(query.get("panes")) : 1;
 const NO_PANES = PANES === 0;
 
@@ -501,6 +502,12 @@ class BenchHub extends MockHub {
   }
 
   private readonly settingsPort = new BenchPort();
+  private opened = false;
+
+  async open(req: Parameters<MockHub["open"]>[0]) {
+    this.opened = true;
+    return super.open(req);
+  }
 
   machinePort(): AgentPort {
     return this.settingsPort;
@@ -513,7 +520,7 @@ class BenchHub extends MockHub {
   }
 
   runtimes(): Promise<RuntimeView[]> {
-    if (NO_PANES) return Promise.resolve([]);
+    if (NO_PANES && !this.opened) return Promise.resolve([]);
     if (PANES <= 1) return super.runtimes();
     return Promise.resolve(
       Array.from({ length: PANES }, (_, i) => ({
@@ -546,6 +553,7 @@ class BenchHub extends MockHub {
     }
     const wait = TREE_AT - performance.now();
     if (wait > 0) return new Promise((resolve) => setTimeout(() => resolve(this.tree()), wait));
+    if (query.get("tree") === "none") return Promise.resolve([]);
     if (!WORKSPACES && query.has("trustpending") && PANES > 1) {
       return super.tree().then((all) => all.map((ws, i) => i > 0 ? ws : { ...ws, sessions: Array.from({ length: PANES }, (_, k) => ({
         path: `/sessions/pane-${k + 1}.jsonl`, name: `pane-${k + 1}`, title: `并行会话 ${k + 1}`, turns: 3, runtimeId: `r${k + 1}`,
