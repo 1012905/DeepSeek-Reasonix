@@ -1,0 +1,2 @@
+- 修复：注销配对设备时偶发的数据竞争已修复，被注销设备的连接会可靠断开。关联 a755eb601。
+- Fixed: a data race when a paired device is revoked; its open streams are now cut reliably. Refs a755eb601.

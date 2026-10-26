@@ -1,0 +1,2 @@
+- 变更：未信任的项目文件夹里的 AGENTS.md 等常驻指令会标明“未验证”，模型只当作项目信息；项目自己声明的 MCP 常驻加载不再生效。关联 4ca33493a、e8c22e7ce。
+- Changed: standing instructions from an untrusted folder are labelled unverified, and a project's own MCP always-load no longer applies. Refs 4ca33493a, e8c22e7ce.

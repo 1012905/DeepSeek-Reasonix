@@ -1,0 +1,2 @@
+- 升级须知：`reasonix trust --yes` 不再顺带批准项目声明的 provider 端点（会把你的 API 密钥发到它的地址），需要加 `--allow-providers`。关联 e19b45d39。
+- Upgrade note: `reasonix trust --yes` no longer approves a provider endpoint the folder declares, which would receive your API key; add `--allow-providers`. Refs e19b45d39.

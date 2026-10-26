@@ -1,0 +1,2 @@
+- 修复：命令里直接写 awk 程序现在要确认；自动记忆不再写入置顶项；登录表单加了大小上限；钩子里未加引号的 Windows 路径被正确识别。关联 de21fb488、4227c20b8、167c01014、6336f6763。
+- Fixed: an inline awk program needs approval, auto memory never pins, the login form is size-capped, and an unquoted Windows hook path is read as written. Refs de21fb488, 4227c20b8, 167c01014.
