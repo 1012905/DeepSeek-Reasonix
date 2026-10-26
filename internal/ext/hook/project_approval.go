@@ -73,7 +73,7 @@ func commandWords(command string) []string {
 	// separators; the fields as written keep it, and the cmd.exe that will run the
 	// line reads them that way.
 	var out []string
-	for _, field := range strings.Fields(command) {
+	for field := range strings.FieldsSeq(command) {
 		if field = strings.Trim(field, `"'`); strings.Contains(field, `\`) {
 			out = append(out, field)
 		}
