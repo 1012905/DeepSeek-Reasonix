@@ -294,6 +294,39 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: test (Windows root token budget)
+        if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -count=1 -timeout=3m -json -run '^Test(RootToken|EffectRootToken)' ./internal/runtime/agent ./internal/assembly/boot | tee "$RUNNER_TEMP/root-token-budget.jsonl"
+          jq -se '
+            [.[] | select(.Test == null and .Action == "pass") | .Package] as $packages |
+            [.[] | select(.Test != null and .Action == "pass") | .Test] as $tests |
+            all(.[]; .Action != "skip" and .Action != "fail") and
+            (["reasonix/internal/runtime/agent", "reasonix/internal/assembly/boot"] - $packages | length) == 0 and
+            (["TestRootTokenBudgetIncludesChildProviderUsage", "TestRootTokenBudgetIncludesChildProviderUsage/configured",
+              "TestRootTokenBudgetIncludesChildProviderUsage/context", "TestRootTokenBudgetIncludesChildProviderUsage/unconfigured",
+              "TestRootTokenBudgetIncludesChildProviderUsage/explicit_zero", "TestRootTokenBudgetSurvivesNestedAndConcurrentChildren",
+              "TestRootTokenBudgetSurvivesNestedAndConcurrentChildren/nested", "TestRootTokenBudgetSurvivesNestedAndConcurrentChildren/siblings",
+              "TestRootTokenBudgetSurvivesNestedAndConcurrentChildren/child_override", "TestRootTokenBudgetContinuationAndReset",
+              "TestRootTokenBudgetContinuationAndReset/continuation", "TestRootTokenBudgetContinuationAndReset/new_task",
+              "TestRootTokenBudgetContinuationAndReset/reset", "TestRootTokenScopeAtomicAccountingAndJobCancellation",
+              "TestEffectRootTokenBudgetReachesDelegatedJobs", "TestEffectRootTokenBudgetReachesDelegatedJobs/foreground",
+              "TestEffectRootTokenBudgetReachesDelegatedJobs/foreground_capability", "TestEffectRootTokenBudgetReachesDelegatedJobs/background",
+              "TestEffectRootTokenBudgetReachesDelegatedJobs/background_capability", "TestEffectRootTokenBudgetReachesDelegatedJobs/background_fleet"] - $tests | length) == 0
+          ' "$RUNNER_TEMP/root-token-budget.jsonl"
+
+      - name: upload Windows root token budget inventory
+        if: always() && env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: root-token-budget-windows-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/root-token-budget.jsonl
+          if-no-files-found: ignore
+          retention-days: 7
+
       # The general Windows PR smoke list intentionally omits internal/contract/tool.
       # Keep the session-temp portability contract covered without widening the
       # leg to every tool test: two real PowerShell launches must share the

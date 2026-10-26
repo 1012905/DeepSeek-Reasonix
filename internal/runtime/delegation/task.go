@@ -653,6 +653,7 @@ func (t *TaskTool) runProfileSpec(ctx context.Context, spec ProfileExecSpec, exi
 		// Capture acquire request by value for the job goroutine.
 		slotReq := acquireReq
 		job := jm.StartForSession(jobs.SessionFromContext(ctx), "task", label, func(jobCtx context.Context, _ io.Writer) (result string, err error) {
+			jobCtx = agent.InheritRootTokenBudget(jobCtx, ctx)
 			jobCtx = agent.WithParentSession(jobCtx, parentSession)
 			jobCtx = evidence.WithLedger(jobCtx, backgroundEvidence)
 			defer func() { jobs.PublishEvidence(jobCtx, backgroundEvidence.Summary()) }()
