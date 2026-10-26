@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
+	"math"
 	"path"
 	"sort"
 	"strconv"
@@ -189,9 +190,14 @@ func sceneObjectImage(files map[string][]byte, image string) ([]byte, bool) {
 	return nil, false
 }
 
+const (
+	maxSceneDimension = 1 << 20
+	maxLayerExtent    = 4.0
+)
+
 func sceneLayers(files map[string][]byte, scene sceneDocument) ([]sceneLayer, float64, float64) {
-	sceneWidth := scene.General.OrthogonalProjection.Width
-	sceneHeight := scene.General.OrthogonalProjection.Height
+	sceneWidth := saneSceneDimension(scene.General.OrthogonalProjection.Width)
+	sceneHeight := saneSceneDimension(scene.General.OrthogonalProjection.Height)
 	layers := make([]sceneLayer, 0, len(scene.Objects))
 	for _, object := range scene.Objects {
 		if object.Visible != nil && !*object.Visible {
@@ -214,8 +220,11 @@ func sceneLayers(files map[string][]byte, scene sceneDocument) ([]sceneLayer, fl
 		if scaleY < 0 {
 			scaleY = -scaleY
 		}
-		if sceneWidth <= 0 || sceneHeight <= 0 {
-			sceneWidth, sceneHeight = imageW, imageH
+		if sceneWidth <= 0 {
+			sceneWidth = saneSceneDimension(imageW)
+		}
+		if sceneHeight <= 0 {
+			sceneHeight = saneSceneDimension(imageH)
 		}
 		originX, originY := parsePair(object.Origin, sceneWidth/2, sceneHeight/2)
 		alpha := 1.0
@@ -228,14 +237,18 @@ func sceneLayers(files map[string][]byte, scene sceneDocument) ([]sceneLayer, fl
 				effects = append(effects, file)
 			}
 		}
+		x := (originX - sizeX*scaleX/2) / sceneWidth
+		y := (originY - sizeY*scaleY/2) / sceneHeight
+		w := sizeX * scaleX / sceneWidth
+		h := sizeY * scaleY / sceneHeight
 		layers = append(layers, sceneLayer{
 			Image:   imageBytes,
 			MIME:    imageMIME(imageBytes),
-			X:       (originX - sizeX*scaleX/2) / sceneWidth,
-			Y:       (originY - sizeY*scaleY/2) / sceneHeight,
-			W:       sizeX * scaleX / sceneWidth,
-			H:       sizeY * scaleY / sceneHeight,
-			Alpha:   clamp01(alpha),
+			X:       boundLayer(x, -maxLayerExtent, maxLayerExtent),
+			Y:       boundLayer(y, -maxLayerExtent, maxLayerExtent),
+			W:       boundLayer(w, 0, maxLayerExtent),
+			H:       boundLayer(h, 0, maxLayerExtent),
+			Alpha:   clampAlpha(alpha),
 			Effects: effects,
 		})
 		if len(layers) >= 16 {
@@ -255,7 +268,7 @@ func parsePair(value string, dx, dy float64) (float64, float64) {
 	}
 	parse := func(s string, fallback float64) float64 {
 		n, err := strconv.ParseFloat(s, 64)
-		if err != nil {
+		if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
 			return fallback
 		}
 		return n
@@ -266,6 +279,33 @@ func parsePair(value string, dx, dy float64) (float64, float64) {
 		y = parse(fields[1], dy)
 	}
 	return x, y
+}
+
+func saneSceneDimension(value float64) float64 {
+	if math.IsNaN(value) || math.IsInf(value, 0) || value <= 0 || value > maxSceneDimension {
+		return 0
+	}
+	return value
+}
+
+func boundLayer(value, lo, hi float64) float64 {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return lo
+	}
+	if value < lo {
+		return lo
+	}
+	if value > hi {
+		return hi
+	}
+	return value
+}
+
+func clampAlpha(value float64) float64 {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return 1
+	}
+	return clamp01(value)
 }
 
 func sceneTexture(files map[string][]byte, materialPath, texture string) ([]byte, bool) {
@@ -303,8 +343,10 @@ func sceneSounds(files map[string][]byte, scene sceneDocument) []sceneAudio {
 		if !ok || mime == "" || len(raw) == 0 {
 			return
 		}
-		if volume <= 0 {
+		if math.IsNaN(volume) || math.IsInf(volume, 0) || volume <= 0 {
 			volume = 1
+		} else {
+			volume = clamp01(volume)
 		}
 		seen[name] = true
 		out = append(out, sceneAudio{Data: raw, MIME: mime, Volume: volume, Loop: loop})
