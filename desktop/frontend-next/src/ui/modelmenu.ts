@@ -6,6 +6,13 @@ import { t } from "../i18n";
 import { KIND_LABEL } from "./vendors";
 import { orderAccounts } from "../state/providerorder";
 
+// modelTooltip names the active model with the picker's canonical account label.
+export function modelTooltip(models: ModelEntry[], current: string | undefined, label: string): string {
+  const account = groupVendors(models).find((a) =>
+    a.kinds.some((kind) => a.byKind[kind].some((model) => model.ref === current)));
+  return account ? `${account.label} / ${label}` : current ?? label;
+}
+
 // Every account gets a heading with its endpoint: the provider name is the
 // config's word for an entry, not the user's for an endpoint, and two doors onto
 // one account share it. Rows carry the wire format beside the model name.
