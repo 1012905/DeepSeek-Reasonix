@@ -1,0 +1,2 @@
+- 修复：规划与执行共用显式配置的根 token 和时间软预算；保留仅规划、审批、继续、换任务及后台作业边界。关联 #14025。
+- Fixed: planning and execution share configured root token/wall soft budgets, preserving plan-only, approval, continuation, task replacement and background-job boundaries. Refs #14025.

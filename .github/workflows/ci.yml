@@ -323,6 +323,39 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: test (Windows Coordinator root budget)
+        if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -count=1 -timeout=3m -json -run '^Test(PreparedRootBudget|CoordinatorRootBudget|EffectCoordinatorRoot)' ./internal/runtime/agent ./internal/runtime/coordinator ./internal/assembly/boot | tee "$RUNNER_TEMP/coordinator-root-budget.jsonl"
+          jq -se '
+            [.[] | select(.Test == null and .Action == "pass") | .Package] as $packages |
+            [.[] | select(.Test != null and .Action == "pass") | .Test] as $tests |
+            all(.[]; .Action != "skip" and .Action != "fail") and
+            (["reasonix/internal/runtime/agent", "reasonix/internal/runtime/coordinator", "reasonix/internal/assembly/boot"] - $packages | length) == 0 and
+            (["TestPreparedRootBudgetLifetime", "TestPreparedRootBudgetLifetime/continuation",
+              "TestPreparedRootBudgetLifetime/new_scope", "TestPreparedRootBudgetLifetime/new_task",
+              "TestPreparedRootBudgetLifetime/reset", "TestPreparedRootBudgetLifetime/new_session",
+              "TestPreparedRootBudgetProjectionAndPreservedTurn", "TestCoordinatorRootBudgetRoutes",
+              "TestCoordinatorRootBudgetRoutes/raw", "TestCoordinatorRootBudgetRoutes/tool_planner",
+              "TestCoordinatorRootBudgetRoutes/failure_fallback", "TestCoordinatorRootBudgetRoutes/plan_only_continuation",
+              "TestCoordinatorRootBudgetRoutes/approval_declined_continuation", "TestCoordinatorRootBudgetRoutes/approval_allowed",
+              "TestEffectCoordinatorRootTokenBudget", "TestEffectCoordinatorRootTokenBudget/shared",
+              "TestEffectCoordinatorRootTokenBudget/unconfigured", "TestEffectCoordinatorRootTokenBudget/context_disables",
+              "TestEffectCoordinatorRootTokenBudget/missing_planner", "TestEffectCoordinatorRootTokenBudget/executor_only"] - $tests | length) == 0
+          ' "$RUNNER_TEMP/coordinator-root-budget.jsonl"
+
+      - name: upload Windows Coordinator root budget inventory
+        if: always() && env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: coordinator-root-budget-windows-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/coordinator-root-budget.jsonl
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: test (Windows root wall budget)
         if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
         timeout-minutes: 5
