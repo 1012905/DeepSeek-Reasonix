@@ -1,0 +1,2 @@
+- 新增（随派发开关，默认关闭）：被派发出去的会话做完任务后，会自己把最终答复送回派发它的会话，不用你再来回转述；回信不会再触发回信。关联 #13341。
+- Added (with dispatch, off by default): a dispatched session sends its final answer back to the session that handed it the task, and a reply is never answered by another reply. Refs #13341.
