@@ -1,0 +1,2 @@
+- 改进：放大设置窗口后，设置内容一直铺到窗口最底部，不再在底部留一条空白。关联 #14418。
+- Changed: an enlarged settings window now reaches the bottom of the window instead of leaving a blank strip beneath it. Refs #14418.
