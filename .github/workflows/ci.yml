@@ -421,6 +421,56 @@ jobs:
           retention-days: 7
 
 
+      - name: test (Windows Git storage environment)
+        if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -count=1 -timeout=3m -json -run '^Test(HostStorageEnvironment|HostObjectStorage|HostExplicitStorageControls|DetachedStorageEnvironment|WorktreePreparationOwnsItsIndex|EffectIsolatedTaskOwnsGitStorage)$' ./internal/platform/gitcmd ./internal/platform/worktree ./internal/assembly/boot | tee "$RUNNER_TEMP/git-storage-environment.jsonl"
+          jq -se '
+            [.[] | select(.Test == null and .Action == "pass") | .Package] as $packages |
+            [.[] | select(.Test != null and .Action == "pass") | .Test] as $tests |
+            all(.[]; .Action != "skip" and .Action != "fail") and
+            (["reasonix/internal/platform/gitcmd", "reasonix/internal/platform/worktree", "reasonix/internal/assembly/boot"] - $packages | length) == 0 and
+            ([
+              "TestDetachedStorageEnvironment",
+              "TestDetachedStorageEnvironment/explicit_env",
+              "TestDetachedStorageEnvironment/inherited_env",
+              "TestEffectIsolatedTaskOwnsGitStorage",
+              "TestEffectIsolatedTaskOwnsGitStorage/ambient_existing",
+              "TestEffectIsolatedTaskOwnsGitStorage/ambient_missing",
+              "TestEffectIsolatedTaskOwnsGitStorage/control",
+              "TestHostExplicitStorageControls",
+              "TestHostExplicitStorageControls/explicit_object_directory",
+              "TestHostExplicitStorageControls/private_index",
+              "TestHostExplicitStorageControls/repository_declared_alternate",
+              "TestHostObjectStorage",
+              "TestHostObjectStorage/ambient_alternate_not_read",
+              "TestHostObjectStorage/writes_stay_in_repository",
+              "TestHostStorageEnvironment",
+              "TestHostStorageEnvironment/GIT_ALTERNATE_OBJECT_DIRECTORIES",
+              "TestHostStorageEnvironment/GIT_INDEX_FILE",
+              "TestHostStorageEnvironment/GIT_OBJECT_DIRECTORY",
+              "TestWorktreePreparationOwnsItsIndex",
+              "TestWorktreePreparationOwnsItsIndex/candidate_ambient_existing",
+              "TestWorktreePreparationOwnsItsIndex/candidate_ambient_missing",
+              "TestWorktreePreparationOwnsItsIndex/candidate_control",
+              "TestWorktreePreparationOwnsItsIndex/delivery_ambient_existing",
+              "TestWorktreePreparationOwnsItsIndex/delivery_ambient_missing",
+              "TestWorktreePreparationOwnsItsIndex/delivery_control"
+            ] - $tests | length) == 0
+          ' "$RUNNER_TEMP/git-storage-environment.jsonl"
+
+      - name: upload Windows Git storage environment inventory
+        if: always() && env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: git-storage-environment-windows-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/git-storage-environment.jsonl
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: test (Windows Anthropic interrupted usage)
         if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
         timeout-minutes: 5
