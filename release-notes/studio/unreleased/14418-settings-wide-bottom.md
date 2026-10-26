@@ -1,0 +1,2 @@
+- 改进：放大设置窗口后铺满整个窗口，含顶部和底部，Windows 的窗口按钮在设置头部里；放大按钮的箭头随状态向外或向内。关联 #14418。
+- Changed: an enlarged settings window fills the whole window, top and bottom, with the Windows buttons in its header; the enlarge button's arrows turn inward. Refs #14418.

@@ -1352,6 +1352,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "图标栏": "Icon rail",
   "导航入口": "Navigation entries",
   "放大设置窗口": "Enlarge the settings window",
+  "缩小设置窗口": "Shrink the settings window",
   "图标栏和侧栏里直达各页面的入口：可以隐藏，也可以调整先后。会话、反馈、账号和设置始终保留。": "The shortcuts to pages in the icon rail and the sidebar: hide any of them or change their order. Sessions, feedback, account and settings are always kept.",
   "还原排列": "Reset arrangement",
   "上移：{name}": "Move up: {name}",
