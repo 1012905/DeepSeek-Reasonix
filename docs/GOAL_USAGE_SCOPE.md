@@ -47,6 +47,18 @@ Goal tee 只识别属于自己的私有 token。原事件链仍负责一次性�
 source、model、token 数量及会话统计不变。标题用量保持既有排除规则。共享 Agent
 token/wall 预算与任务取消仍由各自 owner 管理。
 
+The captured scope wrapper also forwards `UsageQuoter`. An Agent may obtain an
+occurrence-time quote before emitting usage; nested binding retains that same
+quote and the earlier Goal owner.
+
+`CostQuoteSink` owns quoting while the bound
+wrapper owns scope capture, so neither capability is counted as forwarding to
+the downstream recorder when its wrapper is the owner.
+
+已绑定 scope 的包装器也转发 `UsageQuoter`。Agent 可在发送用量前取得发生时刻的
+报价；嵌套绑定保留同一报价及更早的 Goal 归属。`CostQuoteSink` 拥有报价能力，
+已绑定包装器拥有 scope 捕获能力；各自拥有的能力不计作向下游记录器转发。
+
 ## Compatibility and limits / 兼容与限制
 
 | Surface | Contract / 合同 |

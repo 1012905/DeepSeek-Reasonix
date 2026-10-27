@@ -3,6 +3,7 @@ package event
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"reasonix/internal/contract/provider"
 )
@@ -19,16 +20,36 @@ func (s *usageScopeTestSink) Emit(e Event)           { s.events = append(s.event
 func TestUsageScopePreservesCapturedOwnerAndWire(t *testing.T) {
 	old, next := make(chan struct{}), make(chan struct{})
 	sink := &usageScopeTestSink{current: old}
-	chain := Coalesce(Sync(NewCostQuoteSink(sink, nil)), DefaultStreamDeltaWindow)
+	var quotes int
+	owner := NewCostQuoteSink(sink, &QuoteContext{
+		Now: func() time.Time {
+			quotes++
+			return time.Date(2026, 8, 19, 2, 0, 0, 0, time.UTC)
+		},
+		CatalogProviderForModel: func(string) string { return "deepseek" },
+	})
+	chain := Coalesce(Sync(owner), DefaultStreamDeltaWindow)
 	bound := BindUsageScope(chain)
+	if missing := MissingCapabilities(bound); len(missing) != 0 {
+		t.Fatalf("bound wrapper drops %v", missing)
+	}
 	sink.current = next
 	nested := BindUsageScope(bound)
-	u := Event{Kind: Usage, Usage: &provider.Usage{PromptTokens: 10}, UsageSource: UsageSourceSubagent}
+	u := Event{Kind: Usage, UsageSource: UsageSourceSubagent, ModelRef: "deepseek/deepseek-v4-pro",
+		Pricing: &provider.Pricing{CacheHit: .15, Input: 4.5, Output: 13.5, Currency: "CNY"},
+		Usage:   &provider.Usage{PromptTokens: 1_000_000, CompletionTokens: 1_000_000, RequestCount: 1}}
+	u.CostQuote = QuoteUsage(nested, u)
+	if u.CostQuote == nil || u.CostQuote.Original.Amount != "36" || quotes != 1 {
+		t.Fatalf("bound usage lost the quote owner: quote=%+v calls=%d", u.CostQuote, quotes)
+	}
 	nested.Emit(u)
 	if len(sink.events) != 1 || UsageScope(sink.events[0]) != old {
 		t.Fatal("nested capture adopted a later owner")
 	}
 	chain.Emit(u)
+	if quotes != 1 || sink.events[0].CostQuote != u.CostQuote || sink.events[1].CostQuote != u.CostQuote {
+		t.Fatal("scope binding changed or repeated the occurrence quote")
+	}
 	want, err := json.Marshal(sink.events[1])
 	if err != nil {
 		t.Fatal(err)
