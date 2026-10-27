@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { t } from "../i18n";
-import { UNCONFIGURED_REF } from "./ConnectNote";
 import { reason } from "../i18n/kernel";
 import { keepPasteAsFile, PasteKeep, type PasteChip } from "./pastekeep";
 import type { AgentPort, ChipCall, ModelEntry, SessionStatus, WorkspaceGit } from "../port/port";
@@ -11,7 +10,7 @@ import { WorktreeChip } from "./WorktreeChip";
 import { useWorktreeSetup, WorktreeSetupFailure } from "./useWorktreeSetup";
 import { WorktreeSetupPage } from "./WorktreeSetupPage";
 import { Policy } from "./Policy";
-import { chosenGroups, groupHeadings, modelMenu, modelTooltip, narrowToGroups } from "./modelmenu";
+import { chosenGroups, groupHeadings, modelLabel, modelMenu, modelTooltip, narrowToGroups } from "./modelmenu";
 import { ModelGroupChips } from "./ModelGroupChips";
 import { effortMenu, effortReading, effortsFor, forcesThinkingFor, routeEffortPick } from "./effort";
 import { CompletionMenu, useCompletion } from "./Completion";
@@ -390,10 +389,7 @@ export function Composer({ port, status, running, queued = false, quote, restore
   // composer answering for an endpoint that never spoke.
   const declared = efforts.length > 0;
   const forcedThinking = forcesThinkingFor(models, status?.modelRef);
-  const modelLb = status?.modelRef === UNCONFIGURED_REF ? t("未连接")
-    : models.find((m) => m.ref === status?.modelRef)?.modelAlias?.trim()
-    || models.find((m) => m.ref === status?.modelRef)?.modelShort
-    || (status?.modelRef?.replace(/^[^/]+\//, "") ?? status?.label ?? "—");
+  const modelLb = modelLabel(models, status);
   // A model switch rebuilds the runtime kernel-side; other controls here may
   // land at once. Each click needs its own pending state: greying the whole
   // shelf says nothing can change while only one control waits on the kernel.
