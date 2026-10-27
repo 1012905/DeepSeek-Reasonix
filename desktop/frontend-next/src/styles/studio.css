@@ -1299,7 +1299,7 @@ body { background: var(--page) !important; }
 }
 
 /* The inspector is contextual, not a permanent dashboard. */
-.side { background: var(--page); border-left: 1px solid var(--hair); }
+.side { background: var(--bg-side-background, var(--page)); border-left: 1px solid var(--hair); }
 .side .scroll { background: var(--page); }
 .side .meter { border-color: var(--hair); }
 
@@ -1582,7 +1582,7 @@ body { background: var(--page) !important; }
 }
 :root[data-theme="light"] .btn.send { background: var(--accent); color: var(--accent-fg); }
 :root[data-theme="light"] .btn.send:hover { background: #111210; }
-:root[data-theme="light"] .side,
+:root[data-theme="light"] .side { background: var(--bg-side-background, var(--overlay)); border-color: var(--border); }
 :root[data-theme="light"] .side .scroll { background: var(--overlay); border-color: var(--border); }
 :root[data-theme="light"] .prefs-sheet,
 :root[data-theme="light"] .prefs-hd,
@@ -1839,9 +1839,8 @@ body { background: var(--page) !important; }
 :root[data-bg] .pane:has([data-pane="flow"] .flow[data-empty]) {
   background-color: transparent !important;
 }
-:root[data-bg] :is(.rail, .chrome) {
-  background: color-mix(in srgb, var(--page) 80%, transparent) !important;
-}
+:root[data-bg] .rail { background: var(--bg-rail-background, color-mix(in srgb, var(--page) 80%, transparent)) !important; }
+:root[data-bg] .chrome { background: var(--bg-chrome-background, color-mix(in srgb, var(--page) 80%, transparent)) !important; }
 
 .hero .rmark {
   filter: drop-shadow(0 0 28px var(--studio-light-primary));
@@ -3266,9 +3265,8 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 .studio-workspace-kind { color: var(--muted); }
 .studio-user-foot .acctrow:hover,
 .studio-settings:hover { background: var(--accent-wash); color: var(--text); }
-:root[data-theme="light"][data-bg] :is(.rail, .chrome) {
-  background: color-mix(in srgb, var(--page) 86%, transparent) !important;
-}
+:root[data-theme="light"][data-bg] .rail { background: var(--bg-rail-background, color-mix(in srgb, var(--page) 86%, transparent)) !important; }
+:root[data-theme="light"][data-bg] .chrome { background: var(--bg-chrome-background, color-mix(in srgb, var(--page) 86%, transparent)) !important; }
 :root[data-theme="light"][data-bg] .railfoot {
   box-shadow: 0 -1px color-mix(in srgb, var(--border) 62%, transparent);
 }
@@ -3283,10 +3281,10 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
   background: var(--accent-wash);
   color: var(--text);
 }
-.side,
 .side .scroll,
 .studio-browser,
 .studio-browser-toolbar { background: var(--surface); border-color: var(--hair); color: var(--text); }
+.side { background: var(--bg-side-background, var(--surface)); border-color: var(--hair); color: var(--text); }
 .studio-browser-address { background: var(--raised); border-color: var(--border); }
 .studio-browser-address input { color: var(--text); }
 /* A wallpaper remains visible, while cards keep enough of the selected pack's
@@ -3297,7 +3295,7 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
   -webkit-backdrop-filter: blur(11px) saturate(1.04);
   backdrop-filter: blur(11px) saturate(1.04);
 }
-:root[data-bg] .compose { background: color-mix(in srgb, var(--raised) 88%, transparent) !important; }
+:root[data-bg] .compose { background: var(--bg-compose-background, color-mix(in srgb, var(--raised) 88%, transparent)) !important; }
 :root[data-bg] .flow:not([data-empty]) { isolation: isolate; }
 :root[data-bg] .flow:not([data-empty])::before {
   content: "";

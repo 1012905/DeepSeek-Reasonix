@@ -276,3 +276,47 @@ describe("a pack's recipes step the shape and the rhythm", () => {
     expect(read("--d-scale")).toBe("");
   });
 });
+
+describe("backdrop surface opacities", () => {
+  const surfaces = ["nav", "rail", "chrome", "side", "compose"] as const;
+  const glass: ThemePack = {
+    ...illustrated,
+    background: {
+      ...illustrated.background!,
+      surfaceOpacity: {
+        dark: { nav: 0, rail: 0.45, chrome: 0.8, side: 1, compose: 0.88 },
+        light: { nav: 0.6, rail: 0.61, chrome: 0.86, side: 0.87, compose: 0.89 },
+      },
+    },
+  };
+
+  it("paints five independent percentages for the active scheme without rounding", () => {
+    for (const scheme of ["light", "dark"] as const) {
+      apply(glass, scheme);
+      for (const surface of surfaces) {
+        expect(read(`--bg-${surface}-background`)).toBe(`color-mix(in srgb, var(${surface === "compose" ? "--raised" : "--page"}) ${glass.background!.surfaceOpacity![scheme]![surface]! * 100}%, transparent)`);
+      }
+    }
+  });
+
+  it("keeps omitted values on stylesheet defaults and removes stale scheme values", () => {
+    apply(glass, "dark");
+    apply({ ...glass, background: { ...glass.background!, surfaceOpacity: { light: { nav: 0.6 } } } }, "light");
+    expect(read("--bg-nav-background")).toBe("color-mix(in srgb, var(--page) 60%, transparent)");
+    for (const surface of surfaces.slice(1)) expect(read(`--bg-${surface}-background`)).toBe("");
+    apply(illustrated, "dark");
+    for (const surface of surfaces) expect(read(`--bg-${surface}-background`)).toBe("");
+  });
+
+  it("supports sky without an image, but changes nothing without a backdrop", () => {
+    const noImage = { ...glass, background: { ...glass.background!, image: false } };
+    apply({ ...noImage, sky: { rayAlpha: 0.85, cloudAlpha: 0.4 } }, "dark");
+    expect(read("--bg-rail-background")).toBe("color-mix(in srgb, var(--page) 45%, transparent)");
+    expect(document.documentElement.dataset.bg).toBe("on");
+    apply(noImage, "dark");
+    for (const surface of surfaces) expect(read(`--bg-${surface}-background`)).toBe("");
+    expect(document.documentElement.dataset.bg).toBeUndefined();
+    apply(null, "dark");
+    expect(sheet()).toBeNull();
+  });
+});
