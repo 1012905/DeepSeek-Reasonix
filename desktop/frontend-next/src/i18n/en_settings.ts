@@ -2,6 +2,23 @@
 // alone — one catalogue is still the model, and this file is read as its
 // continuation: same keying by Chinese source text, same grouping by screen.
 export const EN_SETTINGS: Record<string, string> = {
+  "全局显示 / 隐藏快捷键": "Global show / hide shortcut",
+  "默认关闭。仅在 Studio 运行时生效；窗口聚焦时隐藏，否则显示并聚焦。不会启动已退出的应用，也不更改窗口内快捷键。": "Off by default. While Studio is running, hide its focused window or show and focus it otherwise. Does not launch a stopped app or change in-app shortcuts.",
+  "快捷键组合": "Shortcut binding",
+  "点击录制后按下修饰键与按键组合，或直接编辑快捷键。Esc 取消录制；清除会立即关闭快捷键。Wayland 或系统保留组合可能不受支持。": "Click Record and press a modifier and key combination, or edit the shortcut directly. Esc cancels recording; Clear immediately disables the shortcut. Wayland or OS-reserved bindings may not be supported.",
+  "请按修饰键与按键组合…": "Press a modifier and key combination…",
+  "录制快捷键": "Record shortcut",
+  "应用快捷键": "Apply shortcut",
+  "清除快捷键": "Clear shortcut",
+  "全局快捷键已关闭": "Global shortcut disabled",
+  "已注册：{value}": "Registered: {value}",
+  "快捷键格式无效，请使用修饰键与按键组合，例如 CommandOrControl+Shift+Space。": "Invalid accelerator. Use a modifier and key combination, e.g. CommandOrControl+Shift+Space.",
+  "系统未能注册此快捷键：可能已被占用、未获授权，或当前桌面不支持。": "The OS could not register this shortcut: it may be occupied, denied permission, or unsupported by this desktop.",
+  "当前环境不支持全局快捷键。": "Global shortcuts are not supported in this environment.",
+  "快捷键未能保存；原设置保持不变。": "Could not save the shortcut; the previous setting is unchanged.",
+  "Studio 正在退出，未更改快捷键。": "Studio is quitting; the shortcut was not changed.",
+  "无法读取或更改 shell 快捷键状态。请重新打开设置后再试。": "Could not read or change shell shortcut status. Reopen settings to try again.",
+  "下列按键在窗口中生效；标着 ⌘ 的地方，Windows 与 Linux 上是 Ctrl。全局显示 / 隐藏快捷键在上方单独配置，仅桌面 shell 支持。": "These keys work inside the window; ⌘ means Ctrl on Windows and Linux. Configure global show / hide separately above, in the desktop shell only.",
   "加载中…": "Loading…",
   "AI 文件交付卡片": "AI file delivery cards",
   "启用 AI 文件交付卡片": "Enable AI file delivery cards",
