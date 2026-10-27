@@ -1031,6 +1031,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "会话显示": "Conversation display",
   "导航与侧栏": "Navigation and sidebar",
   "窗口与性能": "Window and performance",
+  "位于项目文件夹内": "Inside a project folder",
+  "位于项目文件夹 {path} 内，出于安全不从这里启动": "Inside the project folder {path}, so it is not started from here for safety",
   "运行环境": "Where it runs",
   "记录与用量": "What it remembers",
   "这台机器": "This machine",
