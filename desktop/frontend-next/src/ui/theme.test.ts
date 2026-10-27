@@ -121,13 +121,27 @@ describe("a pack's inks answer to the reader's contrast", () => {
     expect(read("--text")).toContain("l + 0.03");
   });
 
-  // The step a pack states is the one someone who never opened the setting
-  // sees, so those two must land on the author's value untouched.
-  it("leaves the pack's value alone on the default step", () => {
+  // An arbitrary pack may already sit at the AA floor on its own grounds.
+  // Soft keeps that authored baseline; only the built-in palette can promise
+  // a lower accessible body ink without a pack-specific accessibility audit.
+  it("leaves the pack's value alone on default and soft", () => {
     apply(pack, "light", false, "");
     expect(read("--text")).toBe("#1A1A1A");
     apply(pack, "light", false, "soft");
     expect(read("--text")).toBe("#1A1A1A");
+  });
+
+  it.each(["light", "dark"] as const)("keeps soft stable through tier changes and reapply in %s", (scheme) => {
+    const tokens = pack.tokens[scheme]!;
+    const expected = [tokens.fg, tokens.fgDim, tokens.fgFaint, tokens.fgFaint];
+    const inks = ["--text", "--muted", "--faint", "--ghost"];
+    for (const tier of ["soft", "normal", "strong", "soft", "soft", "", "soft"]) {
+      apply(pack, scheme, false, tier);
+      if (tier === "" || tier === "soft") expect(inks.map(read)).toEqual(expected);
+      expect(read("--page")).toBe(tokens.bg);
+      expect(read("--surface")).toBe(tokens.bgSoft);
+      expect(read("--accent")).toBe(tokens.accent);
+    }
   });
 
   it("does not move a surface, only the inks", () => {
