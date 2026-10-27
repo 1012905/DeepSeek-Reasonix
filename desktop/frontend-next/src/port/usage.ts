@@ -88,3 +88,30 @@ export interface UsageReport {
   models: UsageModel[];
   providers: UsageProvider[];
 }
+
+export interface UploadDay {
+  day: string;
+  bytes: number;
+}
+
+export interface UploadProvider {
+  provider: string;
+  bytes: number;
+  requests: number;
+  percent: number;
+}
+
+// What model providers were sent: request bodies as they went out, before the
+// connection adds its own overhead. Downloads are not counted.
+export interface UploadReport {
+  from: string;
+  to: string;
+  bytes: number;
+  requests: number;
+  daily: UploadDay[];
+  providers: UploadProvider[];
+}
+
+export interface UploadUsagePort {
+  uploadUsage(days: number): Promise<UploadReport>;
+}
