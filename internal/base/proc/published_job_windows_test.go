@@ -18,13 +18,35 @@ const publishedJobMarker = "REASONIX_PUBLISHED_JOB_TASKKILL_MARKER"
 
 // A renamed copy records a legacy PID fallback without terminating any PID.
 func TestMain(m *testing.M) {
-	if strings.EqualFold(filepath.Base(os.Args[0]), "taskkill.exe") && os.Getenv(publishedJobMarker) != "" {
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	if strings.EqualFold(filepath.Base(exe), "taskkill.exe") && os.Getenv(publishedJobMarker) != "" {
 		if err := os.WriteFile(os.Getenv(publishedJobMarker), []byte(strings.Join(os.Args[1:], " ")), 0o600); err != nil {
 			os.Exit(2)
 		}
 		os.Exit(0)
 	}
+	// A recorder invocation must never fall through into the complete suite.
+	if os.Getenv(publishedJobMarker) != "" && os.Getenv("REASONIX_PUBLISHED_JOB_CHILD") == "" {
+		os.Exit(2)
+	}
 	os.Exit(m.Run())
+}
+
+func TestPublishedJobRecorderAlias(t *testing.T) {
+	marker := publishedJobStub(t)
+	cmd := exec.CommandContext(t.Context(), "taskkill", "-test.run=^TestPublishedJobChild$", "-test.timeout=30s")
+	cmd.Env = append(os.Environ(), "REASONIX_PUBLISHED_JOB_CHILD=return")
+	if err := cmd.Run(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(marker)
+	if err != nil || !strings.Contains(string(data), "-test.run=^TestPublishedJobChild$") {
+		t.Fatalf("bare taskkill alias did not enter recorder: %q %v", data, err)
+	}
 }
 
 func publishedJobStub(t *testing.T) string {
@@ -44,6 +66,18 @@ func publishedJobStub(t *testing.T) string {
 	marker := filepath.Join(dir, "fallback.txt")
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv(publishedJobMarker, marker)
+	resolved, err := exec.LookPath("taskkill")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := os.Stat(filepath.Join(dir, "taskkill.exe"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.Stat(resolved)
+	if err != nil || !os.SameFile(want, got) {
+		t.Fatalf("taskkill resolved outside the fixture: %q %v", resolved, err)
+	}
 	return marker
 }
 

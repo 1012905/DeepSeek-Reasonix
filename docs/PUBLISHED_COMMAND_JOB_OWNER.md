@@ -75,18 +75,31 @@ before qualifying its native counterfactual evidence.
 Later unrelated owner edits remain in the reconstruction. Its digest then
 describes an ownership counterfactual, not this complete historical file.
 
-It requires six named
-pass events for the new owner, four expected fail events and two passing controls
+It requires seven named
+pass events for the new owner, four expected fail events and three passing controls
 for the preceding owner, plus each package terminal.
 
 Parent and helper events are
-included; these are not six independent cases. Cross-compilation alone does not
+included; these are not seven independent cases. Cross-compilation alone does not
 qualify this native behavior.
+
+The recorder identifies its executable path, not argv[0], because the bare
+`taskkill` command can omit the executable suffix in that argument. A dedicated
+alias probe uses only the inert helper-test selector if recorder detection fails.
+
+The fixture requires LookPath to select that same file. The alias probe and
+KillTree use synchronous Run/Wait before temporary-directory cleanup. Unexpected
+recorder entry fails closed instead of starting the complete package suite.
+
+记录替身检查实际可执行文件路径，不依赖 argv[0]；裸 `taskkill` 命令的该参数可能
+不含扩展名。专用别名对照在入口误判时只选无副作用的辅助测试，避免递归运行整包。
+Fixture 断言 LookPath 解析到同一文件；别名探针和 KillTree 同步等待 Run/Wait
+完成后才清理临时目录。异常替身入口立即失败，不启动完整包测试。
 
 专用 Windows 门禁运行新 owner 与反转所有权修改的 overlay，记录重建文件 SHA-256，
 测试保持相同。本单元原生反例资格还须核对它等于上述精确旧 owner 的摘要。
 以后无关 owner 修改保留在重建文件中；届时它是所有权反例，不冒称完整历史文件。
 
-新版须有六个具名通过事件；反例须有四个预期失败事件和两个通过对照，且均
-核对包终态。计数包含父测试和辅助测试，不是六个独立用例；交叉编译不能替代原生
+新版须有七个具名通过事件；反例须有四个预期失败事件和三个通过对照，且均
+核对包终态。计数包含父测试和辅助测试，不是七个独立用例；交叉编译不能替代原生
 行为验证。

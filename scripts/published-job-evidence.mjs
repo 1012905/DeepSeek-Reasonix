@@ -9,6 +9,7 @@ const required = [
   'TestPublishedJobNoPIDFallback/cancelled_wait',
   'TestPublishedJobUsesKernelTree',
   'TestPublishedJobFallbackControl',
+  'TestPublishedJobRecorderAlias',
 ];
 const failures = new Set(required.slice(1, 5));
 const [mode, destination] = process.argv.slice(2);
