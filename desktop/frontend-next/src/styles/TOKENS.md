@@ -305,6 +305,35 @@ pack states a shape, never a number the layout has to agree with.
   negative tracking squeezes a Han character's em box, not the air between
   letters.
 
+## Settings text
+
+- Every text run in the settings pages is one of nine roles, declared in
+  `settings-type.css`.
+- Sizes are `--fs-meta`, `--fs-ui`, `--fs-lead`, `--fs-title` and
+  `--fs-display`; weights are `--w-reg` and `--w-semi`; neutral colours are
+  `--text` and `--muted`.
+- Semantic colours (error, success, warning, accent) mark state and are not
+  part of the count.
+- Roles: group title (lead, semi, text); page title (title, semi, text);
+  emphasis (ui, semi, text); label (ui, reg, text); description (ui, reg,
+  muted); caption (meta, reg, muted); control (meta, reg, text); metric
+  (display, semi, text). The usage hero figure keeps its own larger size.
+- Inside `.prefs-col` the file re-points `--fs-micro` to `--fs-meta`.
+- It also re-points `--faint` and `--ghost` to `--muted`, and `--w-med` to
+  `--w-semi`, so a rule written against any of them lands on a role unedited.
+- The settings pages therefore have two neutral text tiers where the rest of
+  the interface has three. `--muted` is the darker of the tiers it replaces,
+  so the AA floor below still holds.
+- A walk over the 16 pages found 43 combinations of size, weight and colour
+  across 10 sizes, 4 weights and 11 colours. It is now 23 across 5 sizes, 3
+  weights and 9 colours, the 7 non-neutral ones being semantic.
+- Monospace is a family, not a role: a path in code type takes the role of the
+  text around it.
+- `tools/settings-type-sweep.mjs` reads computed styles from a running build
+  and fails on a size outside the scale.
+- `settings-type.test.ts` holds the stylesheet to tokens, so a literal size or
+  colour cannot be added to it.
+
 ## Weight and contrast
 
 - Default and plain-palette light Studio replies use `--w-read: 400` for prose only. Headings,
