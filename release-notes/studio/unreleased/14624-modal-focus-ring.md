@@ -1,2 +1,2 @@
-- 修复：用鼠标点开设置等弹窗后按 Esc 关闭，左侧图标栏的按钮不再带着焦点环和提示框停在“悬停”样子；键盘打开的仍保留焦点环。关联 #14624。
-- Fixed: after opening Settings or another dialog with the mouse and closing it with Esc, the icon rail button no longer stays in a hovered look with a focus ring and hint; dialogs opened by keyboard still return the ring. Refs #14624.
+- 修复：用鼠标点开设置等弹窗后按 Esc 关闭，左侧图标栏按钮不再带着焦点环和提示框停在“悬停”样子；键盘打开的仍保留焦点环。关联 #14624。
+- Fixed: after a mouse-opened dialog is closed with Esc, the icon rail button no longer keeps a focus ring and hint as if hovered. Refs #14624.
