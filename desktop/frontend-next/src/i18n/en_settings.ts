@@ -756,6 +756,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "摘要请求用了 {in} 输入、{out} 输出 token，缓存命中 {hit}。": "The summary request used {in} input and {out} output tokens, {hit} from cache.",
   "无需压缩：{why}": "Nothing to compact: {why}",
   "压缩失败：{why}": "Compaction failed: {why}",
+  "你有 {n} 条较早的消息过长，没能完整保留，现在只通过摘要保留。在消息开头加上 [[keep]] 可以让它原样保留。": "{n} earlier message(s) of yours were too large to keep whole and now survive only through the summary. Prefix a message with [[keep]] to hold it verbatim.",
+  "你用 [[keep]] 标记的消息中，有 {n} 条超出了 [[keep]] 的容量，最早的几条现在只通过摘要保留。": "{n} message(s) you marked [[keep]] went past the room [[keep]] has, so the oldest now survive only through the summary.",
   "子代理「{task}」在等 {by} 先结束：{why}": "Sub-agent \"{task}\" is waiting for {by} to finish: {why}",
   "另一个子代理": "another sub-agent",
   "两者都没声明 write_paths，各自按整个工作区处理": "neither declared write_paths, so each is treated as writing the whole workspace",
