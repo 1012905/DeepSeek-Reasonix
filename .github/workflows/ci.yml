@@ -170,6 +170,36 @@ jobs:
         shell: pwsh
         run: Get-CimInstance Win32_Processor | Select-Object -ExpandProperty Name
 
+      - name: test (Windows carried proof file state)
+        if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -count=1 -timeout=3m -json -run '^Test(CarriedProof(InvalidatesPermissionChange|FileStateCompatibility|RejectsDirectoryState|StandsOnlyForUnchangedContent|SeesADeletion)|EffectCarriedProofTracksFileState)$' ./internal/runtime/agent ./internal/assembly/boot | tee "$RUNNER_TEMP/carried-proof-file-state.jsonl"
+          jq -se '
+            [.[] | select(.Test == null and .Action == "pass") | .Package] as $packages |
+            [.[] | select(.Test != null and .Action == "pass") | .Test] as $tests |
+            all(.[]; .Action != "skip" and .Action != "fail") and
+            (["reasonix/internal/runtime/agent", "reasonix/internal/assembly/boot"] - $packages | length) == 0 and
+            (["TestCarriedProofInvalidatesPermissionChange", "TestCarriedProofFileStateCompatibility",
+              "TestCarriedProofFileStateCompatibility/legacy_file", "TestCarriedProofFileStateCompatibility/legacy_absent",
+              "TestCarriedProofFileStateCompatibility/future", "TestCarriedProofFileStateCompatibility/current_file",
+              "TestCarriedProofFileStateCompatibility/current_absent", "TestCarriedProofRejectsDirectoryState",
+              "TestCarriedProofStandsOnlyForUnchangedContent", "TestCarriedProofSeesADeletion",
+              "TestEffectCarriedProofTracksFileState", "TestEffectCarriedProofTracksFileState/unchanged",
+              "TestEffectCarriedProofTracksFileState/content", "TestEffectCarriedProofTracksFileState/mode"] - $tests | length) == 0
+          ' "$RUNNER_TEMP/carried-proof-file-state.jsonl"
+
+      - name: upload Windows carried proof file state inventory
+        if: always() && env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: carried-proof-file-state-windows-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/carried-proof-file-state.jsonl
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: test
         if: env.RUN_STEPS == 'true' && runner.os != 'Windows'
         env:
