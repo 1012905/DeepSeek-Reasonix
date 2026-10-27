@@ -1,0 +1,2 @@
+- 新增：服务商设置里可以「隐藏共同前缀」，路由类服务给每个模型加的同一段前缀（如 group/）在各处显示时省略，只改显示。关联 #14573。
+- Added: a provider can now hide the prefix all its models share (such as group/ from a router) everywhere the model name is drawn; display only. Refs #14573.

@@ -1,0 +1,2 @@
+- 修复：用量总额现在会说明其中有几笔调用未定价、以及原因；未定价不再只由一个标志暗示。关联 #14522。
+- Fixed: a usage total now says how many of its calls were never priced, and why, instead of only carrying an incomplete flag. Refs #14522.
