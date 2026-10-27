@@ -19,10 +19,10 @@ export type { AdjudicationEntry, AdjudicationState, Adjudications } from "./adju
 import type { HookCatalog, HookDryRun, HookEntry, HookEventInfo, HookSource } from "./hook";
 import type { CapabilityScope, McpCatalog, McpDraft, McpDraftServer, McpEntry, McpInstallResult, McpInstallScope, McpLoad, McpRisk, McpTool, ScopeLayer } from "./mcp";
 import type { MemoryCatalog, MemoryEdit, MemoryEntry, UnreadableMemory } from "./memory";
-import type { UsageQuery, UsageReport } from "./usage";
+import type { UploadUsagePort, UsageQuery, UsageReport } from "./usage";
 export { DEFAULT_USAGE_DAYS } from "./usage";
 export type { MemoryEdit } from "./memory";
-export type { Money, UsageDay, UsageHour, UsageModel, UsageProvider, UsageQuery, UsageReport } from "./usage";
+export type { Money, UploadDay, UploadProvider, UploadReport, UsageDay, UsageHour, UsageModel, UsageProvider, UsageQuery, UsageReport } from "./usage";
 import type { CompactionSettings, Completion, CompletionItem, ModelEntry, ModelMode, ModelPrice, RoleAssignments, RoleOverride } from "./model";
 import type { NetworkProbe, NetworkSettings } from "./network";
 import type { ApprovalDefault, ApprovalMode, WorkspaceTrust, ApprovalVerdict, BrowserTab, Checkpoint, HistoryMessage, HostTodo, JobEntry, JobOutput, Preset, RewindPlan, ToolOutputPage, RewindResult, RewindUndo, RewindScope, SessionEntry, SessionStatus, SessionUsage, SourceUsage, WalletLine, WalletReading, PlanAction } from "./session";
@@ -183,7 +183,7 @@ export interface TrayPrefs {
   closeToTray: boolean;
 }
 
-export interface AgentPort extends WorkspacePreviewPort, SessionTailPort {
+export interface AgentPort extends WorkspacePreviewPort, SessionTailPort, UploadUsagePort {
   providerSetup(): Promise<ProviderSetup | null>;
   saveProviderKey(apiKey: string): Promise<void>;
   // The models that answer the job asked about; "chat" when none is named.
