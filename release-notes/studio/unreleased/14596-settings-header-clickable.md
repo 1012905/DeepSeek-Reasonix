@@ -1,2 +1,0 @@
-- 修复：2.53.0 里放大后的设置窗口，头部的收起、关闭、最小化、最大化按钮和搜索框点不动；现在都可以点击。修复 #14596。
-- Fixed: in 2.53.0 the enlarged settings window's header buttons (collapse, close, minimise, maximise) and search field did not respond; they do now. Fixes #14596.
