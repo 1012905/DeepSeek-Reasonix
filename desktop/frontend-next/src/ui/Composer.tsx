@@ -44,6 +44,7 @@ interface Props {
   port: AgentPort;
   status: SessionStatus | null;
   running: boolean;
+  queued?: boolean;
   // Text a card asked to be quoted, and a counter that makes the same text
   // twice two requests. Quoting the same reply again is an ordinary thing to
   // do, and comparing the string alone would drop the second one.
@@ -79,7 +80,7 @@ interface Props {
   draftKey?: string;
 }
 
-export function Composer({ port, status, running, quote, restore, inject, focus, onSubmit, onChanged, onError, onSettings = () => {}, side = false, onSide, sidePanel, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "", fresh = false, worktreeTarget, onWorktreePhase }: Props) {
+export function Composer({ port, status, running, queued = false, quote, restore, inject, focus, onSubmit, onChanged, onError, onSettings = () => {}, side = false, onSide, sidePanel, changeCount = 0, countElsewhere = false, git = null, onTreeChanged, pulse = 0, draftKey = "", fresh = false, worktreeTarget, onWorktreePhase }: Props) {
   const touch = touchKeyboard();
   const providerOrder = useProviderOrder();
   const modelGroups = useModelFilter();
@@ -217,7 +218,7 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
     pending.current = null;
   }, []);
   useFitHeight(box, text, placeCaret);
-  const placeholder = usePlaceholderFit(box, [t("描述任务、问题或要改的内容…"), t("描述任务…"), "…"]);
+  const placeholder = usePlaceholderFit(box, queued ? [t("继续输入以排队后续修改"), t("继续输入…"), "…"] : [t("描述任务、问题或要改的内容…"), t("描述任务…"), "…"]);
 
   // Attachments ride into the turn as path references, exactly as they do from
   // the CLI — the host saved the bytes, the turn parser resolves the token. A
