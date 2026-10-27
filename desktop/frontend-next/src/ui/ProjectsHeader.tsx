@@ -7,7 +7,7 @@ import { pinToViewport } from "./place";
 import { StudioIcon } from "./StudioIcon";
 import { workspaceMenuKeys } from "./WorkspaceOrder";
 
-export function ProjectsHeader({ adder, canSelect, selecting, onSelect, onToggleAll, allFolded, canFold, searching }: {
+export function ProjectsHeader({ adder, canSelect, selecting, onSelect, onToggleAll, allFolded, canFold, searching, onManage }: {
   adder: Adder;
   canSelect: boolean;
   selecting: boolean;
@@ -16,6 +16,7 @@ export function ProjectsHeader({ adder, canSelect, selecting, onSelect, onToggle
   allFolded?: boolean;
   canFold?: boolean;
   searching?: boolean;
+  onManage?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const more = useRef<HTMLButtonElement>(null);
@@ -62,6 +63,9 @@ export function ProjectsHeader({ adder, canSelect, selecting, onSelect, onToggle
               disabled={!canSelect || selecting} onClick={() => { close(); onSelect(); }}>
               <StudioIcon name="check" /><span>{t("选择本机会话")}</span>
             </button>
+            {onManage && <button role="menuitem" data-action="session-manager.open" onClick={() => { close(); onManage(); }}>
+              <StudioIcon name="layers" /><span>{t("管理会话")}</span>
+            </button>}
           </div>
         </div>, document.body,
       )}

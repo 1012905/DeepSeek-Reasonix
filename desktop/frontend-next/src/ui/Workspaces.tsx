@@ -81,6 +81,9 @@ interface Props {
   onError: (e: unknown) => void;
   // 打开项目这个动作归 App —— 首启那条横幅按的是同一个它。
   adder: Adder;
+  // Opens the standalone session-management view. Absent where the window has no
+  // such view, in which case the header simply omits the entry.
+  onManage?: () => void;
   // Remote projects share the same tree and keyboard navigation as local ones.
   children?: ReactNode;
   hasOtherRows?: (needle: string, hideLegacy: boolean) => boolean;
@@ -91,7 +94,7 @@ interface Props {
 const rowLabel = (session: TreeSession) =>
   session.title || (session.runtimeId && !session.turns ? t("新会话") : session.name);
 
-function WorkspacesView({ hub, tree, treeRead, answered = null, runtimes, active, folded, reload, retry, paging = NO_PAGING, previewLimit = Infinity, onFold, onToggleAll, allFolded, canFold, opening = "", onOpen, onFocus, onClose, liveIds, listedIds = liveIds, runs, scope = "all", pinned = new Set(), onPin = () => {}, onPause = () => {}, onBranch, onArchive = async () => {}, onRename, onError, adder, children, hasOtherRows }: Props) {
+function WorkspacesView({ hub, tree, treeRead, answered = null, runtimes, active, folded, reload, retry, paging = NO_PAGING, previewLimit = Infinity, onFold, onToggleAll, allFolded, canFold, opening = "", onOpen, onFocus, onClose, liveIds, listedIds = liveIds, runs, scope = "all", pinned = new Set(), onPin = () => {}, onPause = () => {}, onBranch, onArchive = async () => {}, onRename, onError, adder, onManage, children, hasOtherRows }: Props) {
   const [busy, setBusy] = useState("");
   const [confirm, setConfirm] = useState("");
   const [selection, setSelection] = useState<Set<string> | null>(null);
@@ -367,7 +370,7 @@ function WorkspacesView({ hub, tree, treeRead, answered = null, runtimes, active
           <ProjectsHeader adder={adder}
             onToggleAll={onToggleAll} allFolded={needle ? false : allFolded} canFold={canFold} searching={!!needle}
             canSelect={displayed.length > 0} selecting={selection !== null}
-            onSelect={() => setSelection(new Set())} />
+            onSelect={() => setSelection(new Set())} onManage={onManage} />
         <div role="tree" aria-label={t("项目与会话")} aria-multiselectable={selection !== null} inert={busy === "batch"} data-action-keydown="tree.navigate" ref={treeKeys.ref} onKeyDown={treeKeys.onKeyDown}>
           {shownTree.map((ws) => {
             // A fold is a resting-state preference; while a query is on it would hide

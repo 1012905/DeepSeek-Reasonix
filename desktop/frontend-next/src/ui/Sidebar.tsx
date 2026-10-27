@@ -22,6 +22,7 @@ import { chord } from "./keys";
 import { Palette, type Command } from "./Palette";
 import { Workspaces } from "./Workspaces";
 import { OpenProject } from "./OpenProject";
+import { SessionManager } from "./SessionManager";
 import type { TreePaging, TreeView } from "./treewindow";
 import { MASK, useHidesAmounts } from "./wallet";
 import { useFileDrop } from "./filedrop";
@@ -154,6 +155,7 @@ export function Sidebar({
   const paletteTree = useMemo(() => [...tree, ...shownRemotes.flatMap((host) =>
     remoteWorkspaces(host, remoteTrees[host.name]).map((ws) => ({ ...ws, host: host.name })))], [tree, shownRemotes, remoteTrees]);
   const [over, setOver] = useState(false);
+  const [managerOpen, setManagerOpen] = useState(false);
   const drop = useFileDrop((d) => {
     if (collapsed || adder.busy || d.text) return;
     if (d.paths.length !== 1) {
@@ -233,6 +235,8 @@ export function Sidebar({
         await onOpenRemote(host, root);
         await reloadRemoteTrees();
       }} />}
+    {managerOpen && <SessionManager hub={hub} tree={tree} liveIds={liveIds} reload={reloadTree}
+      onOpen={onOpen} onError={onError} onCloseManager={() => setManagerOpen(false)} />}
     {/* Outside the column's inert wrapper: a collapsed rail must still be
         reachable by the shortcut that opens this. */}
     <Palette
@@ -324,6 +328,7 @@ export function Sidebar({
         onArchive={onArchive}
         onRename={onRename}
         onError={onError}
+        onManage={() => setManagerOpen(true)}
         adder={{ ...adder, add: () => shownRemotes.length ? setProjectPicker(true) : adder.add() }}
       >
         {shownRemotes.some((host) => remoteWorkspaces(host, remoteTrees[host.name]).length > 0 || runtimes.some((rt) => rt.host === host.name)) ? (
