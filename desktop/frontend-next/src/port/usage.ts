@@ -78,6 +78,10 @@ export interface UsageReport {
   // Set when a counted call's money is unknown (no rate card, or a quote that
   // could not price its usage). cost is then a floor, not the bill.
   costIncomplete?: boolean;
+  // How many of those counted calls are under that floor, and the distinct
+  // reasons the rows recorded (the kernel's incomplete-reason vocabulary).
+  unpricedCalls?: number;
+  incompleteReasons?: string[];
   active_days: number;
   top_model: string;
   top_provider: string;
