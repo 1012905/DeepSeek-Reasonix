@@ -1,0 +1,2 @@
+- 修复：删除来自 Reasonix 1.x 的会话后，同一会话不再重新出现在侧栏；删除状态会在重启后保留，且不会修改 1.x 的原始存储。删除记录的读取限制在本机会话目录内。修复 #14632。
+- Fixed: deleted 1.x conversations stay out of the sidebar after restart. The original store stays unchanged; marker reads stay within the native session directory. Fixes #14632.
