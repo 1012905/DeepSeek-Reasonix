@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { t } from "../i18n";
 import type { HubPort, TreeSession, TreeWorkspace } from "../port/hub";
@@ -76,14 +76,6 @@ export function SessionManager({ hub, tree, liveIds, reload, onOpen, onError, on
       return next;
     });
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !pending) onCloseManager();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [pending, onCloseManager]);
-
   const runDelete = async () => {
     setConfirm(false);
     setPending(true);
@@ -104,9 +96,11 @@ export function SessionManager({ hub, tree, liveIds, reload, onOpen, onError, on
   const deletableCount = filtered.filter((s) => selection.has(s.path) && !isRunning(s)).length;
 
   return createPortal(
-    <div className="sm-backdrop" role="presentation" onClick={() => !pending && onCloseManager()}>
-      <div className="sm-panel" role="dialog" aria-modal="true" aria-label={t("会话管理")}
-        onClick={(ev) => ev.stopPropagation()}>
+    <div className="sm-backdrop" role="presentation" data-action-click="session-manager.close"
+      onClick={(ev) => { if (ev.target === ev.currentTarget && !pending) onCloseManager(); }}
+      onKeyDown={(ev) => { if (ev.key === "Escape" && !pending) onCloseManager(); }}
+      data-action-keydown="session-manager.close">
+      <div className="sm-panel" role="dialog" aria-modal="true" aria-label={t("会话管理")}>
         <header className="sm-head">
           <h2>{t("会话管理")}</h2>
           <span className="sm-count">{t("共 {n} 个会话", { n: rows.length })}</span>
@@ -118,7 +112,7 @@ export function SessionManager({ hub, tree, liveIds, reload, onOpen, onError, on
         <div className="sm-filters">
           <label className="sm-search">
             <StudioIcon name="search" />
-            <input type="search" value={needle} placeholder={t("按名称搜索…")}
+            <input type="search" value={needle} placeholder={t("按名称搜索…")} data-action="session-manager.search"
               onChange={(e) => setNeedle(e.target.value)} aria-label={t("搜索会话")} />
           </label>
           <div className="sm-seg" role="group" aria-label={t("范围")}>
@@ -127,7 +121,7 @@ export function SessionManager({ hub, tree, liveIds, reload, onOpen, onError, on
                 onClick={() => setScope(v)}>{t(v === "all" ? "全部" : v === "live" ? "进行中" : v === "pinned" ? "置顶" : "归档")}</button>
             ))}
           </div>
-          <select className="sm-ws" value={wsRoot} aria-label={t("项目")}
+          <select className="sm-ws" value={wsRoot} aria-label={t("项目")} data-action="session-manager.project"
             onChange={(e) => setWsRoot(e.target.value)}>
             <option value="all">{t("所有项目")}</option>
             {tree.map((ws) => <option key={ws.root} value={ws.root}>{ws.name}</option>)}
@@ -137,7 +131,8 @@ export function SessionManager({ hub, tree, liveIds, reload, onOpen, onError, on
         <div className="sm-toolbar">
           <label className="sm-selall">
             <input type="checkbox" checked={allSelected} ref={(el) => { if (el) el.indeterminate = !allSelected && someSelected; }}
-              disabled={selectable.length === 0 || pending} aria-label={t(allSelected ? "取消全选" : "全选")} onChange={toggleAll} />
+              disabled={selectable.length === 0 || pending} aria-label={t(allSelected ? "取消全选" : "全选")}
+              data-action="session-manager.select-all" onChange={toggleAll} />
             <span>{allSelected ? t("取消全选") : t("全选")}</span>
           </label>
           <span className="sm-status" role="status">{t("已选 {n} 个", { n: selection.size })}</span>
@@ -156,7 +151,8 @@ export function SessionManager({ hub, tree, liveIds, reload, onOpen, onError, on
             return (
               <div key={s.path} className={"sm-row" + (checked ? " is-sel" : "") + (running ? " is-running" : "")} role="listitem">
                 <input type="checkbox" className="sm-check" checked={checked} disabled={running || pending}
-                  aria-label={t("选择会话：{name}", { name: s.title || s.name })} onChange={() => toggle(s.path)} />
+                  aria-label={t("选择会话：{name}", { name: s.title || s.name })} data-action="session-manager.toggle"
+                  onChange={() => toggle(s.path)} />
                 <button className="sm-open" data-action="session-manager.open" onClick={() => void onOpen({ sessionPath: s.path }).then(onCloseManager).catch(onError)}>
                   <span className="sm-title">{s.title || s.name}</span>
                   <span className="sm-meta">

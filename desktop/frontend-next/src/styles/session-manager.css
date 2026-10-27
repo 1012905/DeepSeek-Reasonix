@@ -31,12 +31,12 @@
 }
 .sm-head h2 {
   margin: 0;
-  font: var(--w-semi, 600) 16px/1 var(--ui);
+  font: var(--w-semi, 600) var(--fs-lead) / 1 var(--ui);
   color: var(--text, #111);
 }
 .sm-count {
   color: var(--muted, #888);
-  font: var(--w-reg, 400) 12px var(--ui);
+  font: var(--w-reg, 400) var(--fs-meta) var(--ui);
 }
 .sm-x {
   margin-left: auto;
@@ -73,7 +73,7 @@
   outline: none;
   background: transparent;
   color: var(--text, #111);
-  font: var(--w-reg, 400) 13px var(--ui);
+  font: var(--w-reg, 400) var(--fs-ui) var(--ui);
   width: 100%;
 }
 .sm-seg {
@@ -87,7 +87,7 @@
   background: transparent;
   color: var(--muted, #888);
   padding: 6px 12px;
-  font: var(--w-med, 500) 13px var(--ui);
+  font: var(--w-med, 500) var(--fs-ui) var(--ui);
   cursor: pointer;
 }
 .sm-seg button[aria-pressed="true"] {
@@ -100,7 +100,7 @@
   padding: 6px 10px;
   background: var(--page, #fff);
   color: var(--text, #111);
-  font: var(--w-reg, 400) 13px var(--ui);
+  font: var(--w-reg, 400) var(--fs-ui) var(--ui);
   max-width: 220px;
 }
 
@@ -116,10 +116,10 @@
   align-items: center;
   gap: 6px;
   color: var(--text, #111);
-  font: var(--w-med, 500) 13px var(--ui);
+  font: var(--w-med, 500) var(--fs-ui) var(--ui);
   cursor: pointer;
 }
-.sm-status { color: var(--muted, #888); font: var(--w-reg, 400) 12px var(--ui); }
+.sm-status { color: var(--muted, #888); font: var(--w-reg, 400) var(--fs-meta) var(--ui); }
 .sm-spacer { flex: 1; }
 .sm-danger {
   display: inline-flex;
@@ -130,7 +130,7 @@
   color: #fff;
   padding: 6px 14px;
   border-radius: var(--r-sm, 8px);
-  font: var(--w-semi, 600) 13px var(--ui);
+  font: var(--w-semi, 600) var(--fs-ui) var(--ui);
   cursor: pointer;
 }
 .sm-danger:disabled {
@@ -147,7 +147,7 @@
   color: var(--muted, #888);
   text-align: center;
   padding: 32px 0;
-  font: var(--w-reg, 400) 13px var(--ui);
+  font: var(--w-reg, 400) var(--fs-ui) var(--ui);
 }
 .sm-row {
   display: flex;
@@ -174,7 +174,7 @@
 }
 .sm-open:hover .sm-title { color: var(--accent, #4b6bfb); }
 .sm-title {
-  font: var(--w-med, 500) 14px/1.2 var(--ui);
+  font: var(--w-med, 500) var(--fs-lead) / 1.2 var(--ui);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -183,12 +183,12 @@
   display: flex;
   gap: 10px;
   color: var(--muted, #888);
-  font: var(--w-reg, 400) 12px var(--ui);
+  font: var(--w-reg, 400) var(--fs-meta) var(--ui);
 }
 .sm-meta .sm-ws { color: var(--muted, #888); }
 .sm-badges { display: inline-flex; gap: 6px; flex: none; }
 .sm-badge {
-  font: var(--w-reg, 400) 11px var(--ui);
+  font: var(--w-reg, 400) var(--fs-micro) var(--ui);
   padding: 2px 7px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--muted, #888) 18%, transparent);
@@ -201,6 +201,6 @@
   margin: 0;
   padding: 8px 16px;
   color: var(--muted, #888);
-  font: var(--w-reg, 400) 12px var(--ui);
+  font: var(--w-reg, 400) var(--fs-meta) var(--ui);
   border-top: 1px solid var(--border, #eee);
 }

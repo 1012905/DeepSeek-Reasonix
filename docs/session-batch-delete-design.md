@@ -1,3 +1,10 @@
+---
+owner: @SivanCola
+backup: @esengine
+status: active
+reviewed: 2026-10-27
+---
+
 # 会话批量删除能力 实现方案
 
 > 场景：日常开发 — 为会话（Session/Conversation）功能增加批量删除能力。
