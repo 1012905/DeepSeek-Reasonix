@@ -223,6 +223,32 @@ jobs:
           WINDOWS_SANDBOX_WAIT_MS: "20000"
         run: go test -count=1 -p 4 -timeout=18m ./internal/runtime/agent/... ./internal/platform/appidentity/... ./internal/assembly/boot/... ./internal/state/checkpoint/... ./internal/frontend/cli/... ./internal/session/control/... ./internal/base/filelock/... ./internal/base/fileutil/... ./internal/ext/hook/... ./internal/state/instruction/... ./internal/ext/mcplaunch/... ./internal/platform/notify/... ./internal/base/proc/... ./internal/platform/remote/... ./internal/platform/repair/... ./internal/safety/sandbox/... ./internal/base/sysproxy/... ./internal/state/workspacelease/... ./cmd/...
 
+      - name: test (Windows published command job owner)
+        if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/published-job-owner"
+          mkdir -p "$evidence"
+          go test -count=1 -timeout=3m -json -run '^TestPublishedJob' ./internal/base/proc | tee "$evidence/positive.jsonl"
+          node scripts/published-job-evidence.mjs positive "$evidence/positive.jsonl"
+          node scripts/published-job-evidence.mjs overlay "$evidence"
+          set +e
+          go test -count=1 -timeout=3m -json -overlay="$evidence/overlay.json" -run '^TestPublishedJob' ./internal/base/proc > "$evidence/negative.jsonl"
+          old_result=$?
+          set -e
+          test "$old_result" -eq 1
+          node scripts/published-job-evidence.mjs negative "$evidence/negative.jsonl"
+
+      - name: upload Windows published command job owner evidence
+        if: always() && env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: published-job-owner-windows-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/published-job-owner/
+          if-no-files-found: error
+          retention-days: 7
+
       - name: test (Windows isolation owners)
         if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
         timeout-minutes: 25
