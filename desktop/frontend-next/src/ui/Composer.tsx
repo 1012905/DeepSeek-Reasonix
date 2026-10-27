@@ -392,6 +392,7 @@ export function Composer({ port, status, running, queued = false, quote, restore
   const forcedThinking = forcesThinkingFor(models, status?.modelRef);
   const modelLb = status?.modelRef === UNCONFIGURED_REF ? t("未连接")
     : models.find((m) => m.ref === status?.modelRef)?.modelAlias?.trim()
+    || models.find((m) => m.ref === status?.modelRef)?.modelShort
     || (status?.modelRef?.replace(/^[^/]+\//, "") ?? status?.label ?? "—");
   // A model switch rebuilds the runtime kernel-side; other controls here may
   // land at once. Each click needs its own pending state: greying the whole

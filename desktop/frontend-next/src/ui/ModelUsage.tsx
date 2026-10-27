@@ -19,6 +19,7 @@ const ROLES: [RoleKey, string, string, Answers][] = [
   ["decision", "决策", "system_one 询问的后端", "decision"],
 ];
 
+const shown = (m: ModelEntry) => m.modelAlias?.trim() || m.modelShort || m.model;
 const answersOf = (m: ModelEntry): Answers => (m.answers === "decision" ? "decision" : "chat");
 const answersMatch = (m: ModelEntry, answers: Answers) =>
   answers === "search" ? m.webSearch === true : answers === "vision" ? m.vision === true && answersOf(m) === "chat" : answersOf(m) === answers;
@@ -222,7 +223,7 @@ function Choices({
       {groups.map(({ v, rows }) => (
         <optgroup key={v.key} label={v.label}>
           {rows.map((m) => (
-            <option key={m.ref} value={m.ref}>{m.vision ? `${m.model} · ${t("读图")}` : m.model}</option>
+            <option key={m.ref} value={m.ref}>{m.vision ? `${shown(m)} · ${t("读图")}` : shown(m)}</option>
           ))}
         </optgroup>
       ))}
