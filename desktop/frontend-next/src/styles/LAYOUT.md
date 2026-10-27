@@ -342,6 +342,9 @@ and selected states, while long titles truncate within the remaining width.
   the pane's tab-row line so the two rows read as one: the strip is
   `--pane-bar-h` less the card's top inset and border. `perf/dock.mjs` holds
   the two lines together.
+- The file toolbar gives spare width to the truncated path; optional controls
+  and Save keep their intrinsic widths. Enabled Save uses accent foreground ink;
+  disabled Save uses opaque muted ink on a neutral surface.
 - The workbench is hidden, not unmounted. It holds the open files and a browser
   per tab, each with its own history, and a glance at the conversation must not
   cost them. `.scroll[data-pane="browser"][hidden]` was already written for it.
