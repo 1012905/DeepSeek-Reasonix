@@ -36,6 +36,7 @@ import { touchKeyboard } from "./touchKeyboard";
 import { ImagePreview } from "./ImagePreview";
 import { SideAskButton } from "./SideAskButton";
 import { chipId, chipName, isPicture, quoteBlock, releaseChip, type Chip } from "./composerChips";
+import { isAbsolutePath, parseImagePaths, resolveImagePath } from "./imagepaths";
 
 interface Props {
   worktreeTarget?: HTMLElement | null;
@@ -339,8 +340,12 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
   // turn edit the copy and report the edit as done while the file the user
   // pointed at never changed. Only the host can mint the token: whether a path
   // is inside the workspace compares two spellings of one location.
+  //
+  // A pasted image comes back the other way round — as a path a copy wrote —
+  // and the reader wants it as the image it names: preview says so, and the
+  // path stays on the chip as the place it came from.
   const refIn = useCallback(
-    (paths: string[]) => {
+    (paths: string[], preview = false) => {
       port
         .dropRefs(paths)
         .then((refs) => {
@@ -352,6 +357,9 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
                   name: nameOf(r.path ?? r.ref),
                   state: "ready" as const,
                   a: { path: r.path ?? "", ref: r.ref, image: r.image },
+                  url: preview && r.image && r.path && !isAbsolutePath(r.path)
+                    ? port.workspaceImageURL(r.path)
+                    : undefined,
                 }]
               : [],
           );
@@ -362,6 +370,37 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
         .catch(onError);
     },
     [port, onError],
+  );
+
+  // A pasted image comes back as a path a copy wrote. It is taken as the image
+  // it names: the bytes are read from where it is and stored as this turn's
+  // attachment, so what the reader sees in the box is the image itself, and the
+  // path never becomes part of what is sent.
+  const takeImages = useCallback(
+    async (paths: string[]) => {
+      const files: File[] = [];
+      const elsewhere: string[] = [];
+      const refused: string[] = [];
+      for (const path of paths) {
+        // The host reads the picture where it is: inside the workspace, or
+        // outside it where a grant covers the place it is in. A path no grant
+        // covers is refused rather than referred to — naming a path is not a
+        // grant, so a pasted path must not become read access.
+        const read = await readImage(port.workspaceImageURL(path));
+        if ("blob" in read) {
+          files.push(new File([read.blob], nameOf(path), { type: read.blob.type }));
+          continue;
+        }
+        if (isAbsolutePath(path)) refused.push(path);
+        else elsewhere.push(resolveImagePath(path, status?.workspaceRoot ?? ""));
+      }
+      if (files.length > 0) attach(files);
+      if (elsewhere.length > 0) refIn(elsewhere, true);
+      if (refused.length > 0) {
+        onError(new Error(t("工作区外的图片无法读取：{path}", { path: refused.join("、") })));
+      }
+    },
+    [attach, onError, port, refIn, status],
   );
 
   // One place decides what a payload becomes, whichever channel carried it.
@@ -573,6 +612,19 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
               return;
             }
             const body = e.clipboardData.getData("text/plain");
+            // A copied image arrives as a path the copy wrote. It is taken as
+            // the image it names, so the path never becomes part of what is
+            // sent: what the box shows is the image itself.
+            const { paths, text } = parseImagePaths(body);
+            if (paths.length > 0) {
+              e.preventDefault();
+              if (text) {
+                if (pasteIsLong(text)) setShots((prev) => [...prev, { k: "paste", id: chipId(), body: text, lines: countLines(text) }]);
+                else insert(text);
+              }
+              void takeImages(paths);
+              return;
+            }
             if (!pasteIsLong(body)) return;
             // Long enough to bury the composer. It still goes with the turn — it
             // is just held beside the box instead of becoming it.
@@ -796,4 +848,24 @@ export function Composer({ port, status, running, quote, restore, inject, focus,
       </div>
     </div></>
   );
+}
+
+// How long an image gets to answer before it counts as unreadable. A paste is
+// a small thing to ask for; a spinner is not.
+const imageTimeout = 4000;
+
+// Reads an image the host will serve, so it can ride into the turn as this
+// turn's own attachment. A path the host will not serve answers with the
+// reason rather than with nothing: the reader is told which picture could not
+// be read, not left wondering why one image arrived and another did not.
+async function readImage(url: string): Promise<{ blob: Blob } | { why: string }> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(imageTimeout) });
+    if (!res.ok) return { why: t("图片无法读取（{code}）", { code: res.status }) };
+    const blob = await res.blob();
+    if (!blob.type.startsWith("image/")) return { why: t("图片格式无法识别：{type}", { type: blob.type }) };
+    return { blob };
+  } catch (e) {
+    return { why: reason(e) };
+  }
 }

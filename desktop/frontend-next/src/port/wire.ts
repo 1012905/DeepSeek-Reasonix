@@ -263,10 +263,16 @@ export interface DecisionReceipt {
   via?: Via;
 }
 
-// An image the host stored under .reasonix/attachments that a message references.
+// An image the host stored or was handed this session that a message references.
 // Mirrors eventwire.Attachment: a client previews this, not how it was spelled.
 export interface StoredAttachment {
+  // Workspace-relative spelling for stored images, or the absolute, native
+  // location for an image the session was handed outside the workspace.
   path: string;
+  // The opaque external-folder token an in-place external image arrived as.
+  // Present only for external images, so the surface can hide the token now
+  // that it previews the image by its absolute path instead.
+  ref?: string;
 }
 
 // The paired device a person acted from. Mirrors eventwire.Via: the pairing's
