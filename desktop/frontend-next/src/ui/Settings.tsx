@@ -11,6 +11,7 @@ import type { CapabilityScope, McpEntry, ModelEntry, PluginPackage, SkillEntry }
 import { useSettingsSearch } from "./useSettingsSearch";
 import { useSettingLanding } from "./useSettingLanding";
 import { bytes, tokens as fmtTokens } from "../i18n/format";
+import { STORAGE_TALLY_DELAY, cachedStorageTotal, storageTotal } from "./storageTally";
 import { SECTION_NAME } from "./prefsnav";
 import { SettingsNav } from "./SettingsNav";
 import { Group, SCOPE_SAID } from "./Group";
@@ -184,12 +185,14 @@ export function Settings({ hub, onError, port, networkPort, localWorkspacePort, 
     let alive = true;
     setTally({});
     const put = (k: Section, v: string) => { if (alive) setTally((prev) => ({ ...prev, [k]: v })); };
-    homePort.storage().then((st) => put("storage", bytes(st.roots.reduce((n, r) => n + (r.bytes || 0), 0)))).catch(() => {});
+    const known = cachedStorageTotal(homePort);
+    if (known !== undefined) put("storage", bytes(known));
+    const walk = known !== undefined ? undefined : setTimeout(() => { storageTotal(homePort).then((n) => put("storage", bytes(n))).catch(() => {}); }, STORAGE_TALLY_DELAY);
     // The same window Usage itself opens on, or the list and the page it opens
     // would report two different totals for one word.
     homePort.usage(DEFAULT_DAYS).then((u) => put("usage", fmtTokens(u.tokens))).catch(() => {});
     homePort.versions().then((v) => put("versions", v.current || "dev")).catch(() => {});
-    return () => { alive = false; };
+    return () => { alive = false; clearTimeout(walk); };
   }, [homePort]);
 
   // Focus lands once, when the pane opens, and goes back where it came from on
