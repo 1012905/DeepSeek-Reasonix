@@ -2533,33 +2533,6 @@
 
   .prefs-main[data-sec="ext"] .prefs-col { max-width: 980px }
 
-  .prefs-intro {
-    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 13px;
-    margin-bottom: 20px; padding: 0 2px 17px; border-bottom: 1px solid var(--hair);
-  }
-
-  .prefs-intro-mark {
-    display: grid; place-items: center; width: 34px; height: 34px;
-    border: 1px solid var(--border);
-    border-radius: var(--r-md); background: var(--overlay); color: var(--muted);
-  }
-  .prefs-intro-mark svg {
-    width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.45;
-    stroke-linecap: round; stroke-linejoin: round;
-  }
-  .prefs-intro-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0 }
-  .prefs-intro-overline {
-    font: var(--w-semi) var(--fs-micro) var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--faint);
-  }
-  .prefs-intro h2 { margin: 0; font: var(--w-semi) var(--fs-title)/1.25 var(--ui); color: var(--text); letter-spacing: -.01em }
-  .prefs-intro-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 0 }
-  .prefs-intro-meta strong {
-    max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font: var(--w-med) var(--fs-ui) var(--mono); color: var(--muted);
-  }
-  .prefs-intro-meta > span { font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--ghost) }
-  .prefs-intro-meta[data-danger] strong { color: var(--err-ink) }
-
   .grp {
     margin-bottom: 16px; padding: 19px 20px 17px; outline: 3px solid transparent; outline-offset: 2px;
     border-radius: var(--r-md); background: var(--surface);
@@ -2659,11 +2632,6 @@
     .prefs-find { grid-column: 1 / -1; grid-row: 2; width: 100%; max-width: none; margin-left: 0 }
     .prefs-found { right: 14px; width: calc(100% - 28px) }
     .prefs-main { --main-pad-b: 40px; padding: 20px 14px var(--main-pad-b) }
-    .prefs-intro { grid-template-columns: auto minmax(0, 1fr); gap: 11px; margin-bottom: 16px }
-    .prefs-intro-meta {
-      grid-column: 2; flex-direction: row; align-items: baseline; justify-content: space-between;
-    }
-    .prefs-intro-meta strong { max-width: 60% }
     .grp { padding: 17px 15px 15px }
     .advset { padding-inline: 15px }
   }

@@ -3356,8 +3356,6 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
   background: color-mix(in srgb, var(--page) 82%, var(--float)) !important;
   scrollbar-color: color-mix(in srgb, var(--muted) 34%, transparent) transparent;
 }
-.prefs-intro { border-color: var(--hair); }
-.prefs-intro-mark { background: var(--accent-wash); border-color: var(--hair); color: var(--accent); }
 .grp,
 .advset,
 .setting {
@@ -3585,7 +3583,6 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 .prefs {
   --prefs-body: var(--fs-ui);
   --prefs-meta: var(--fs-meta);
-  --prefs-title: var(--fs-title);
   font-family: var(--ui);
   font-size: var(--prefs-body);
 }
@@ -3593,17 +3590,13 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 .prefs-find,
 .prefs-nav button,
 .prefs-found .what { font-size: var(--fs-ui); }
-.prefs-nav .navsec,
-.prefs-intro-overline {
+.prefs-nav .navsec {
   font-size: calc(11.5px * var(--fs-scale, 1));
   letter-spacing: .08em;
   text-transform: none;
 }
 .prefs-nav .nv,
-.prefs-intro-meta > span,
 .apply { font-size: var(--prefs-meta); }
-.prefs-intro h2 { font-size: var(--prefs-title); }
-.prefs-intro-meta strong { font-family: var(--ui); font-size: var(--fs-ui); }
 .grp > .grp-hd h3, .grp > h3.grp-hd { font-size: var(--fs-lead); }
 .grp .hint,
 .grp .note,
