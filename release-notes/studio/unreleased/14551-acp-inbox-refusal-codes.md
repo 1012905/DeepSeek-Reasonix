@@ -1,0 +1,2 @@
+- 修复：ACP 的 inbox 拒绝现在带机器码——`-32020` 队列拒绝（终端或可修复），`-32021` 该工作可能已执行过、不要重试。关联 #14551。
+- Fixed: ACP inbox refusals now carry machine codes — `-32020` for a queue refusal, `-32021` for work that may already have run and must not be retried. Refs #14551.
