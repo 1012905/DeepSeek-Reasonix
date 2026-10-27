@@ -755,9 +755,6 @@ export const EN: Record<string, string> = {
   "代码块、命令、差异与工具输出共用这一等宽字体，不跟随界面主题改变。":
     "Code blocks, commands, diffs and tool output share this monospace font and do not change with the interface theme.",
   "等宽字体": "Monospace font",
-  "更多个性化": "More personalization",
-  "已设置自定义壁纸": "Custom wallpaper set",
-  "壁纸与背景位置": "Wallpaper and background position",
   "文字粗细": "Text weight",
   "视觉效果": "Visual effects",
   "窗口持续占用显卡时，改为「节能」：界面不变，只去掉磨砂玻璃、动态天空和颗粒这几层。": "If the window keeps your GPU busy, choose Reduced: the layout stays as it is, only frosted glass, the animated sky and the grain layer go.",
