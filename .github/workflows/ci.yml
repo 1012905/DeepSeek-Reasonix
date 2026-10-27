@@ -320,6 +320,38 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: test (Windows delegated Goal usage scope)
+        if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -count=1 -timeout=3m -json -run '^Test(UsageScope.*|DelegatedUsageKeepsGoalOwner|EffectDelegatedUsageKeepsGoalOwner)$' ./internal/contract/event ./internal/session/control ./internal/assembly/boot | tee "$RUNNER_TEMP/goal-usage-scope.jsonl"
+          jq -se '
+            ["TestUsageScopePreservesCapturedOwnerAndWire", "TestUsageScopeKeepsEarlierEventOwner",
+             "TestUsageScopeWithoutCapability", "TestDelegatedUsageKeepsGoalOwner",
+             "TestDelegatedUsageKeepsGoalOwner/chat_to_goal", "TestDelegatedUsageKeepsGoalOwner/replaced_goal",
+             "TestDelegatedUsageKeepsGoalOwner/cleared_goal", "TestDelegatedUsageKeepsGoalOwner/resumed_goal",
+             "TestDelegatedUsageKeepsGoalOwner/same_goal_next_turn", "TestDelegatedUsageKeepsGoalOwner/between_turns",
+             "TestDelegatedUsageKeepsGoalOwner/nested_after_replacement", "TestEffectDelegatedUsageKeepsGoalOwner",
+             "TestEffectDelegatedUsageKeepsGoalOwner/chat_to_goal", "TestEffectDelegatedUsageKeepsGoalOwner/replaced_goal",
+             "TestEffectDelegatedUsageKeepsGoalOwner/nested_chat_to_goal", "TestEffectDelegatedUsageKeepsGoalOwner/same_goal",
+             "TestEffectDelegatedUsageKeepsGoalOwner/completed_before_goal"] as $required |
+            [.[] | select(.Test != null and .Action == "pass") | .Test] as $passed |
+            [.[] | select(.Test == null and .Action == "pass") | .Package] as $packages |
+            all(.[]; .Action != "fail" and .Action != "skip") and
+            (($required - $passed) | length == 0) and
+            ((["reasonix/internal/contract/event", "reasonix/internal/session/control", "reasonix/internal/assembly/boot"] - $packages) | length == 0)
+          ' "$RUNNER_TEMP/goal-usage-scope.jsonl"
+
+      - name: upload Windows delegated Goal usage scope inventory
+        if: always() && env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: goal-usage-scope-windows-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/goal-usage-scope.jsonl
+          if-no-files-found: error
+          retention-days: 7
+
       - name: test (Windows planner local budget)
         if: env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
         timeout-minutes: 5

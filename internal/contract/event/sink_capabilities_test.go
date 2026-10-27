@@ -16,6 +16,11 @@ type capturingSink struct {
 
 func (s *capturingSink) Emit(e Event) { s.events = append(s.events, e) }
 
+func (s *capturingSink) CaptureUsageScope() any {
+	s.recorded = append(s.recorded, "UsageScope")
+	return s
+}
+
 func (s *capturingSink) RecordDelegationAudit(hostaudit.DelegationAudit) {
 	s.recorded = append(s.recorded, "DelegationAudit")
 }
@@ -61,6 +66,7 @@ func (s *capturingSink) RecordVerificationContractDrift(VerificationContractDrif
 
 // recordAll drives every optional capability once through s.
 func recordAll(s Sink) {
+	CaptureUsageScope(s)
 	RecordDelegationAudit(s, hostaudit.DelegationAudit{})
 	RecordReadinessAudit(s, hostaudit.ReadinessAudit{})
 	RecordTurnCompletion(s)
