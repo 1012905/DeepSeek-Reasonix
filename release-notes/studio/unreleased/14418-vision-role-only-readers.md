@@ -1,2 +1,0 @@
-- 改进：设置里「模型偏好」的「看图」下拉框现在只列出已声明支持读图的模型；已选的旧模型仍会显示，并标明"未声明读图"。关联 #14418。
-- Changed: the vision row in Model preferences now lists only models declared to read images; a model chosen earlier stays visible, marked as not declared. Refs #14418.
