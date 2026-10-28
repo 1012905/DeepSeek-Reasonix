@@ -556,7 +556,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          go test -count=1 -timeout=3m -json -run '^Test(RootToken|EffectRootToken)' ./internal/runtime/agent ./internal/assembly/boot | tee "$RUNNER_TEMP/root-token-budget.jsonl"
+          go test -count=1 -timeout=3m -json -run '^Test(RootToken|EffectRootToken|BudgetCountsKnownReportedTokens|ReportedToken|EffectReportedTotalTokenBudget)' ./internal/runtime/agent ./internal/assembly/boot | tee "$RUNNER_TEMP/root-token-budget.jsonl"
           jq -se '
             [.[] | select(.Test == null and .Action == "pass") | .Package] as $packages |
             [.[] | select(.Test != null and .Action == "pass") | .Test] as $tests |
@@ -572,6 +572,38 @@ jobs:
               "TestEffectRootTokenBudgetReachesDelegatedJobs", "TestEffectRootTokenBudgetReachesDelegatedJobs/foreground",
               "TestEffectRootTokenBudgetReachesDelegatedJobs/foreground_capability", "TestEffectRootTokenBudgetReachesDelegatedJobs/background",
               "TestEffectRootTokenBudgetReachesDelegatedJobs/background_capability", "TestEffectRootTokenBudgetReachesDelegatedJobs/background_fleet"] - $tests | length) == 0
+          ' "$RUNNER_TEMP/root-token-budget.jsonl"
+          jq -se '
+            . as $events |
+            {"reasonix/internal/runtime/agent": [
+               "TestBudgetCountsKnownReportedTokens",
+               "TestBudgetCountsKnownReportedTokens/split",
+               "TestBudgetCountsKnownReportedTokens/total_only",
+               "TestBudgetCountsKnownReportedTokens/partial_split",
+               "TestBudgetCountsKnownReportedTokens/lower_total",
+               "TestBudgetCountsKnownReportedTokens/missing_total",
+               "TestBudgetCountsKnownReportedTokens/negative_split",
+               "TestBudgetCountsKnownReportedTokens/zero",
+               "TestBudgetCountsKnownReportedTokens/negative",
+               "TestReportedTokensEnforceLocalCapOnInheritedRoot",
+               "TestReportedTokensFollowOriginalAuxiliaryRoot",
+               "TestReportedTokenCountersSaturate"],
+             "reasonix/internal/assembly/boot": [
+               "TestEffectReportedTotalTokenBudget",
+               "TestEffectReportedTotalTokenBudget/split",
+               "TestEffectReportedTotalTokenBudget/total_only",
+               "TestEffectReportedTotalTokenBudget/partial_split",
+               "TestEffectReportedTotalTokenBudget/lower_total",
+               "TestEffectReportedTotalTokenBudget/missing_total",
+               "TestEffectReportedTotalTokenBudget/disabled"]} |
+            to_entries | all(.[]; . as $package |
+              ([ $events[] | select(.Package == $package.key and .Test == null and
+                 (.Action == "pass" or .Action == "fail" or .Action == "skip")) ] |
+               length == 1 and .[0].Action == "pass") and
+              all(.value[]; . as $test |
+                [ $events[] | select(.Package == $package.key and .Test == $test and
+                  (.Action == "pass" or .Action == "fail" or .Action == "skip")) ] |
+                length == 1 and .[0].Action == "pass"))
           ' "$RUNNER_TEMP/root-token-budget.jsonl"
 
       - name: upload Windows root token budget inventory
