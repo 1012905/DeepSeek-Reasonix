@@ -18,7 +18,7 @@ export function readInventory(directory) {
       assert(Array.isArray(group.tests) && group.tests.length > 0, `${file}: empty tests`);
       const tests = required.get(group.package) ?? new Set();
       for (const test of group.tests) {
-        assert(typeof test === 'string' && /^Test[A-Za-z0-9_]+(?:\/[^\s]+)*$/.test(test), `${file}: invalid test`);
+        assert(typeof test === 'string' && /^Test[A-Za-z0-9_]+(?:\/[^\s]+)?$/.test(test), `${file}: invalid test`);
         tests.add(test);
       }
       required.set(group.package, tests);

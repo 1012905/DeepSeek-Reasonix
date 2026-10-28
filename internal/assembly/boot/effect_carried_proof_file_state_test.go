@@ -42,6 +42,7 @@ func TestEffectCarriedProofTracksFileState(t *testing.T) {
 	for _, change := range []string{"unchanged", "content", "mode"} {
 		t.Run(change, func(t *testing.T) {
 			isolateConfigHome(t)
+			writeUserConfig(t, "[sandbox]\nbash = \"off\"\n")
 			dir := robustTempDir(t)
 			t.Chdir(dir)
 			rec := &fileStateProofProvider{}
