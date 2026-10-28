@@ -72,6 +72,9 @@ desktop/**/.reasonix/
 # CodeGraph per-project index (rebuilt locally; never committed)
 .codegraph/
 
+# WorkBuddy agent-local project memory/state; never commit it.
+.workbuddy/
+
 # Editor / OS
 .DS_Store
 Thumbs.db
