@@ -871,7 +871,7 @@ body { background: var(--page) !important; }
 .activity-group { --fs-scale: var(--activity-scale, 1); margin: var(--sp-4) 0 0; overflow: clip; }
 .activity-group > summary {
   min-height: 28px; padding: 0; display: flex; align-items: center; gap: var(--sp-3);
-  color: var(--faint); font-size: calc(11px * var(--fs-scale, 1)); font-weight: 500; line-height: 1.5;
+  color: var(--faint); font-size: var(--fs-meta); font-weight: 500; line-height: 1.5;
   cursor: pointer; user-select: none;
 }
 .activity-group > summary:hover { color: var(--muted); }
@@ -894,11 +894,11 @@ body { background: var(--page) !important; }
   border-radius: 4px;
   color: var(--net);
   background: var(--net-wash);
-  font: 500 calc(11px * var(--fs-scale, 1))/1.5 var(--ui);
+  font: 500 var(--fs-meta)/1.5 var(--ui);
 }
-.activity-title { color: inherit; font: 500 calc(11px * var(--fs-scale, 1))/1.5 var(--ui); }
-.activity-errors { color: var(--err-ink); font: 500 calc(11px * var(--fs-scale, 1))/1.5 var(--ui); }
-.activity-count { margin-left: 0; color: var(--faint); font: 500 calc(11px * var(--fs-scale, 1))/1.5 var(--ui); }
+.activity-title { color: inherit; font: 500 var(--fs-meta)/1.5 var(--ui); }
+.activity-errors { color: var(--err-ink); font: 500 var(--fs-meta)/1.5 var(--ui); }
+.activity-count { margin-left: 0; color: var(--faint); font: 500 var(--fs-meta)/1.5 var(--ui); }
 .activity-fold-icon { margin-left: 2px; color: var(--faint); transition: transform 140ms ease; }
 .activity-group[open] .activity-fold-icon { transform: rotate(180deg); }
 .activity-group[open] > summary { position: sticky; top: 0; z-index: 1; }
