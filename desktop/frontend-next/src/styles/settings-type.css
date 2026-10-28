@@ -6,3 +6,4 @@
 .prefs-col :is(.v, .n, text, .composition-builtin-description) { font-weight: var(--w-reg); }
 .prefs-col :is(.cur, div.v) { font-size: var(--fs-display); font-weight: var(--w-semi); }
 .prefs-col .mi-mono { font-size: var(--fs-meta); }
+.prefs-col :is(.btn, .act)[data-primary]:not(:disabled) { color: var(--accent-fg); }

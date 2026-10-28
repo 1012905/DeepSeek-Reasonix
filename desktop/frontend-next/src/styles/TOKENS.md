@@ -335,6 +335,10 @@ pack states a shape, never a number the layout has to agree with.
   and fails on a size outside the scale.
 - `settings-type.test.ts` holds the stylesheet to tokens, so a literal size or
   colour cannot be added to it.
+- The neutral ink the roles set on buttons would land on a primary action's
+  fill, where the component pairs `--accent-fg` with `--accent`; an enabled
+  `[data-primary]` button therefore keeps `--accent-fg`, and nothing else is
+  recoloured.
 
 ## Weight and contrast
 
