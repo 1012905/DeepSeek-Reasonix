@@ -21,11 +21,15 @@ and selected states, while long titles truncate within the remaining width.
 
 ## Project header actions
 
+- The project header is a non-shrinking sibling of the tree scroller. Local and
+  remote rows share that scroller; adding a project, folding all projects and
+  entering batch selection remain reachable at either end of the list.
+- Batch selection returns focus to the header menu when it ends.
 - The open-project and more-actions buttons share `--overlay` hover fill and
   `--text` ink. The more-actions button retains both while its menu is open.
   Project-row actions keep their `--raised` fill.
-- `perf/project-header.mjs` checks hover parity, menu dismissal, keyboard focus
-  and the folder picker in both schemes.
+- `perf/project-header.mjs` checks hover parity, menu dismissal, keyboard focus,
+  the folder picker and a long mixed local/remote list in both schemes.
 
 ## Reset and the window
 
