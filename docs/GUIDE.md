@@ -1548,6 +1548,16 @@ background tool-call failure. Removing the MCP server also removes its local
 OAuth state unless a lower-priority declaration for the same resource becomes
 effective.
 
+If a server's configuration file or source directory was deleted outside
+Reasonix, **Remove** in the running session also clears its retained connection,
+startup failure, or on-demand tools.
+
+An unknown name still reports an error, and unreadable or unwritable
+configuration is not treated as a successful removal.
+
+Servers managed by a plugin package must be disabled or removed with that
+package; removing a writable declaration may reveal a same-name fallback.
+
 Browse the official MCP Registry from **Settings → MCP servers → Browse
 registry**, or use `reasonix mcp browse [query]` and
 `reasonix mcp install <registry-name>`. Registry access is explicit and never
