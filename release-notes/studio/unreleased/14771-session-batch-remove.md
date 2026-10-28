@@ -1,0 +1,2 @@
+- 新增：会话支持批量删除；整批中若有运行中或不属于本工作区的会话则整批拒绝，中途擦除失败不会回滚已删除的会话。
+- New: conversations can be deleted in bulk; a batch with a running or foreign conversation is refused as a whole, and an erase that fails part-way does not undo earlier ones.
