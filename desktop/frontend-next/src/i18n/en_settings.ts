@@ -185,7 +185,6 @@ export const EN_SETTINGS: Record<string, string> = {
   "搜索设置…": "Search settings…",
   "搜索设置": "Search settings",
   "没有匹配的设置": "No matching setting",
-  "设置项：{n}": "Settings: {n}",
   "立即生效": "In effect now",
   "当前会话": "This session",
   "当前模型": "This model",
