@@ -1,9 +1,14 @@
 package delegation
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
+
+// ErrAncestorCopyBusy means this store already holds a continuation of the
+// same canonical source in the target parent. Callers may retry after release.
+var ErrAncestorCopyBusy = errors.New("ancestor continuation is already in progress")
 
 type ancestorCopyKey struct {
 	parent string
@@ -44,7 +49,7 @@ func (s *SubagentStore) reserveAncestorCopy(key ancestorCopyKey) (func(), error)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.copying[key] {
-		return nil, fmt.Errorf("subagent reference %q is already being continued in parent session %q; retry after it finishes", key.source, key.parent)
+		return nil, fmt.Errorf("%w: subagent reference %q in parent session %q; retry after it finishes", ErrAncestorCopyBusy, key.source, key.parent)
 	}
 	if s.copying == nil {
 		s.copying = make(map[ancestorCopyKey]bool)

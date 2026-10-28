@@ -27,6 +27,13 @@ reviewed: 2026-10-28
 3. `continue_from` 与兼容的旧 `fork_from` 输入共用此归属。较早祖先及其最近副本归一到同一来源；不同目标会话、不同来源保持独立。
 4. 准备失败或放弃未发布的 run 会释放预留。已完成 run 释放后，续跑复用原持久化副本；直接按当前副本引用续跑仍使用原引用锁。
 
+`errors.Is(err, ErrAncestorCopyBusy)` identifies the refusal through wrapping.
+TaskTool uses the existing `subagent.settling` answer code and preserves that
+sentinel; callers do not classify error prose.
+
+包装后的错误仍可用 `errors.Is(err, ErrAncestorCopyBusy)` 识别；TaskTool 使用既有
+`subagent.settling` 回答码并保留此标识，不解析错误文案。
+
 ## Compatibility and limits / 兼容与边界
 
 | Boundary / 边界 | Contract / 合同 |
@@ -54,3 +61,17 @@ reviewed: 2026-10-28
 2. TaskTool 回归在 `MarkRunning` 写元数据前阻塞既有父会话销毁检查回调。竞争调用被拒绝，首个调用读取真实持久化来源转录并创建唯一副本。
 3. 以上是本机 Store/TaskTool 与脚本 provider 验证，不是线上 provider、完整 Boot、浏览器、崩溃重启或物理进程范围验证。
 4. Windows 工作流要求全部指定测试及包终态通过且零跳过；本机交叉编译不等于 Windows 原生执行。
+
+A second TaskTool regression requests background execution without a job manager.
+Preparation succeeds, then normal completion abandons the unstarted run.
+No test calls `Release` for it; a foreground retry proves admission was freed.
+
+另一 TaskTool 回归在没有 job manager 时请求后台执行：准备成功后由正常结束路径
+放弃尚未启动的 run；测试不调用其 `Release`，前台重试证明预留已释放。
+
+The shared `scripts/windows-concurrency-tests.mjs` step reads additive,
+package-qualified inventories under `.github/windows-concurrency/`. This suite
+requires 17 named passes including parents. The broad smoke remains.
+
+共享脚本读取 `.github/windows-concurrency/` 中按包限定的独立清单；此套件要求含
+父测试的 17 个指定测试通过，保留 broad smoke。

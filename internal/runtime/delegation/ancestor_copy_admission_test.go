@@ -1,6 +1,8 @@
 package delegation
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,7 +64,7 @@ func TestAncestorCopyAdmissionCoversUnpublishedRun(t *testing.T) {
 				if second != nil {
 					second.Release()
 				}
-				if err == nil || !strings.Contains(err.Error(), "already") {
+				if !errors.Is(fmt.Errorf("caller: %w", err), ErrAncestorCopyBusy) {
 					t.Fatalf("second admission = %v; first copy has not been published", err)
 				}
 				if err := s.SaveCompleted(first); err != nil {
@@ -197,7 +199,7 @@ func TestAncestorCopyAdmissionUsesNearestSourceIdentity(t *testing.T) {
 	if second != nil {
 		second.Release()
 	}
-	if err == nil || !strings.Contains(err.Error(), "already") {
+	if !errors.Is(err, ErrAncestorCopyBusy) {
 		t.Fatalf("alias of nearest ancestor bypassed admission: %v", err)
 	}
 }
