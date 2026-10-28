@@ -1,2 +1,0 @@
-- 修复：压缩后“较早的消息过长，只通过摘要保留”的提示在中文界面下也用中文显示。修复 #14651。
-- Fixed: the "earlier messages were too large to keep whole" notice after a compaction now reads in the window's language. Fixes #14651.

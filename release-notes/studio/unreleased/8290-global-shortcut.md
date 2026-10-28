@@ -1,6 +1,0 @@
-- 新增：桌面设置提供默认关闭的全局显示 / 隐藏快捷键，立即注册并显示失败状态；绑定保存在本机 shell 配置中，仅 Studio 运行时有效。关联 #8290。
-- 限制：不会启动已退出的应用；浏览器与网络查看器不能配置远程主机快捷键。关联 #7623。
-- Added: an opt-in global show/hide shortcut in desktop settings, with immediate registration and visible failure status. The binding belongs to the local shell profile. Refs #8290.
-- Limits: works only while Studio runs, without launching a stopped app. Browser and network viewers cannot configure a remote host shortcut. Refs #7623.
-- 改进：快捷键支持按键录制、本机符号显示与清除；shell 拒绝没有主修饰键或仅有 Shift 的绑定。关联 #8290。
-- Improved: record a key combination with platform-native labels and Clear; the shell requires Control, Command, Alt or Super, not Shift alone. Refs #8290.

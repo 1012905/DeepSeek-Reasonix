@@ -1,2 +1,0 @@
-- 改进：将「壁纸」及其选择、替换、移除、Wallpaper Engine 导入、浓度、压暗和焦点控件从「更多个性化」移到「外观」的独立区块；已选壁纸的预览直接显示，无需展开。关联 #14470。
-- Changed: Wallpaper, choose/change/remove, scene import, strength, dim and focus move from More personalization to Appearance. The selected preview is visible directly. Refs #14470.

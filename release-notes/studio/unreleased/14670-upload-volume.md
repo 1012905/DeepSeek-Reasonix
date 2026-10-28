@@ -1,2 +1,0 @@
-- 新增：设置 → 用量里多了「上传量」，显示今天和近 30 天发给模型服务商的请求内容大小、次数、平均每次多大，并按服务商列出。关联 #14670。
-- Added: Settings → Usage has "Upload volume": request bodies sent to model providers today and over 30 days, count, average size, and a per-provider list. Refs #14670.
