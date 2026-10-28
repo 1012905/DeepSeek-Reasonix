@@ -25,6 +25,7 @@ import { NavRailSection } from "./NavRailSection";
 import { GraphicsSection } from "./GraphicsSection";
 import { GlobalShortcutSection } from "./GlobalShortcutSection";
 import { SendShortcut } from "./SendShortcut";
+import { RunningMessageSetting } from "./RunningMessageSetting";
 import { KeysSheet } from "./KeysSheet";
 import { SessionTabsSetting } from "./SessionTabsSetting";
 import { EscStopSetting } from "./EscStopSetting";
@@ -570,6 +571,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
       <NewAnswerSection />
       <GraphicsSection />
       <SendShortcut />
+      <RunningMessageSetting />
       <GlobalShortcutSection />
       <KeysSheet />
       <EscStopSetting />

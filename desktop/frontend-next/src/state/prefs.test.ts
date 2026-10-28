@@ -1,8 +1,28 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { liveGraceMinutes, LIVE_GRACE_CHOICES, onLiveGraceChange, onOpenSessionLimitChange, openSessionLimit, setLiveGraceMinutes, setOpenSessionLimit, onPlanProgressChange, setShowsPlanProgress, showsPlanProgress } from "./prefs";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { liveGraceMinutes, LIVE_GRACE_CHOICES, onLiveGraceChange, onOpenSessionLimitChange, openSessionLimit, runningMessageIntent, setLiveGraceMinutes, setOpenSessionLimit, setRunningMessageIntent, onPlanProgressChange, setShowsPlanProgress, showsPlanProgress } from "./prefs";
 
 beforeEach(() => localStorage.clear());
+afterEach(() => { vi.restoreAllMocks(); setRunningMessageIntent("steer"); localStorage.clear(); });
+
+describe("default intent for messages sent during a run", () => {
+  it("defaults to steering and reads only the offered follow-up choice", () => {
+    expect(runningMessageIntent()).toBe("steer");
+    for (const raw of ["", "queued", "invalid"]) {
+      localStorage.setItem("rx-running-message-intent", raw);
+      expect(runningMessageIntent()).toBe("steer");
+    }
+    setRunningMessageIntent("followup");
+    expect(runningMessageIntent()).toBe("followup");
+    expect(localStorage.getItem("rx-running-message-intent")).toBe("followup");
+  });
+
+  it("holds the choice for this window if storage cannot be written", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("unavailable"); });
+    setRunningMessageIntent("followup");
+    expect(runningMessageIntent()).toBe("followup");
+  });
+});
 
 describe("collapsed plan progress on this machine", () => {
   it("is off by default and only accepts an explicit on preference", () => {

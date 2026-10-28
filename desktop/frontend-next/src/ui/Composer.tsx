@@ -18,7 +18,7 @@ import { ChipMirror, useSkillChips } from "./ChipMirror";
 import { useIme } from "./ime";
 import { usePlaceholderFit } from "./placeholderfit";
 import { useFitHeight } from "./fitHeight";
-import { useSendShortcut } from "../state/prefs";
+import { useRunningMessageIntent, useSendShortcut } from "../state/prefs";
 import { sendAria, sendHint, sendsOnKey } from "./sendkey";
 import { countLines, pasteIsLong, planTone, planVerb } from "./intake";
 import { kindOf, nameOf, previewURL } from "./chipfile";
@@ -195,6 +195,7 @@ export function Composer({ port, status, running, queued = false, quote, restore
   }, chips, addSession);
   const ime = useIme();
   const sendShortcut = useSendShortcut();
+  const runningIntent = useRunningMessageIntent();
 
   // A counter, not a boolean: asking twice in a row has to move the cursor twice.
   useEffect(() => {
@@ -637,7 +638,7 @@ export function Composer({ port, status, running, queued = false, quote, restore
               ? t("正在添加附件…")
               : failed
                 ? t("有附件添加失败，请重试或移除")
-                : sendHint(sendShortcut, running, touch)}
+                : sendHint(sendShortcut, running, touch, runningIntent)}
         </span>
         {showCount && <span className="fcount">{t("{n} 字 · {lines} 行", { n: text.length, lines })}</span>}
       </div>
@@ -788,7 +789,7 @@ export function Composer({ port, status, running, queued = false, quote, restore
                 <path d="M8 12.8V3.4M4.2 7.2 8 3.4l3.8 3.8" />
               </svg>
             </span>
-            <span>{t(submitting ? "正在发送…" : running ? "插话" : "发送")}</span>
+            <span>{t(submitting ? "正在发送…" : running ? runningIntent === "followup" ? "排队发送" : "插话" : "发送")}</span>
           </button>}
         </span>
       </div>
