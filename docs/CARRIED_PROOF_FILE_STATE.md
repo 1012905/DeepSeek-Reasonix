@@ -27,14 +27,19 @@ repair files. Absence has its own versioned fingerprint.
 前后的文件身份、模式、大小与修改时间。它不修改权限或修复文件。文件缺失使用独立
 的版本化指纹。
 
-Symlinks, directories and special files cannot carry this regular-file proof.
-A dangling symlink is not absence. A current turn can still collect evidence
-through the existing tools; this restriction governs reuse after continuation
-or rebuild, not tool permissions or normal completion.
+Every nonregular path returns an empty fingerprint and never reuses carried
+proof. This includes a symlink to an otherwise regular file, as well as
+directories and special files. A dangling symlink is not absence.
 
-符号链接、目录与特殊文件不能携带此普通文件证明；悬空链接不算文件缺失。
-当前轮仍可通过原工具收集证据；该限制约束继续执行或重建后的证明复用，不改变工具
-权限或正常完成规则。
+The cost is fresh verification, inspection and sign-off after continuation or rebuild even
+when a symlink and its target bytes have not changed. This invalidation does
+not itself produce a separate warning. Existing tools can still collect fresh
+evidence; tool permissions and normal completion rules are unchanged.
+
+所有非普通文件路径返回空指纹，均不复用携带的证明，包括指向普通文件的符号链接、
+目录与特殊文件；悬空链接不算文件缺失。即使链接及目标字节没有变化，继续执行或
+重建后也要重新验证、检查和签收，这是明确的复用成本；失效本身不会单独显示警告。
+仍可通过原工具收集新证据，不改变工具权限或正常完成规则。
 
 ## Persisted compatibility / 持久化兼容性
 
@@ -84,16 +89,29 @@ live incident, HTTP/browser test or actual process-death recovery. The Windows
 inventory requires 14 named events across Agent and Boot without skips,
 including parent events. Unix tests also refuse real links and a FIFO.
 
+The shared `scripts/windows-concurrency-tests.mjs` step reads the package-qualified
+`carried-proof-file-state.json` inventory under `.github/windows-concurrency/`.
+It retains all 14 requirements and both package terminals; broad smoke is separate.
+
 这是脚本 provider 与同一测试进程中的两次构建，不是线上事故、HTTP/浏览器测试
 或实际进程死亡恢复。Windows 清单要求 Agent 与 Boot 两个包的 14 个命名事件无
 skip 通过，计数包含父测试。Unix 测试另覆盖真实链接与 FIFO 的拒绝。
 
-Go file mode does not capture ownership, ACLs, extended attributes or every
-Windows security descriptor. The checks are observations, not an atomic
+共享脚本读取 `.github/windows-concurrency/carried-proof-file-state.json` 中按包
+限定的清单，保留全部 14 项与两个包终态要求；broad smoke 仍单独运行。
+
+For regular files on Windows this contract covers content and the read-only bit
+only. Go's synthesized mode does not establish POSIX permission semantics or
+cover Windows ACLs and full security descriptors.
+
+On any platform, Go file mode does not capture ownership or extended attributes.
+The checks are observations, not an atomic
 multi-file snapshot or protection against arbitrary concurrent external writers.
 Rooted source authority, physical quiescence and durable publication remain separate.
 
-Go 文件模式不涵盖所有者、ACL、扩展属性及全部 Windows 安全描述符。这些检查是
+Windows 普通文件合同仅覆盖内容与只读位；Go 合成的模式不代表 POSIX 权限语义，
+也不覆盖 Windows ACL 或完整安全描述符。任何平台上的 Go 模式均不涵盖所有者与
+扩展属性。这些检查是
 观察，不是多文件原子快照，也不能约束任意并发外部写入者。根目录授权、物理静默
 与持久发布仍由其他机制负责。
 
