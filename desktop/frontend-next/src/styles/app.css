@@ -2470,7 +2470,7 @@
     margin: 0; flex: 1; min-width: 0; font: var(--w-reg) var(--fs-ui) var(--ui); color: var(--faint);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .prefs-hd .btn { flex: none; align-self: center }
+  .prefs-hd > .btn { flex: none; align-self: center; height: 32px; display: inline-flex; align-items: center; justify-content: center }
   .prefs-hd .esc { margin-left: 5px; font: var(--w-reg) var(--fs-micro) var(--mono); color: var(--ghost) }
 
   .prefs-body { flex: 1; display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 0 }
