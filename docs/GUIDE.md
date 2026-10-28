@@ -2040,6 +2040,20 @@ so ordinary `@mentions` stay literal. Typing `/` or `@` opens an autocomplete
 menu — slash commands, or hierarchical file navigation (one directory level at a
 time, descend into folders) plus MCP resources.
 
+- **Line snapshots:** `@path/to/file:10-20` attaches source lines 10 through 20,
+  inclusive and starting at 1. The file is read when the message is sent, with
+  its original start and end lines recorded for accurate citations.
+- **Paths:** keep the existing space escape spelling, e.g.
+  `@src/my\ file.go:10-20`. Only a final digits-only range suffix is recognized;
+  Windows drive colons are preserved.
+- **Literal mentions:** if the path does not resolve to an existing local entry,
+  the token stays literal, including `@alice:1-2` and `@10-12`.
+- **Refusals:** for existing paths, zero, inverted, or out-of-file ranges produce
+  a visible notice without falling back to the whole file. Ranges require a
+  readable regular text file; selected text over 64 KiB is refused rather than truncated.
+- Whole-file references and text selected in the workspace viewer remain
+  available.
+
 In Studio's file panel, right-click one file or folder:
 
 - **Copy path** copies its absolute workspace path, including remote roots.
