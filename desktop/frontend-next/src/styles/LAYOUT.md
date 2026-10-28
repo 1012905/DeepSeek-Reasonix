@@ -1622,6 +1622,10 @@ A sub-agent row, by the list's own width:
   the edited title; pending requests disable all editing and dismissal.
 - The native dialog owns focus containment and the backdrop. Its colours follow
   the active light or dark palette.
+- Typography follows the shared modal hierarchy: `--fs-title`/`--w-semi` for
+  the heading and `--fs-ui`/`--w-reg` for hints, input, errors and actions.
+  Interface size and weight preferences apply at every width; narrow screens
+  retain the same type roles rather than introducing another font size.
 
 ## Card shell
 
