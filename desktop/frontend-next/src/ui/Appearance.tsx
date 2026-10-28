@@ -18,6 +18,7 @@ import { LegacySessionsSection } from "./LegacySessionsSection";
 import { OpenSessionLimitSection } from "./OpenSessionLimitSection";
 import { LiveStreamBudgetSection } from "./LiveStreamBudgetSection";
 import { NewAnswerSection } from "./NewAnswerSection";
+import { PlanProgressSection } from "./PlanProgressSection";
 import { SessionQuickSection } from "./SessionQuickSection";
 import { NavEntriesSection } from "./NavEntriesSection";
 import { NavRailSection } from "./NavRailSection";
@@ -575,6 +576,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
       <PageSleepSetting />
       <SessionTabsSetting />
       <Folding />
+      <PlanProgressSection />
       <Notifications port={port} />
 
       {/* What makes this page read as a console is that all of it arrives at
