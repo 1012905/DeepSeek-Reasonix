@@ -220,3 +220,31 @@ describe("pasting a copied image back into a turn", () => {
   });
 });
 
+describe("an image referenced in place outside the workspace", () => {
+  const extPath = "c:/folder/outside.png";
+  const token = "__reasonix_external_folder/ab12cd34ef56/outside.png";
+  const body = `@${token} 请看这张图`;
+  const item = {
+    t: "user",
+    id: "ext",
+    text: body,
+    attachments: [{ path: extPath, ref: token }],
+  } as Extract<Item, { t: "user" }>;
+
+  it("copies the absolute path so a paste reads the image back, not the opaque token", async () => {
+    servesImages();
+    const write = installClipboard(async () => {});
+    render(<UserCard item={item} port={new MockPort()} />);
+    fireEvent.click(screen.getByRole("button", { name: "复制" }));
+    await waitFor(() => expect(write).toHaveBeenCalledWith(`@//c/:/folder/outside.png 请看这张图`));
+  });
+
+  it("draws the image from its absolute path and keeps the token out of the bubble", () => {
+    render(<UserCard item={item} port={new MockPort()} />);
+    expect(screen.getByRole("img", { name: "outside.png" }).getAttribute("src")).toBe(`/fixture/${extPath}`);
+    // The opaque external-folder token is implementation detail; the bubble shows
+    // the words the person typed, as it does for a stored workspace attachment.
+    expect(screen.queryByText(body)).toBeNull();
+    expect(screen.getByText("请看这张图")).toBeTruthy();
+  });
+});
