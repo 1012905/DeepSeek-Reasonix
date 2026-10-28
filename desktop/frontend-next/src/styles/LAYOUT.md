@@ -457,7 +457,25 @@ and selected states, while long titles truncate within the remaining width.
   keeps the reading width, where the line being typed stays one glance. The
   full-all measure is the opt-in that moves `--column` with it, for a reader who
   wants the composer on the same edges as the transcript.
-- Below 680px both columns take the phone rule instead (see *Phones*).
+- Custom percentage sets `--doc`, `--column` and `--wide` from
+  `--measure-width`: 30–100% of the conversation pane, with rail clearance.
+- Settings → Appearance → Size → Line width offers presets and a 1% slider,
+  initially 80%. `desktop.appearance.width_percent` persists independently of
+  `desktop.conversation_width`, so selecting a preset retains the custom value.
+- An unchanged effective percentage stays unset in the stored configuration.
+- Only custom mode shows the conversation-and-composer hint; presets retain
+  the prose-width guidance for code, commands and tool output.
+- The composer is a `conversation` container as well as the pane: toolbar labels
+  respond to the width of the composer, including a custom percentage, rather
+  than assuming it fills the pane.
+- The default reading-width composer retains mode and workspace labels: labels
+  retire at 720px of actual composer space rather than at the pane's old 780px.
+- The workspace control remains available even below 360px of composer space.
+  Model and effort labels shrink together before the toolbar wraps below 280px;
+  compacting labels must not remove access to workspace configuration.
+- Below 760px the transcript and composer take the phone width instead. The
+  populated flow selector must retain enough specificity to override its
+  percentage width, not just the empty conversation's rule.
 - Docking the agent's browser puts the pane on a grid, and the browser's column
   spans the body's row and the composer's. Inside the conversation column `100%`
   is that column, so the composer's own centring keeps it off the divider, and
