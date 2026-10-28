@@ -868,6 +868,9 @@ what exists.
   only content.
 - A very faint gilt line under the header says this is the window's own thing,
   not content.
+- The header's expand/restore and close buttons share a 32px hit-region height,
+  matching the search control's minimum height. Inline-flex centres SVG and text
+  content independently of font fallback; native window controls retain their own sizing.
 - The search entry sits beside the title. That position used to hold one
   explanation addressed to two of the three tiers; that sentence now lives on
   each settings block (`.apply`). Results are laid under the header without
