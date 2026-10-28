@@ -28,7 +28,7 @@ import { useSessionMove } from "./useSessionMove";
 import { useSessionMoveTo } from "./useSessionMoveTo";
 import { pinnedFirst } from "./pinorder";
 import { Confirm, removeHint, sessionDeleteHint } from "./WorkspaceConfirm";
-import { UnreadCount, UnreadDot } from "./UnreadMark";
+import { UnreadCount } from "./UnreadMark";
 import { PeerThreadMark } from "./peerthreads";
 import { NO_PAGING, atCap, sessionCount, answers, unloaded, type TreePaging, type TreeView } from "./treewindow";
 import { SessionBatch, useSelectedRows } from "./SessionBatch";
@@ -616,8 +616,7 @@ function WorkspacesView({ hub, tree, treeRead, answered = null, runtimes, active
                           </span>
                         )}
                         <PeerThreadMark path={session.path} />
-                        {session.unread && <UnreadDot />}
-                        <SessionAge at={session.lastActiveAt} />
+                        <SessionAge at={session.lastActiveAt} unread={session.unread} />
                         {kept.length > 0 && (
                           <button
                             className="sesscopies"
