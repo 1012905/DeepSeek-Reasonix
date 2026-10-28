@@ -1731,7 +1731,7 @@
   .turntools > .picker:first-of-type .nm { flex: 1; min-width: 0 }
   .go { display: inline-flex; align-items: center; gap: 7px; flex: none }
 
-  .compose .row > * { position: relative; z-index: 1; animation: rowin var(--m-panel) both }
+  .compose .row > * { position: relative; z-index: 8; animation: rowin var(--m-panel) both }
   @keyframes rowin { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
 
   .compose .row [data-pending] { pointer-events: none; opacity: .5; transition: opacity var(--m-line) }
