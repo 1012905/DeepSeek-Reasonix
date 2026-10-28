@@ -1,0 +1,2 @@
+- 修复：会话租约无法证明时不再谎称被占用——密钥擦除会拒绝改写并以错误退出，会话与任务列表显示 `unknown`。关联 #14727。
+- Fixed: when a session lease cannot be proven, the secret scrub refuses to rewrite and exits non-zero instead of claiming the lease is held; session and task listings show `unknown`. Refs #14727.
