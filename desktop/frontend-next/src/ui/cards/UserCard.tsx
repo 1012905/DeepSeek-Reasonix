@@ -5,6 +5,7 @@ import { RewindControl } from "./RewindControl";
 import { SkillPinView } from "./SkillPinView";
 import { parseSkillPin } from "./skillpin";
 import { CopyButton } from "../CopyButton";
+import { CopyImagesButton } from "../CopyImagesButton";
 import { reason } from "../../i18n/kernel";
 import { t } from "../../i18n";
 import { clock } from "../../i18n/format";
@@ -63,6 +64,7 @@ export function UserCard({
   const [draft, setDraft] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [failed, setFailed] = useState("");
+  const [copyNotice, setCopyNotice] = useState("");
   const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
   const box = useRef<HTMLTextAreaElement>(null);
   const source = messageSource(item.via, useViewer());
@@ -189,7 +191,20 @@ export function UserCard({
         </div>
         <div className="user-acts">
           {item.at && <time className="user-time" dateTime={new Date(item.at).toISOString()} title={new Date(item.at).toLocaleString()}>{clock(item.at)}</time>}
-          <CopyButton text={copyText} iconOnly showFeedback label={t("复制")} />
+          {port && images.length > 0 ? (
+            // A message that carries images has two copies — the words, or the
+            // words with the images the message was about — so the arrow beside
+            // the button offers the other one.
+            <CopyImagesButton
+              text={copyText}
+              images={images}
+              imageURL={(path) => port.workspaceImageURL(path)}
+              label={t("复制")}
+              onNotice={setCopyNotice}
+            />
+          ) : (
+            <CopyButton text={copyText} iconOnly showFeedback label={t("复制")} />
+          )}
           {reopen && (
             <button type="button" className="reask-open" data-action="turn.edit" data-target={item.id}
               title={t("改写这条消息并重新发送")} aria-label={t("改写")}
@@ -201,6 +216,7 @@ export function UserCard({
             <RewindControl cp={cp!} compact onPrepare={onPrepareRewind!} onCommit={(planId) => onCommitRewind!(planId, item.text)} />
           )}
         </div>
+        {copyNotice && <div className="copy-note" role="status">{copyNotice}</div>}
       </div>
     </div>
   );
