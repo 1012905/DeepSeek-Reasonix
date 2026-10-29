@@ -1,0 +1,2 @@
+- 修复：删除配置来源文件夹后，仍可移除残留的 MCP 服务；配置损坏时会保留服务，并指出无法解析的 Claude 配置文件。关联 #14738、#14739。
+- Fixed: stale MCP servers can be removed after their source folder is deleted; malformed Claude config errors name the file without removing servers. Refs #14738, #14739.
