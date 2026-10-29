@@ -1,0 +1,2 @@
+- 修复：连接远程主机（如 WSL）时，读取会话列表、删除会话、置顶或归档，不再每次都重新建立连接；连接在最后一次操作后保留 45 秒，连续操作不再逐次停顿。修复 #14745。
+- Fixed: on a remote host such as WSL, listing, deleting, pinning or archiving sessions no longer reconnects every time; the link is held 45 seconds after the last action. Fixes #14745.
