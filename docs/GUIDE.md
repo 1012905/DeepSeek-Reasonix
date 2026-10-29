@@ -30,6 +30,7 @@
 - [Embedded documentation retrieval](#embedded-documentation-retrieval)
 - [@ references](#-references)
 - [Two-model collaboration](#two-model-collaboration)
+- [Cross-project task dispatch](#cross-project-task-dispatch)
 - [Letting the model change a setting](#letting-the-model-change-a-setting)
 - [Google Gemini, native (experimental)](#google-gemini-native-experimental)
 
@@ -2514,6 +2515,110 @@ Not built, and why:
 
 - Gemini: its video input is in the native Gemini API (inline data, the Files API, YouTube URLs); the OpenAI-compatible page does not list a video content part, and Reasonix reaches Gemini through that endpoint.
 - Zhipu GLM: the documentation shows `video_url` with a public HTTPS address only and says nothing about base64 or limits, so a local file cannot be sent without Reasonix uploading it somewhere.
+
+## Cross-project task dispatch
+
+Use this when one project needs an answer from another project's session, rather
+than letting the current session edit across project roots. Dispatch is
+experimental and off by default.
+
+Start from a **local session in Reasonix Studio
+or the web UI**; terminal/protocol sessions and SSH-driven panes cannot open the
+receiving session.
+
+1. Add the target folder to your projects in the sidebar and open it. Answer its
+   workspace trust question there before dispatching. The target must be an
+   existing directory in your project list; use its full path if several projects
+   share a folder name.
+2. In the sending session, open **Settings → Session messages → Messages between
+   sessions (experimental)**. Turn on **Turn on session messages**, then **Let the
+   model hand a task to another session**.
+
+   These save to your user config, not
+   `reasonix.toml`. They apply between turns; if a turn is running, send the task
+   on the next turn after saving. No session restart is needed for these UI
+   switches.
+3. Make a concrete request, including the context the other project needs:
+
+   > In `/work/shop-web`, we need to show an order's delivery status. Hand a task
+   > to the `shop-api` project at `/work/shop-api`: inspect its order-status API,
+   > report the endpoint, response fields and possible status values, and do not
+   > change files. Bring its answer back here and explain how this frontend
+   > should call it.
+
+   The model uses `dispatch_to_project` to open a session in the target project.
+   Later dispatches from this sender to the same project reuse that dispatched
+   session while it remains open; they do not take over an arbitrary existing
+   conversation.
+4. You can inspect the work in the target project's session. When its turn ends,
+   its final answer is sent back automatically to the **sending session**, as a
+   message labelled as data from the other session.
+
+   Return to the sending
+   conversation for the reply and the model's continuation. The initial dispatch
+   receipt only confirms delivery, not completion.
+
+   If you paused the receiving
+   queue yourself, standing consent does not resume it: resume it to process the
+   queued task or reply.
+
+The equivalent user configuration is:
+
+```toml
+[peers]
+enabled = true
+dispatch = true
+```
+
+**Consent and permissions.** Enabling dispatch is standing consent for tasks and
+replies between the paired sessions: there is no separate message-approval card
+for each one.
+
+Ordinary messages between unpaired sessions still need approval
+unless you separately release the receiving project under **Projects allowed through**.
+
+That list is optional for dispatch and is not workspace trust; releasing a
+project skips incoming-message consent, not tool permissions or sandbox rules.
+You can revoke a released project there.
+
+A newly dispatched session inherits the sender's model, preset, approval mode
+and planning mode.
+
+In particular, a YOLO sender opens a YOLO session: the target
+project's `ask` permission rules are auto-allowed in that mode, while `deny`
+rules still hold.
+
+Workspace permissions and sandbox restrictions still apply;
+dispatch consent is not a promise that no files will change. Choose the sender's
+mode and task scope accordingly.
+
+**Trust and limits.** Naming an undecided project already in your sidebar can
+trust it automatically where whole-workspace trust is allowed. A declined
+project is refused.
+
+If trust needs a user answer, its pane opens with the trust
+question and the task is **not sent**: answer there, then ask to dispatch again.
+
+For a folder not yet in your project list, add it yourself, or let the model
+request `open_projects`; its card lists the paths and requires your explicit
+approval even in YOLO mode before adding or trusting them.
+
+`open_projects` is unavailable in plan mode until the plan is approved.
+
+Dispatch refuses unknown or ambiguous projects and the current project itself
+(work locally or use a sub-agent instead).
+
+The default ceilings are one dispatch
+level and eight open dispatched sessions per sender; user-only
+`peers.max_dispatch_depth` and `peers.max_dispatched_sessions` can change them
+(`0` removes a ceiling).
+
+A workspace-bound agent composition cannot dispatch
+into another workspace.
+
+Disabling dispatch also stops automatic replies; live
+pairings are held in memory, so do not rely on them surviving an application
+restart.
 
 ## Letting the model change a setting
 
