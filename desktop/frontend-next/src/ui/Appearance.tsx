@@ -572,9 +572,9 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
       <GraphicsSection />
       <SendShortcut />
       <RunningMessageSetting />
+      <EscStopSetting />
       <GlobalShortcutSection />
       <KeysSheet />
-      <EscStopSetting />
       <PageSleepSetting />
       <SessionTabsSetting />
       <Folding />
