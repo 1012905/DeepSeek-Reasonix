@@ -326,6 +326,7 @@ export const SETTINGS: SettingEntry[] = [
   { section: "appearance", anchor: "page-sleep", title: "空闲网页休眠", scope: "machine", apply: "immediate", keywords: ["休眠", "睡眠", "空闲", "内存", "收起", "browser", "page", "sleep", "memory"] },
   { section: "appearance", anchor: "session-tabs", title: "会话标签栏", scope: "machine", apply: "immediate", keywords: ["标签", "会话切换", "tabs", "session"] },
   { section: "appearance", anchor: "folding", title: "会话折叠", scope: "machine", apply: "immediate", keywords: ["展开", "收起", "思考", "执行过程", "步骤", "输出", "简报", "fold"] },
+  { section: "appearance", anchor: "plan-progress", title: "收起时显示计划进度", scope: "machine", apply: "immediate", keywords: ["计划", "进度条", "待办", "收起", "todo", "plan", "progress", "collapsed"] },
   { section: "appearance", anchor: "window", title: "窗口", scope: "machine", apply: "immediate", keywords: ["托盘", "关闭行为", "休眠", "睡眠"] },
   // Immediate because the endpoint hands the holder every running sink reads,
   // not because the file was written: writing it is what a restart would need.

@@ -108,6 +108,7 @@ export const ACTIONS: UIAction[] = [
   { id: "appearance.live-stream-budget", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.session-quick-actions", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.new-answer-marker", kind: "view", target: "none", proof: "interaction" },
+  { id: "appearance.plan-progress", kind: "view", target: "none", proof: "interaction" },
   { id: "appearance.graphics", kind: "view", target: "none", proof: "interaction" },
   { id: "window.global-shortcut", kind: "shell-native", target: "none", proof: "browser" },
   { id: "appearance.session-tabs", kind: "view", target: "none", proof: "interaction" },

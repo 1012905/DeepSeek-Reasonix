@@ -160,6 +160,33 @@ export function setNavRailMode(mode: NavRailMode): void {
   navRailListeners.forEach((fn) => fn());
 }
 
+const PLAN_PROGRESS_KEY = "rx-plan-progress";
+const planProgressListeners = new Set<() => void>();
+
+export function showsPlanProgress(): boolean {
+  try {
+    return localStorage.getItem(PLAN_PROGRESS_KEY) === "on";
+  } catch {
+    return false;
+  }
+}
+
+export function onPlanProgressChange(fn: () => void): () => void {
+  planProgressListeners.add(fn);
+  return () => {
+    planProgressListeners.delete(fn);
+  };
+}
+
+export function setShowsPlanProgress(on: boolean): void {
+  try {
+    localStorage.setItem(PLAN_PROGRESS_KEY, on ? "on" : "off");
+  } catch {
+    /* unavailable storage keeps the default */
+  }
+  planProgressListeners.forEach((fn) => fn());
+}
+
 // How long a session that finished its turn stays in the sidebar's running list,
 // in minutes. Off (0) unless this machine chose a value: leaving the list the
 // moment a turn ends is the long-standing behaviour, and keeping a row there is

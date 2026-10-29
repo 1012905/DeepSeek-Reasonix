@@ -1742,3 +1742,9 @@ A sub-agent row, by the list's own width:
 - Thinking expansion and collapsed previews are independent display preferences. Folding presets change expansion only; manual disclosure choices keep their priority.
 - The optional preview occupies one line below the header, with a left rule and width-based ellipsis. It shows the opening text, including during streaming, rather than following the newest tokens.
 - The preview remains inside the disclosure summary so it is visible and clickable while collapsed. Expanded reasoning replaces it; the settings demonstration uses the same preview styling.
+
+## Collapsed plan progress
+
+- Appearance → Conversation display offers “Show collapsed plan progress,” off by default and persisted on this machine. Changing it immediately updates mounted plan cards.
+- A nonempty collapsed plan draws the expanded plan's `.prog2` track below its summary, using completed steps over total steps from `stepDone`. Pending and running steps do not count as complete.
+- Opening the card replaces the optional track with the existing expanded progress. Goal-only, empty and hidden cards have no progress track; collapse, Escape, outside dismissal and focus return remain unchanged.
