@@ -1,0 +1,2 @@
+- 新增：e2ebench 批量运行写出 `batch.json`（commit、模型、语料指纹、七态计数、结果哈希）；`-mode audit` 用保留行重算报告数字，拒收无法重算的批次。关联 #14757。
+- New: an e2ebench batch writes `batch.json` (commit, model, corpus digest, ledger counts, rows hash); `-mode audit` re-derives its figures and refuses a batch it cannot. Refs #14757.
