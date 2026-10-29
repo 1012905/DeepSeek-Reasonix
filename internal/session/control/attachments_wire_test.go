@@ -136,12 +136,12 @@ func TestStoredAttachmentsCarryExternalImagesByAbsolutePath(t *testing.T) {
 	if err := os.WriteFile(txt, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if len(c.StoredAttachments("@" + token + "/notes.txt")) != 0 {
+	if len(c.StoredAttachments("@"+token+"/notes.txt")) != 0 {
 		t.Fatal("a non-image external file was reported as an attachment")
 	}
 
 	// A path that was a directory grant, not an image, is not an attachment.
-	if len(c.StoredAttachments("@" + token)) != 0 {
+	if len(c.StoredAttachments("@"+token)) != 0 {
 		t.Fatal("the folder grant itself was reported as an attachment")
 	}
 }
