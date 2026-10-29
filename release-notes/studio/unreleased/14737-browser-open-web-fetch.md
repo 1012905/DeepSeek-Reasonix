@@ -1,0 +1,2 @@
+- 改进：模型读静态网页时不再默认打开内置浏览器——浏览器工具的说明现在提示它用 web_fetch 取文本，用完就关闭标签，避免一轮留下十几个页面。修复 #14737。
+- Changed: the browser tool now tells the model to read static pages with web_fetch and to close tabs when done, so a turn no longer leaves a dozen open pages behind. Fixes #14737.
