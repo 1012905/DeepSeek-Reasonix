@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"reasonix/internal/base/proc"
 	"reasonix/internal/platform/gitcmd"
@@ -343,7 +344,12 @@ func stderrSuffix(stderr string) string {
 	}
 	const max = 500
 	if len(stderr) > max {
-		stderr = stderr[:max] + "…"
+		// Cut on a rune boundary: git may print localized, multi-byte messages.
+		cut := max
+		for cut > 0 && !utf8.RuneStart(stderr[cut]) {
+			cut--
+		}
+		stderr = stderr[:cut] + "…"
 	}
 	return ": " + stderr
 }
