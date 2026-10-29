@@ -9,16 +9,11 @@ import (
 	"reasonix/internal/contract/event"
 )
 
-// StoredAttachments lists the images a message references that the host stored
-// or was handed this session: workspace attachments under .reasonix/attachments,
-// and images the session was given outside the workspace (a dropped folder or
-// file). Each is returned once, normalized to the spelling the model resolves.
-//
-// A workspace image carries Path as its workspace-relative, slash-separated
-// spelling and an empty Ref. An external image carries Path as its absolute,
-// native-spelled location — what a paste reads back — and Ref as the opaque
-// external-folder token the line was submitted with, so the surface can drop
-// that token from the visible body now that it draws the image from Path.
+// StoredAttachments lists the images a message references that the host stored or
+// was handed this session: workspace attachments under .reasonix/attachments, and
+// images the session was given outside the workspace. Each is returned once,
+// normalized to the spelling the model resolves — a workspace image by its
+// workspace-relative Path and an empty Ref, an external one by its absolute Path plus the opaque Ref the surface drops.
 func (c *Controller) StoredAttachments(text string) []event.Attachment {
 	var out []event.Attachment
 	for _, r := range c.detectRefs(text) {

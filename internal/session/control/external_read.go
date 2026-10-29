@@ -6,12 +6,9 @@ import (
 )
 
 // ReadableExternalPath answers where a path outside the workspace may be read
-// from: the root it is under, and the path under that root.
-//
-// A path is read only where a grant already covers it — a folder the user
-// granted this workspace, or one they brought into this session. Naming a path
-// is not a grant, so a pasted path cannot turn into read access on its own:
-// that is what keeps the clipboard from being a way to read the disk.
+// from: the root it is under, and the path under that root. A path is read
+// only where a grant already covers it — naming a path is not a grant, so a
+// pasted path cannot turn into read access on its own.
 func (c *Controller) ReadableExternalPath(path string) (root string, rel string, ok bool) {
 	if c == nil {
 		return "", "", false
