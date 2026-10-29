@@ -1,0 +1,2 @@
+- 修复：设置里“快捷键”页的卡片顺序调整，“Esc 停止任务”紧跟发送相关设置，全局快捷键和按键表放在后面。关联 #14789。
+- Fixed: on the Shortcuts settings page, "Esc to stop" now sits right after the send settings, with the global shortcut and the key table after it. Refs #14789.

@@ -1,0 +1,2 @@
+- 新增：外观中的「输入框提示」可隐藏任务和排队占位文字，默认显示；选择在本机记住，输入和发送方式不变。修复 #14759。
+- Added: Appearance's Composer hint switch hides task and queue placeholders. On by default, remembered on this machine; typing and sending stay unchanged. Fixes #14759.

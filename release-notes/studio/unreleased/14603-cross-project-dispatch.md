@@ -1,0 +1,2 @@
+- 文档：中英文使用指南新增跨项目任务派发流程，说明开关位置、项目添加与信任、示例请求、回信位置，以及同意、权限继承和派发限制。关联 #14603。
+- Docs: added English/Chinese cross-project dispatch walkthroughs covering setup, example tasks, replies, consent, inherited permissions and limits. Refs #14603.

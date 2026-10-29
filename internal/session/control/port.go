@@ -186,6 +186,7 @@ type SessionHistory interface {
 	CommitFileRevert(planID string, resolution checkpoint.ConflictResolution) (checkpoint.RewindResult, error)
 	Branch(name string) (string, error)
 	BranchAt(turn int, name string) (string, error)
+	ForkSessionTail(sourcePath string) (path string, dropped int, err error)
 	Branches() ([]sessionstore.BranchInfo, error)
 	BranchTreeText() string
 	SwitchBranch(ref string) (sessionstore.BranchInfo, error)
@@ -295,6 +296,9 @@ type RuntimeSettings interface {
 	NetworkSettings() NetworkSettings
 	SaveNetworkSettings(in NetworkSettings, password string, clearPassword bool) error
 	DiagnoseNetwork(ctx context.Context) []NetworkProbe
+	ProviderHealth(ctx context.Context, name string) (ProviderHealthReading, error)
+	ProviderHealthSettings() (ProviderHealthSettings, error)
+	SaveProviderHealthSettings(enabled bool) error
 	ShellSettings() ShellSettings
 	SaveShellSettings(prefer, path string, args ...string) error
 	PermissionRules() PermissionRules

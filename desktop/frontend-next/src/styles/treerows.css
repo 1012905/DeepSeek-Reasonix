@@ -1,4 +1,4 @@
-.projects-header { margin: 8px 15px 6px; }
+.projects-header { flex: none; margin: 8px 15px 6px; }
 .projects-heading { display: flex; align-items: center; justify-content: space-between; min-height: 28px; padding-inline: 7px; color: var(--faint); font: var(--w-med) var(--fs-meta)/1.4 var(--ui); }
 .projects-heading-actions { display: flex; align-items: center; gap: 2px; }
 .projects-heading-title { display: flex; align-items: center; gap: 6px; }
@@ -47,8 +47,7 @@
 .rail .rmtws-node .sessdel { opacity: 0; }
 .rail .rmtws-node .sessrow:is(:hover, :focus-within) .sessdel { opacity: 1; }
 .rail .sessage { margin-left: auto; margin-right: 0; font-size: var(--fs-micro); }
-.rail .sessage + .sesscopies { margin-inline-start: 6px; }
-.rail .sessrow[data-unread]:not(:has(> .sesscopies)) > .sessage { margin-inline-end: 22px; }
+.rail :is(.sessage, .unread-dot) + .sesscopies { margin-inline-start: 6px; }
 .rail .sessmore { width: calc(100% - 12px); margin: 2px 0 5px 3px; padding-left: 9px; text-align: left; }
 .rail .sessrow:hover { background: color-mix(in srgb, var(--text) 4%, transparent); }
 .rail .sessrow[aria-selected="true"] { background: color-mix(in srgb, var(--text) 13%, transparent); color: var(--text); font-weight: var(--w-reg); box-shadow: none; }

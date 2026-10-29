@@ -1,0 +1,2 @@
+- 修复：更新失败后提示里的“下载完整安装包”改为用系统浏览器打开发布页，不再落到被设置页盖住的内置浏览器里。修复 #14775。
+- Fixed: after a failed update, "download the full installer" now opens the release page in the system browser instead of the in-app browser behind the settings sheet. Fixes #14775.
