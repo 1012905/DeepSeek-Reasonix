@@ -361,6 +361,11 @@ var partialWireMirrors = []partialWireMirror{
 	// reopened session shows the rewrite as the model's own.
 	{"internal/frontend/serve/history.go", "historyToolCall", "internal/frontend/tui/client.go", "HistoryToolCall",
 		[]string{"id", "name", "arguments", "argumentNormalization", "resolvedName", "capabilityId"}},
+	// The terminal's copy of /history's message. It draws no picture, but the
+	// count tells an image-only turn from host chrome, and via/modelRef are
+	// what a reload can no longer say once the reader drops them.
+	{"internal/frontend/serve/history.go", "historyMessage", "internal/frontend/tui/client.go", "HistoryMessage",
+		[]string{"images", "via", "modelRef"}},
 }
 
 // partialWireMirror is one declared subset: readerFile's readerType must carry
