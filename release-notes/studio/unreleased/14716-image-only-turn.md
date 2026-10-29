@@ -1,2 +1,0 @@
-- 修复：恢复会话时，纯图片的一轮不再消失——终端会保留这一轮并显示「附有 N 张图片 — 终端不显示图片」。关联 #14716。
-- Fixed: a restored transcript no longer drops a turn that was only an image; the terminal keeps the turn and says "N image(s) attached — this terminal shows no image". Refs #14716.

@@ -1,2 +1,0 @@
-- 修复：Windows 开启沙箱后 Git Bash 每条命令都报「couldn't create signal pipe」。现在沙箱下 Git Bash 起不来时，会话自动改用 PowerShell 并说明原因。修复 #14713，关联 #14714。
-- Fixed: with the Windows sandbox on, every Git Bash command failed. A sandboxed session now uses PowerShell and says why when Git Bash cannot start there. Fixes #14713, refs #14714.
