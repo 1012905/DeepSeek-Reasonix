@@ -17,7 +17,7 @@ export const PAGES: Partial<Record<Section, readonly SettingPage[]>> = {
     { id: "look", label: "外观与主题", anchors: ["mode", "scheme", "font", "size", "weight", "contrast", "effects", "wallpaper", "language", "advanced-appearance"] },
     { id: "navigation", label: "导航与侧栏", anchors: ["navrail", "naventries", "session-quick-actions", "legacy-sessions", "live-grace", "open-session-limit", "live-stream-budget", "session-tabs"] },
     { id: "conversation", label: "会话显示", anchors: ["new-answer-marker", "folding", "plan-progress"] },
-    { id: "shortcuts", label: "快捷键", anchors: ["send-shortcut", "global-shortcut", "keys", "esc-stop"] },
+    { id: "shortcuts", label: "快捷键", anchors: ["send-shortcut", "running-message-intent", "global-shortcut", "keys", "esc-stop"] },
     { id: "window", label: "窗口与性能", anchors: ["window", "notify", "page-sleep", "graphics"] },
   ],
 };

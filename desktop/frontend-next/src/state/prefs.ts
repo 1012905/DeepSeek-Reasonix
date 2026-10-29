@@ -515,6 +515,40 @@ export function useSendShortcut(): SendShortcut {
   return useSyncExternalStore(subscribeSendShortcut, sendShortcut, sendShortcut);
 }
 
+export type RunningMessageIntent = "steer" | "followup";
+const RUNNING_MESSAGE_KEY = "rx-running-message-intent";
+const runningMessageListeners = new Set<() => void>();
+let transientRunningMessage: RunningMessageIntent = "steer";
+let runningMessageStorageFailed = false;
+
+export function runningMessageIntent(): RunningMessageIntent {
+  if (runningMessageStorageFailed) return transientRunningMessage;
+  try {
+    return localStorage.getItem(RUNNING_MESSAGE_KEY) === "followup" ? "followup" : "steer";
+  } catch {
+    return transientRunningMessage;
+  }
+}
+
+export function setRunningMessageIntent(next: RunningMessageIntent): void {
+  transientRunningMessage = next;
+  try { localStorage.setItem(RUNNING_MESSAGE_KEY, next); runningMessageStorageFailed = false; } catch { runningMessageStorageFailed = true; }
+  runningMessageListeners.forEach((fn) => fn());
+}
+
+function subscribeRunningMessage(fn: () => void): () => void {
+  runningMessageListeners.add(fn);
+  const storage = (event: StorageEvent) => {
+    if (event.key === RUNNING_MESSAGE_KEY || event.key === null) fn();
+  };
+  window.addEventListener("storage", storage);
+  return () => { runningMessageListeners.delete(fn); window.removeEventListener("storage", storage); };
+}
+
+export function useRunningMessageIntent(): RunningMessageIntent {
+  return useSyncExternalStore(subscribeRunningMessage, runningMessageIntent, runningMessageIntent);
+}
+
 // The sidebar remains the default session switcher. Tabs are a local display
 // choice and do not change which sessions stay open in the kernel.
 const SESSION_TABS_KEY = "rx-show-session-tabs";
