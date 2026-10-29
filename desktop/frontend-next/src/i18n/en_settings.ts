@@ -1158,6 +1158,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "会话中各部分默认展开还是收起。失败的步骤与正在运行的操作可以单独处理；已手动展开或收起的块保持原样。": "Whether each part of a conversation starts open or folded. Failed steps and work still running can be handled on their own; a block you have already opened or closed stays as it is.",
   "收起时显示计划进度": "Show collapsed plan progress",
   "在收起的计划卡片下方显示进度条，随已完成步骤更新。默认关闭，仅保存在本机。": "Show a progress bar below the collapsed plan card, updated as steps complete. Off by default; saved only on this machine.",
+  "输入框提示": "Composer hint",
+  "在空白任务输入框中显示任务和排队提示。默认显示，仅保存在本机，不影响输入和发送。": "Show task and queue guidance in the empty composer. On by default; saved only on this machine. Does not affect typing or sending.",
   "计划进度": "Plan progress",
   "折叠预设": "Folding preset",
   "精简": "Compact",
