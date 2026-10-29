@@ -3,8 +3,8 @@ import type { WorkspaceLease } from "./workspace_lease";
 export type { WorkspaceLease } from "./workspace_lease";
 import type { SurfaceImage, SurfaceLocation, SurfaceFact, SurfaceDataset } from "./surface-rich";
 export type { SurfaceImage, SurfaceLocation, SurfaceFact, SurfaceDataset, SurfaceSeries } from "./surface-rich";
-import type { ExtensionStatus, ExtensionKeyValue, ExtensionActionRef, ExtensionCard, ExtensionFormField, ExtensionForm, ExtensionPanel, ExtensionNotification, ExtensionViewTone } from "./extension_ui";
-export type { ExtensionStatus, ExtensionKeyValue, ExtensionActionRef, ExtensionCard, ExtensionFormField, ExtensionForm, ExtensionPanel, ExtensionNotification, ExtensionViewTone };
+import type { CostCoverage, CostQuote, Usage, CacheDiagnostics } from "./wire_usage";
+export type { CostCoverage, CostQuote, Usage, CacheDiagnostics };
 // Mirrors internal/contract/eventwire. Field names and kind strings must match exactly;
 // this file is the contract, not a convenience shape.
 
@@ -163,75 +163,12 @@ export interface Tool {
   execution?: Execution;
 }
 
-// Only prefixChangeReasons is omitempty on the wire; the rest always arrive, so
-// marking them optional would make every reader handle an absence that the
-// producer never sends.
-export interface CacheDiagnostics {
-  prefixHash: string;
-  prefixChanged: boolean;
-  prefixChangeReasons?: string[];
-  toolSchemaTokens: number;
-  cacheMissTokens: number;
-  cacheHitTokens: number;
-  // Whether the messages this request carried over are the bytes the last one
-  // sent. A miss with neither the prefix nor the body changed is the
-  // provider's, and the panel has to be able to say so.
-  carriedMessages: number;
-  bodyChanged: boolean;
-  bodyHash: string;
-}
 
 export interface Money {
   amount: string;
   currency: string;
 }
 
-// How much of the usage behind a quote carries a complete price fact. A single
-// call is only ever complete or incomplete; an aggregate has two more answers,
-// because it can price some of its calls and not others, and it can have billed
-// nothing at all. Kept apart from displayStatus, which is about whether the
-// requested currency could be shown, not about whether the cost is known.
-export type CostCoverage = "none" | "complete" | "partial" | "incomplete";
-
-export interface CostQuote {
-  original: Money;
-  selected?: Money;
-  estimated: boolean;
-  costComplete: boolean;
-  // Absent from a kernel older than the field — a remote workspace can be one.
-  coverage?: CostCoverage;
-  // Why the cost fact is short, kept as provenance. The state is read from
-  // coverage, never worked backwards out of this.
-  incompleteReason?: string;
-}
-
-export interface Usage {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-  cacheHitTokens: number;
-  cacheMissTokens: number;
-  reasoningTokens?: number;
-  estimated?: boolean;
-  source?: string;
-  // The stream attempt that billed these tokens. Usage lands after its round
-  // has settled, so this is what attaches it — not whatever is still open.
-  attemptId?: string;
-  cacheDiagnostics?: CacheDiagnostics;
-  sessionCacheHitTokens: number;
-  sessionCacheMissTokens: number;
-  // Context* is the latest single request's shape, for gauges and rebind. Absent
-  // means fall back to the billable prompt/completion totals above.
-  contextPromptTokens?: number;
-  contextCompletionTokens?: number;
-  contextReasoningTokens?: number;
-  contextCacheHitTokens?: number;
-  contextCacheMissTokens?: number;
-  cost?: number;
-  currency?: string;
-  currencyCode?: string;
-  costQuote?: CostQuote;
-}
 
 export interface Approval {
   id: string;
@@ -265,7 +202,7 @@ export interface DecisionReceipt {
   via?: Via;
 }
 
-// An image the host stored or was handed this session that a message references.
+// An image the host stored under .reasonix/attachments that a message references.
 // Mirrors eventwire.Attachment: a client previews this, not how it was spelled.
 export interface StoredAttachment {
   // Workspace-relative spelling for stored images, or the absolute, native
@@ -339,6 +276,71 @@ export interface Guardian {
   rationale?: string;
   duration_ms?: number;
 }
+
+// Extension UI surfaces. A sidecar publishes data, never markup — the host
+// decides how to draw it, which is why the same extension shows up as a card
+// here, as text in the CLI, and as a client-rendered block over ACP.
+export interface ExtensionStatus {
+  label: string;
+  detail?: string;
+  severity?: string;
+  progress?: number;
+}
+
+export interface ExtensionKeyValue {
+  key: string;
+  value: string;
+}
+
+export interface ExtensionActionRef {
+  actionId: string;
+  label: string;
+}
+
+export interface ExtensionCard {
+  title?: string;
+  markdown?: string;
+  text?: string;
+  fields?: ExtensionKeyValue[];
+  progress?: number;
+  actions?: ExtensionActionRef[];
+}
+
+export interface ExtensionFormField {
+  key: string;
+  label?: string;
+  kind?: "confirm" | "input" | "select" | "multiselect";
+  options?: string[];
+  default?: unknown;
+  required?: boolean;
+}
+
+export interface ExtensionForm {
+  title?: string;
+  message?: string;
+  fields: ExtensionFormField[];
+}
+
+// A panel has no markdown on purpose — see the protocol DTO: the side rail is
+// a narrow column, and a rendered document there costs more than it tells.
+export interface ExtensionPanel {
+  title?: string;
+  text?: string;
+  fields?: ExtensionKeyValue[];
+  progress?: number;
+  actions?: ExtensionActionRef[];
+}
+
+export interface ExtensionNotification {
+  title: string;
+  body?: string;
+  severity?: string;
+}
+
+// A view is composed rather than filled in: the extension sends a tree of
+// primitives and this side renders them with its own components. Tone says
+// what a node means, never what colour it is — the palette stays ours.
+export type ExtensionViewTone = "dim" | "strong" | "ok" | "warn" | "err" | "accent";
 
 export interface ExtensionViewNode {
   kind: "text" | "markdown" | "row" | "stack" | "kv" | "meter" | "pip" | "button" | "divider" | "field" | "choice_card" | "editable_text" | "diff_preview" | "map" | "comparison" | "dashboard";
