@@ -1928,11 +1928,7 @@ button, input, select, textarea { font-size: calc(13.3333px * var(--fs-scale, 1)
 }
 .rail .sessrow[data-run="done"] { animation: none; }
 .rail .sessrow[data-just-done] { animation: studio-session-done 1.2s ease-out both; }
-.rail .sessrow > .unread-dot { position: absolute; inset-inline-end: 11px; top: 50%; translate: 0 -50%; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-ink); pointer-events: none; }
-.rail .sessrow[data-unread] > .sesscopies { margin-inline-end: 26px; }
-.rail .sessrow-context[data-unread] > .sesstitle { padding-inline-end: 26px; }
-.rail .sessrow-remote > .unread-dot { inset-inline-end: 36px; }
-.rail .sessrow-remote[data-unread] > .sessmeta { margin-inline-end: 58px; }
+.rail .sessrow > .unread-dot { flex: none; margin-inline-start: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); pointer-events: none; }
 .rail .sessrow[data-unread] .sesstitle { color: var(--text); font-weight: var(--w-semi); }
 :root[data-theme="dark"] .rail .sessrow[data-unread]:not(:hover):not([aria-selected="true"]) { background: color-mix(in srgb, var(--text) 4%, transparent); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rail .sessrow[data-unread]:not(:hover):not([aria-selected="true"]) { background: color-mix(in srgb, var(--text) 4%, transparent); } }

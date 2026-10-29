@@ -261,8 +261,8 @@ and selected states, while long titles truncate within the remaining width.
   back into scope, draws its tick and nothing else. `data-just-done` carries
   that event and `data-run="done"` carries the state; keeping them apart is
   what stops history from replaying as news.
-- Unread is a fact the kernel owns, drawn beside the run tick and never merged with it: an 8px dot at the row end, so titles keep their column and it cannot be read as the project's status dot, a semibold title, and a spoken "未读" on the dot.
-- In dark an unread row also takes a 4% tint, below hover and selection. In light it would sit one step from the selected row, so light has none. A remote row keeps its dot left of the delete button, and its turn count shifts left to make room.
+- Unread is a fact the kernel owns, separate from run state: a green 8px dot replaces the session's date until it is marked viewed, with a semibold title and a localized spoken "未读" on the dot. Local and remote rows use the same date slot; a missing timestamp does not hide an unread completion.
+- In dark an unread row also takes a 4% tint, below hover and selection. In light it would sit one step from the selected row, so light has none.
 - A folded project row sums the unread sessions under it into an outlined count among its action buttons, unlike the filled feedback badge, and drops it when the project opens. A pane tab carries a 6px dot; the tab strip is currently hidden by the Studio sheet. Nothing here animates.
 
 ## The queue
@@ -1626,7 +1626,7 @@ A sub-agent row, by the list's own width:
 - The title takes every pixel the row's visible content leaves it. The age sits against the row's right padding and the earlier-versions badge beside it; nothing is held back on the right for a control that is not showing.
 - The hover buttons (archive) take no width until the row is hovered or focused, then 24px plus 6px; on a device without hover they are always drawn.
 - Taking the room only while shown means the title shortens when the buttons appear, never before. Pinning stays an overlay at the left, so the pin never moves the title.
-- An unread dot is an overlay 11px from the right edge: an unread row keeps 22px after its age (or after its badge, 26px) for it, and the dot hides while the buttons are shown.
+- The unread dot takes the age's place in normal flow, before the versions or legacy badge. It stays visible beside hover actions without overlay spacing; clearing canonical unread restores the original age.
 - A legacy `margin-right: 44px` on the age made room for a delete button the rail has long since hidden; the rail's rule sets it to zero.
 - The current session reads as current in its fill and a 1px neutral outline, never in a state colour. The fill is a 13% text tint against hover's 4%.
 - The outline is drawn inside the border box (`outline-offset: -1px`): the row's transparent 2px left border would push an inset shadow off the edge.
