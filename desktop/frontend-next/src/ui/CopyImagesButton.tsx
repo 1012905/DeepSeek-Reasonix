@@ -5,6 +5,7 @@ import { StudioIcon } from "./StudioIcon";
 import { Picker, type MenuItem } from "./Menu";
 import { copyText } from "./CopyButton";
 import { annotateImagePath } from "./imagepaths";
+import "../styles/copy-split.css";
 
 // A message that carries images has two copies: the words alone, or the words
 // with the images the message was about. The button copies the second, because
