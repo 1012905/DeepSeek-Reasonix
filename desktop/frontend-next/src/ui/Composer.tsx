@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
@@ -18,7 +18,7 @@ import { ChipMirror, useSkillChips } from "./ChipMirror";
 import { useIme } from "./ime";
 import { usePlaceholderFit } from "./placeholderfit";
 import { useFitHeight } from "./fitHeight";
-import { useRunningMessageIntent, useSendShortcut } from "../state/prefs";
+import { onComposerHintChange, showsComposerHint, useRunningMessageIntent, useSendShortcut } from "../state/prefs";
 import { sendAria, sendHint, sendsOnKey } from "./sendkey";
 import { countLines, pasteIsLong, planTone, planVerb } from "./intake";
 import { kindOf, nameOf, previewURL } from "./chipfile";
@@ -218,7 +218,9 @@ export function Composer({ port, status, running, queued = false, quote, restore
     pending.current = null;
   }, []);
   useFitHeight(box, text, placeCaret);
-  const placeholder = usePlaceholderFit(box, queued ? [t("继续输入以排队后续修改"), t("继续输入…"), "…"] : [t("描述任务、问题或要改的内容…"), t("描述任务…"), "…"]);
+  const showHint = useSyncExternalStore(onComposerHintChange, showsComposerHint, showsComposerHint);
+  const fittedPlaceholder = usePlaceholderFit(box, queued ? [t("继续输入以排队后续修改"), t("继续输入…"), "…"] : [t("描述任务、问题或要改的内容…"), t("描述任务…"), "…"]);
+  const placeholder = showHint ? fittedPlaceholder : "";
 
   // Attachments ride into the turn as path references, exactly as they do from
   // the CLI — the host saved the bytes, the turn parser resolves the token. A

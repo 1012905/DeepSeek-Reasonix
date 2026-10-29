@@ -1001,6 +1001,14 @@ Composer shortcuts:
 | Plain `Up` / `Down` at the prompt boundary | Recalls older or newer submitted prompts | Modified arrows and native text navigation stay with the textarea. |
 | `Esc` while a turn is running | Cancels the running turn | If the turn has not produced a response yet, the draft is restored. |
 
+**Settings → Appearance → Conversation display → Composer hint** controls
+guidance in the empty task input. It is on by default. Turning it off hides
+both task and queue placeholders immediately and persists on this machine.
+
+The input's accessible name, entered text, queue content, IME handling and
+send shortcuts stay unchanged. Turning the hint back on restores the
+responsive guidance at the theme's normal contrast.
+
 Remembered projects have Move up / Move down in their project menu. Open it with the keyboard, navigate with arrows or Home/End, and use Escape to return to the trigger. Moving a project changes sidebar order without changing the launch project.
 
 Studio remembers which local and remote projects you collapse in the sidebar,

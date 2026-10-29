@@ -19,6 +19,7 @@ import { OpenSessionLimitSection } from "./OpenSessionLimitSection";
 import { LiveStreamBudgetSection } from "./LiveStreamBudgetSection";
 import { NewAnswerSection } from "./NewAnswerSection";
 import { PlanProgressSection } from "./PlanProgressSection";
+import { ComposerHintSection } from "./ComposerHintSection";
 import { SessionQuickSection } from "./SessionQuickSection";
 import { NavEntriesSection } from "./NavEntriesSection";
 import { NavRailSection } from "./NavRailSection";
@@ -571,6 +572,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
       <NewAnswerSection />
       <GraphicsSection />
       <SendShortcut />
+      <ComposerHintSection />
       <RunningMessageSetting />
       <EscStopSetting />
       <GlobalShortcutSection />

@@ -59,6 +59,15 @@ and at every contrast step, so nothing paints differently until a pack sets one.
 - The running compose ring, call lines, pips, carets and the delegated nest keep
   `net` and `deleg`.
 
+## Composer guidance
+
+- Composer guidance keeps its theme-owned `--ghost` ink at full opacity. The
+  Appearance visibility preference suppresses the placeholder text at its
+  choice owner, not by lowering contrast or changing shared neutral inks.
+- `perf/composer-placeholder.mjs` checks the default-on preference, live
+  visibility changes and reload persistence through Appearance, alongside
+  entered text, focus, IME, submission and queued guidance.
+
 ## Elevation
 
 | Pack key | Variable | Default | Job |

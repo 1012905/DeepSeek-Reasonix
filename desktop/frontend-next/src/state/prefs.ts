@@ -160,6 +160,33 @@ export function setNavRailMode(mode: NavRailMode): void {
   navRailListeners.forEach((fn) => fn());
 }
 
+const COMPOSER_HINT_KEY = "rx-composer-hint";
+const composerHintListeners = new Set<() => void>();
+
+export function showsComposerHint(): boolean {
+  try {
+    return localStorage.getItem(COMPOSER_HINT_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+export function onComposerHintChange(fn: () => void): () => void {
+  composerHintListeners.add(fn);
+  return () => {
+    composerHintListeners.delete(fn);
+  };
+}
+
+export function setShowsComposerHint(on: boolean): void {
+  try {
+    localStorage.setItem(COMPOSER_HINT_KEY, on ? "on" : "off");
+  } catch {
+    /* unavailable storage keeps the default */
+  }
+  composerHintListeners.forEach((fn) => fn());
+}
+
 const PLAN_PROGRESS_KEY = "rx-plan-progress";
 const planProgressListeners = new Set<() => void>();
 
