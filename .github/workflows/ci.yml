@@ -318,6 +318,32 @@ jobs:
               "TestHeldPathsCoverOnlyTheSameFileAcrossCaseSpellings",
               "TestLegacyWaitDoesNotConsumeExecutionCapacity"] - $tests | length) == 0
           ' "$RUNNER_TEMP/isolation-owners.jsonl"
+          jq -se '
+            . as $events |
+            {"reasonix/internal/platform/worktree": [
+               "TestApplyPathsRejectsRedirectedAncestors",
+               "TestApplyPathsRejectsRedirectedAncestors/outside_delete",
+               "TestApplyPathsRejectsRedirectedAncestors/inside_delete",
+               "TestApplyPathsRejectsRedirectedAncestors/dangling_delete",
+               "TestApplyPathsRejectsRedirectedAncestors/outside_write",
+               "TestApplyPathsRejectsRedirectedAncestors/inside_write",
+               "TestApplyPathsRejectsRedirectedAncestors/regular_parent",
+               "TestApplyPathsRejectsRedirectedAncestors/unchanged",
+               "TestApplyPathsRejectsRedirectedAncestors/missing_creation",
+               "TestWriteChangesRejectsRedirectedDeletion",
+               "TestWriteChangesUnlinksLeafDirectoryLink",
+               "TestWholeWorkspaceApplyPreservesFileToDirectoryTransition"],
+             "reasonix/internal/runtime/isolation": [
+               "TestApplyToolRetainsResultAfterAncestorReplacement"]} |
+            to_entries | all(.[]; . as $package |
+              ([ $events[] | select(.Package == $package.key and .Test == null and
+                 (.Action == "pass" or .Action == "fail" or .Action == "skip")) ] |
+               length == 1 and .[0].Action == "pass") and
+              all(.value[]; . as $test |
+                [ $events[] | select(.Package == $package.key and .Test == $test and
+                  (.Action == "pass" or .Action == "fail" or .Action == "skip")) ] |
+                length == 1 and .[0].Action == "pass"))
+          ' "$RUNNER_TEMP/isolation-owners.jsonl"
 
       - name: upload Windows isolation test inventory
         if: always() && env.RUN_STEPS == 'true' && runner.os == 'Windows' && github.event_name == 'pull_request'
