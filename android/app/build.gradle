@@ -68,6 +68,12 @@ android {
         // what `MainActivity` feeds real inset values for, since a WebView does
         // not implement `env(safe-area-inset-*)`.
         targetSdk 35
+        // versionCode must strictly increase, because Android refuses an update
+        // whose versionCode is not higher. The build digit is a single decimal
+        // place, so the scheme collides once a patch reaches 10: 2.55.10 and
+        // 2.56.0 both come out as 25601. Patch releases above 9 are not expected
+        // on Studio, and widening the digit now would renumber every build, so
+        // the constraint is recorded rather than fixed.
         versionCode versionMajor * 10000 + versionMinor * 100 + versionPatch * 10 + versionBuild
         versionName "${versionMajor}.${versionMinor}.${versionPatch}"
 

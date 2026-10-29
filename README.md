@@ -172,9 +172,15 @@ The same release also carries the 2.x `reasonix` CLI as archives for
 The Android build ships on that release as `ReasonixMobile-<version>.apk`
 (`arm64`, Android 8.0 or newer). The kernel and the page run on the phone, and
 the agent reaches your servers over SSH; pairing with a computer is done by
-scanning the code it shows. A build made without a signing key is named
-`-unsigned.apk`, so check for that name — and the `.sha256` beside it — before
-installing.
+scanning the code it shows.
+
+The APK is signed with the Android release key rather than minisign, so it
+carries a `.sha256` and no `.minisig`.
+
+When that key is absent the build is named
+`ReasonixMobile-<version>-unsigned.apk`. Android refuses to install an unsigned
+package, so those builds stay a workflow artifact for whoever wants to sign one,
+and the release carries no APK at all.
 
 ### Reasonix 1.x (stable)
 

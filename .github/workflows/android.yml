@@ -82,6 +82,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # `publish` decides whether to attach anything, and the only honest answer to
+    # "will this APK install" is whether a key was restored.
+    outputs:
+      signed: ${{ steps.key.outputs.signed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -207,6 +211,22 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           ls -l "$name" "$name.sha256"
 
+      # An unsigned package is not a lesser APK, it is an unusable one: Android's
+      # package manager rejects it outright rather than reporting a signature
+      # mismatch. Say so where the run summary can be read, instead of letting a
+      # green build imply a shippable artifact.
+      - name: Say what an unsigned build means
+        if: steps.key.outputs.signed != 'true'
+        run: |
+          echo "::warning::no signing key configured, so this APK is unsigned. Android refuses to install an unsigned package, so the release will carry no APK; the file stays a workflow artifact for whoever signs it."
+          {
+            echo "### No APK on this release"
+            echo ""
+            echo "The build produced an unsigned APK, which Android refuses to install."
+            echo "It is attached to this run as a workflow artifact only. Add the four"
+            echo "signing secrets to publish one."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v8
         with:
           name: android-apk
@@ -218,6 +238,10 @@ jobs:
   publish:
     name: attach the APK
     needs: [resolve, build]
+    # Nothing to attach unless the build was signed. Skipping is the honest
+    # outcome: a release page with an APK nobody can install is worse than a
+    # release page without one.
+    if: needs.build.outputs.signed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -236,7 +260,10 @@ jobs:
           TAG: ${{ needs.resolve.outputs.tag }}
           REPO: ${{ github.repository }}
         run: |
-          for _ in $(seq 1 120); do
+          # 90 minutes: on the last Studio release the page appeared about 40
+          # minutes after the tag run started, and the APK build spends part of
+          # that before this wait begins.
+          for _ in $(seq 1 360); do
             if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
               gh release upload "$TAG" dist/*.apk dist/*.sha256 --repo "$REPO" --clobber
               echo "attached to $TAG"
@@ -244,5 +271,5 @@ jobs:
             fi
             sleep 15
           done
-          echo "::error::release $TAG did not appear within 30 minutes; the APK was built but not published"
+          echo "::error::release $TAG did not appear within 90 minutes; the APK was built but not published"
           exit 1
