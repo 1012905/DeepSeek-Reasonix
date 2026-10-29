@@ -1120,20 +1120,6 @@
   .copy[data-state="done"] { color: var(--ok) }
   .copy[data-state="failed"] { color: var(--warn-ink) }
 
-  /* The copy button and the arrow beside it are one control: the button
-     copies, the arrow offers the other way to copy. */
-  .copy-split { display: inline-flex; align-items: center; gap: 2px; }
-  .copy-split .picker { display: flex; }
-  .copy-arrow {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 20px; height: 26px; padding: 0;
-    border: 0; border-radius: var(--r-sm); background: transparent; color: var(--faint);
-    cursor: pointer; transition: color var(--m-line), background var(--m-line);
-  }
-  .copy-arrow:hover { background: var(--overlay); color: var(--text) }
-  .copy-arrow:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
-  .copy-note { margin-top: 4px; color: var(--warn-ink); font: var(--w-reg) var(--fs-meta) var(--ui); }
-
 
   .out .txt.bad { padding-left: 10px; border-left: 2px solid var(--warn) }
 
