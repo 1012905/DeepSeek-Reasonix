@@ -17,6 +17,9 @@ const { fileURLToPath } = require("node:url");
 const URI_LIST = "text/uri-list";
 const osFormat = (name) => `electron application/osclipboard;format="${name}"`;
 const FILE_NAME_W = osFormat("FileNameW");
+// Windows names the raw CF_HDROP payload "FileNameW", and on some
+// Electron/OS builds the bare "FileName"; both carry the same UTF-16 list.
+const FILE_NAME = osFormat("FileName");
 const PUBLIC_FILE_URL = osFormat("public.file-url");
 
 // A URI list holds one URI per line, and a comment line starts with a hash.
@@ -75,7 +78,7 @@ async function clipboardFiles(clipboard) {
       try {
         if (type === URI_LIST) {
           paths.push(...uriListPaths(await payloadText(item, type)));
-        } else if (type === FILE_NAME_W) {
+        } else if (type === FILE_NAME_W || type === FILE_NAME) {
           paths.push(...fileNamePaths(await payloadBytes(item, type)));
         } else if (type === PUBLIC_FILE_URL) {
           paths.push(...fileUrlPaths(await payloadText(item, type)));

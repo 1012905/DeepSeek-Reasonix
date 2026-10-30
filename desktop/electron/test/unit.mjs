@@ -3793,6 +3793,17 @@ test("the windows file-name format holds its paths as utf-16, each ended by a nu
   assert.deepEqual(fileNamePaths(bytes), ["C:\\Users\\me\\a.txt", "C:\\Users\\me\\b.txt"]);
 });
 
+// Some Electron/OS builds name the raw CF_HDROP payload with the bare
+// "FileName" rather than "FileNameW"; both must resolve to the same paths.
+test("the bare windows FileName name also resolves the utf-16 path list", async () => {
+  const bytes = Buffer.from("C:\\Users\\me\\a.txt\0\0", "utf16le");
+  const type = 'electron application/osclipboard;format="FileName"';
+  const clipboard = {
+    read: async () => [{ types: [type], getType: async () => new Blob([bytes]) }],
+  };
+  assert.deepEqual(await clipboardFiles(clipboard), ["C:\\Users\\me\\a.txt"]);
+});
+
 test("the macos file url names one file", () => {
   const url = pathToFileURL(path.resolve("a.txt")).href;
   assert.deepEqual(fileUrlPaths(url), [path.resolve("a.txt")]);
