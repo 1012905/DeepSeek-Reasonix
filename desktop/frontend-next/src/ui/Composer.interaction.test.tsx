@@ -1075,4 +1075,28 @@ describe("a pasted file is handled like a drop", () => {
     expect(dropRefs).not.toHaveBeenCalled();
     expect(box.value).toBe("");
   });
+
+  // A clipboard that names a file but hands the view no File, and also carries
+  // that path as text/plain, must land as a reference only: the path text must
+  // not be inserted, or the box ends up with the path twice — once as text,
+  // once beside the attachment. The view advertises the file in its own types
+  // (text/uri-list), so the default paste is prevented synchronously and the
+  // shell's path is awaited afterwards.
+  it("takes a named file as a reference and drops its path text", async () => {
+    vi.spyOn(hostMod, "host").mockReturnValue(electron(["C:\\Users\\me\\Documents\\photo.png"]));
+    const port = new MockPort();
+    const dropRefs = vi.spyOn(port, "dropRefs").mockImplementation((p) => Promise.resolve(p.map((path) => ({ ref: "@" + path, path }))));
+    const { box } = draw({ port });
+    const pasted = fireEvent.paste(box, {
+      clipboardData: {
+        files: [],
+        types: ["text/uri-list", "text/plain"],
+        getData: (type: string) => (type === "text/plain" ? "C:\\Users\\me\\Documents\\photo.png" : ""),
+      },
+    });
+    // The paste is taken over: the path text never reaches the box.
+    expect(pasted).toBe(false);
+    await waitFor(() => expect(dropRefs).toHaveBeenCalledWith(["C:\\Users\\me\\Documents\\photo.png"]));
+    expect(box.value).toBe("");
+  });
 });

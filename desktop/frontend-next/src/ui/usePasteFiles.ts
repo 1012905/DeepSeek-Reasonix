@@ -32,8 +32,9 @@ export function usePasteFiles({ submitting, onFiles, onLongText }: Options) {
         event.preventDefault();
         return;
       }
-      const files = [...event.clipboardData.files];
-      const body = event.clipboardData.getData("text/plain");
+      const data = event.clipboardData;
+      const files = [...data.files];
+      const body = data.getData("text/plain");
       // What the clipboard carries is the shell's answer to give: it reads the
       // formats that carry files, and never the text. The clipboard names what
       // was copied; the File the view holds may be a copy that belongs to the
@@ -47,11 +48,23 @@ export function usePasteFiles({ submitting, onFiles, onLongText }: Options) {
         void carried.then((paths) => onFiles(paths, files));
         return;
       }
-      // A clipboard that names a file is a file paste even where the view
-      // shows none: a platform may hand the file over as text.
+      // A clipboard that names a file is a file paste even where the view shows
+      // none: a platform may hand the file over only as a named path, and put
+      // that path in text/plain too. The reference must go in and the path text
+      // must not — left alone, the browser pastes the path text beside the
+      // reference, doubling it. The view advertises the file synchronously in
+      // its own types: a file copy names text/uri-list, and Files where the
+      // renderer also holds one. So the default paste is prevented here, before
+      // the handler returns; the shell's paths still arrive on the async step.
+      const types = data.types ?? [];
+      const viewNamesFile = types.includes("text/uri-list") || types.includes("Files");
       void carried.then((paths) => {
         if (paths.length > 0) onFiles(paths, files);
       });
+      if (viewNamesFile) {
+        event.preventDefault();
+        return;
+      }
       if (!pasteIsLong(body)) return;
       // Long enough to bury the composer. It still goes with the turn — it is
       // just held beside the box instead of becoming it.
