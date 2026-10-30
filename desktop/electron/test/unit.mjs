@@ -3793,25 +3793,16 @@ test("the windows file-name format holds its paths as utf-16, each ended by a nu
   assert.deepEqual(fileNamePaths(bytes), ["C:\\Users\\me\\a.txt", "C:\\Users\\me\\b.txt"]);
 });
 
-// Some Electron/OS builds name the copied file with the bare "FileName" as a
-// UTF-8 string rather than the UTF-16 "FileNameW" list; it must still resolve.
-test("the bare windows FileName name resolves the path as utf-8 text", async () => {
-  const type = 'electron application/osclipboard;format="FileName"';
-  const clipboard = {
-    read: async () => [{ types: [type], getType: async () => new Blob(["C:\\Users\\me\\a.txt"]) }],
-  };
-  assert.deepEqual(await clipboardFiles(clipboard), ["C:\\Users\\me\\a.txt"]);
-});
-
 // When more than one format names the same file, the result collapses to a
 // single entry instead of attaching that file twice.
 test("formats naming the same file collapse to one entry", async () => {
   const one = pathToFileURL(path.resolve("one.txt")).href;
-  const type = 'electron application/osclipboard;format="FileName"';
+  const type = 'electron application/osclipboard;format="FileNameW"';
+  const bytes = Buffer.from(path.resolve("one.txt") + "\0\0", "utf16le");
   const clipboard = {
     read: async () => [{
       types: ["text/uri-list", type],
-      getType: async (t) => new Blob([t === "text/uri-list" ? `${one}\r\n` : path.resolve("one.txt")]),
+      getType: async (t) => new Blob([t === "text/uri-list" ? `${one}\r\n` : bytes]),
     }],
   };
   assert.deepEqual(await clipboardFiles(clipboard), [path.resolve("one.txt")]);

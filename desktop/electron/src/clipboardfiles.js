@@ -17,10 +17,10 @@ const { fileURLToPath } = require("node:url");
 const URI_LIST = "text/uri-list";
 const osFormat = (name) => `electron application/osclipboard;format="${name}"`;
 const FILE_NAME_W = osFormat("FileNameW");
-// "FileNameW" carries the path list as raw UTF-16, while some builds instead
-// expose the bare "FileName" as a UTF-8 string; both name the same paths,
-// read apart below.
-const FILE_NAME = osFormat("FileName");
+// "FileNameW" carries the path list as raw UTF-16. Some builds expose a bare
+// "FileName" instead, but that one arrives in the system ANSI codepage (and as
+// an 8.3 short name), so it is not a reliable source and is skipped; the
+// Unicode path already comes through text/uri-list, which is what we use.
 const PUBLIC_FILE_URL = osFormat("public.file-url");
 
 // A URI list holds one URI per line, and a comment line starts with a hash.
@@ -41,17 +41,6 @@ function fileNamePaths(bytes) {
   const text = Buffer.from(bytes).toString("utf16le");
   const paths = [];
   for (const part of text.split("\0")) {
-    const trimmed = part.trim();
-    if (trimmed) paths.push(trimmed);
-  }
-  return paths;
-}
-
-// The bare "FileName" format is the path (or paths split by a null) as a
-// UTF-8 string, not the UTF-16 list "FileNameW" carries.
-function fileNameTextPaths(text) {
-  const paths = [];
-  for (const part of String(text ?? "").split("\0")) {
     const trimmed = part.trim();
     if (trimmed) paths.push(trimmed);
   }
@@ -92,8 +81,6 @@ async function clipboardFiles(clipboard) {
           paths.push(...uriListPaths(await payloadText(item, type)));
         } else if (type === FILE_NAME_W) {
           paths.push(...fileNamePaths(await payloadBytes(item, type)));
-        } else if (type === FILE_NAME) {
-          paths.push(...fileNameTextPaths(await payloadText(item, type)));
         } else if (type === PUBLIC_FILE_URL) {
           paths.push(...fileUrlPaths(await payloadText(item, type)));
         }
